@@ -39,8 +39,8 @@ export interface MpTerminal {
   operatingMode: string;
 }
 
-// Lista maquininhas Point vinculadas à conta do Access Token.
-export async function listMpTerminals(
+// Endpoint novo (/terminals/v1/list) — só alguns modelos.
+async function listFromTerminalsApi(
   accessToken: string,
   filters?: { storeId?: string; posId?: string }
 ): Promise<MpTerminal[]> {
@@ -57,11 +57,7 @@ export async function listMpTerminals(
       },
     }
   );
-
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`MP list terminals failed (${response.status}): ${detail}`);
-  }
+  if (!response.ok) return [];
 
   const body = (await response.json()) as {
     data?: {
@@ -80,6 +76,51 @@ export async function listMpTerminals(
     storeId: t.store_id ?? null,
     operatingMode: t.operating_mode ?? 'UNDEFINED',
   }));
+}
+
+// Endpoint clássico do Point (/point/integration-api/devices) — Point Smart etc.
+async function listFromPointDevicesApi(
+  accessToken: string
+): Promise<MpTerminal[]> {
+  const response = await fetch(
+    `${MP_API_BASE}/point/integration-api/devices`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+  if (!response.ok) return [];
+
+  const body = (await response.json()) as {
+    devices?: Array<{ id: string; operating_mode?: string; pos_id?: number }>;
+  };
+
+  return (body.devices ?? []).map((d) => ({
+    id: d.id,
+    posId: d.pos_id ?? null,
+    storeId: null,
+    operatingMode: d.operating_mode ?? 'UNDEFINED',
+  }));
+}
+
+// Lista maquininhas Point vinculadas à conta, combinando os dois endpoints
+// (modelos novos via /terminals e Point Smart via /point/integration-api/devices).
+export async function listMpTerminals(
+  accessToken: string,
+  filters?: { storeId?: string; posId?: string }
+): Promise<MpTerminal[]> {
+  const [terminals, devices] = await Promise.all([
+    listFromTerminalsApi(accessToken, filters),
+    listFromPointDevicesApi(accessToken),
+  ]);
+
+  const map = new Map<string, MpTerminal>();
+  for (const t of [...terminals, ...devices]) {
+    if (!map.has(t.id)) map.set(t.id, t);
+  }
+  return Array.from(map.values());
 }
 
 interface CreateCardParams {
