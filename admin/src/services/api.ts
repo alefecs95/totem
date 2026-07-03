@@ -40,8 +40,16 @@ export interface Tenant {
   mp_access_token: string | null;
   mp_webhook_secret: string | null;
   mp_device_id: string | null;
+  mp_user_id: string | null;
+  mp_store_id: string | null;
   sumup_api_key: string | null;
   sumup_reader_id: string | null;
+  endereco: string | null;
+  numero: string | null;
+  cidade: string | null;
+  estado: string | null;
+  latitude: string | number | null;
+  longitude: string | number | null;
   ativo: boolean;
   criado_em: string;
 }
@@ -58,8 +66,18 @@ export type TenantInput = Partial<
     | 'mp_webhook_secret'
     | 'mp_device_id'
     | 'sumup_api_key'
+    | 'endereco'
+    | 'numero'
+    | 'cidade'
+    | 'estado'
   >
-> & { comissao_pct?: number };
+> & { comissao_pct?: number; latitude?: number; longitude?: number };
+
+// Status retornado pelo backend ao tentar criar loja/caixa no Mercado Pago.
+export interface MpProvisionStatus {
+  ok: boolean;
+  motivo?: string;
+}
 
 export interface Transaction {
   id: string;
@@ -117,20 +135,25 @@ export async function getTenants(): Promise<Tenant[]> {
   return data.tenants;
 }
 
-export async function createTenant(input: TenantInput): Promise<Tenant> {
-  const { data } = await api.post<{ tenant: Tenant }>('/admin/tenants', input);
-  return data.tenant;
+export async function createTenant(
+  input: TenantInput
+): Promise<{ tenant: Tenant; mpStore?: MpProvisionStatus }> {
+  const { data } = await api.post<{
+    tenant: Tenant;
+    mpStore?: MpProvisionStatus;
+  }>('/admin/tenants', input);
+  return data;
 }
 
 export async function updateTenant(
   id: string,
   input: TenantInput
-): Promise<Tenant> {
-  const { data } = await api.put<{ tenant: Tenant }>(
-    `/admin/tenants/${id}`,
-    input
-  );
-  return data.tenant;
+): Promise<{ tenant: Tenant; mpStore?: MpProvisionStatus }> {
+  const { data } = await api.put<{
+    tenant: Tenant;
+    mpStore?: MpProvisionStatus;
+  }>(`/admin/tenants/${id}`, input);
+  return data;
 }
 
 export async function deleteTenant(id: string): Promise<void> {
@@ -145,6 +168,7 @@ export interface Totem {
   ativo: boolean;
   ultimo_acesso: string | null;
   criado_em: string;
+  mp_pos_id: string | null;
   setupUrl: string;
 }
 
@@ -163,12 +187,12 @@ export async function getTotens(tenantId: string): Promise<Totem[]> {
 export async function createTotem(
   tenantId: string,
   input: TotemInput
-): Promise<Totem> {
-  const { data } = await api.post<{ totem: Totem }>(
-    `/admin/tenants/${tenantId}/totens`,
-    input
-  );
-  return data.totem;
+): Promise<{ totem: Totem; mpPos?: MpProvisionStatus }> {
+  const { data } = await api.post<{
+    totem: Totem;
+    mpPos?: MpProvisionStatus;
+  }>(`/admin/tenants/${tenantId}/totens`, input);
+  return data;
 }
 
 export async function deleteTotem(id: string): Promise<void> {

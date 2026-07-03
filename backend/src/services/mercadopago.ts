@@ -139,6 +139,106 @@ export async function createPixPayment({
   };
 }
 
+// ---------------------------------------------------------------------------
+// Lojas (stores) e Caixas (POS) — pré-requisito do Point Smart em modo integrado.
+// Docs: POST /users/{user_id}/stores e POST /pos
+// ---------------------------------------------------------------------------
+
+export interface MpStoreLocation {
+  street_name?: string;
+  street_number?: string;
+  city_name: string;
+  state_name: string;
+  latitude: number;
+  longitude: number;
+  reference?: string;
+}
+
+// Resolve o user_id da conta dona do access token (necessário para criar lojas).
+export async function getMpUserId(accessToken: string): Promise<string> {
+  const response = await fetch(`${MP_API_BASE}/users/me`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`MP users/me failed (${response.status}): ${detail}`);
+  }
+  const data = (await response.json()) as { id: number | string };
+  return String(data.id);
+}
+
+// Cria uma loja (store) na conta do tenant.
+export async function createMpStore({
+  accessToken,
+  userId,
+  name,
+  externalId,
+  location,
+}: {
+  accessToken: string;
+  userId: string;
+  name: string;
+  externalId: string;
+  location: MpStoreLocation;
+}): Promise<{ storeId: string }> {
+  const response = await fetch(`${MP_API_BASE}/users/${userId}/stores`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ name, external_id: externalId, location }),
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`MP create store failed (${response.status}): ${detail}`);
+  }
+  const data = (await response.json()) as { id: number | string };
+  return { storeId: String(data.id) };
+}
+
+// Cria um caixa (POS) e associa a uma loja. Cada Point Smart em modo PDV
+// precisa de um caixa próprio.
+export async function createMpPos({
+  accessToken,
+  name,
+  storeId,
+  externalStoreId,
+  externalId,
+  category,
+}: {
+  accessToken: string;
+  name: string;
+  storeId: string;
+  externalStoreId?: string;
+  externalId: string;
+  category: number;
+}): Promise<{ posId: string; externalId: string }> {
+  const response = await fetch(`${MP_API_BASE}/pos`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name,
+      store_id: storeId,
+      external_store_id: externalStoreId,
+      external_id: externalId,
+      category,
+    }),
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`MP create POS failed (${response.status}): ${detail}`);
+  }
+  const data = (await response.json()) as {
+    id: number | string;
+    external_id: string;
+  };
+  return { posId: String(data.id), externalId: data.external_id };
+}
+
 // Consulta o status de um pagamento e normaliza para o nosso domínio.
 export async function getPaymentStatus(
   accessToken: string,

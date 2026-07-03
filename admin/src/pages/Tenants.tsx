@@ -20,7 +20,26 @@ const emptyForm: TenantInput = {
   mp_webhook_secret: '',
   mp_device_id: '',
   sumup_api_key: '',
+  endereco: '',
+  numero: '',
+  cidade: '',
+  estado: '',
+  latitude: undefined,
+  longitude: undefined,
 };
+
+function mensagemMpStore(motivo?: string): string {
+  switch (motivo) {
+    case 'sem_access_token':
+      return 'Organizador salvo. A loja do Mercado Pago não foi criada: preencha o MP Access Token.';
+    case 'localizacao_incompleta':
+      return 'Organizador salvo. A loja do Mercado Pago não foi criada: preencha Cidade, Estado, Latitude e Longitude.';
+    case 'mp_store_failed':
+      return 'Organizador salvo, mas houve erro ao criar a loja no Mercado Pago. Verifique o Access Token.';
+    default:
+      return 'Organizador salvo, mas a loja do Mercado Pago não foi criada.';
+  }
+}
 
 export default function Tenants() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -29,6 +48,7 @@ export default function Tenants() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<TenantInput>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [aviso, setAviso] = useState('');
   const [totensTenant, setTotensTenant] = useState<Tenant | null>(null);
 
   const carregar = () => {
@@ -43,11 +63,13 @@ export default function Tenants() {
   const abrirNovo = () => {
     setEditingId(null);
     setForm(emptyForm);
+    setAviso('');
     setModalOpen(true);
   };
 
   const abrirEdicao = (t: Tenant) => {
     setEditingId(t.id);
+    setAviso('');
     setForm({
       nome: t.nome,
       responsavel: t.responsavel,
@@ -59,6 +81,12 @@ export default function Tenants() {
       mp_webhook_secret: t.mp_webhook_secret ?? '',
       mp_device_id: t.mp_device_id ?? '',
       sumup_api_key: t.sumup_api_key ?? '',
+      endereco: t.endereco ?? '',
+      numero: t.numero ?? '',
+      cidade: t.cidade ?? '',
+      estado: t.estado ?? '',
+      latitude: t.latitude != null ? Number(t.latitude) : undefined,
+      longitude: t.longitude != null ? Number(t.longitude) : undefined,
     });
     setModalOpen(true);
   };
@@ -66,14 +94,17 @@ export default function Tenants() {
   const salvar = async (e: FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setAviso('');
     try {
-      if (editingId) {
-        await updateTenant(editingId, form);
-      } else {
-        await createTenant(form);
-      }
-      setModalOpen(false);
+      const { mpStore } = editingId
+        ? await updateTenant(editingId, form)
+        : await createTenant(form);
       carregar();
+      if (form.gateway === 'mercadopago' && mpStore && !mpStore.ok) {
+        setAviso(mensagemMpStore(mpStore.motivo));
+      } else {
+        setModalOpen(false);
+      }
     } finally {
       setSaving(false);
     }
@@ -85,8 +116,10 @@ export default function Tenants() {
     carregar();
   };
 
-  const setField = (key: keyof TenantInput, value: string | number) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const setField = (
+    key: keyof TenantInput,
+    value: string | number | undefined
+  ) => setForm((prev) => ({ ...prev, [key]: value }));
 
   return (
     <div>
@@ -270,6 +303,83 @@ export default function Tenants() {
                     placeholder="ID da maquininha no Mercado Pago"
                   />
                 </Field>
+
+                <p
+                  style={{
+                    margin: '4px 0 0',
+                    fontSize: 12,
+                    color: '#64748b',
+                  }}
+                >
+                  Localização da loja (obrigatória para criar a loja no Mercado
+                  Pago).
+                </p>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <Field label="Endereço">
+                    <input
+                      style={input}
+                      value={form.endereco ?? ''}
+                      onChange={(e) => setField('endereco', e.target.value)}
+                    />
+                  </Field>
+                  <Field label="Número">
+                    <input
+                      style={input}
+                      value={form.numero ?? ''}
+                      onChange={(e) => setField('numero', e.target.value)}
+                    />
+                  </Field>
+                </div>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <Field label="Cidade">
+                    <input
+                      style={input}
+                      value={form.cidade ?? ''}
+                      onChange={(e) => setField('cidade', e.target.value)}
+                    />
+                  </Field>
+                  <Field label="Estado">
+                    <input
+                      style={input}
+                      value={form.estado ?? ''}
+                      onChange={(e) => setField('estado', e.target.value)}
+                    />
+                  </Field>
+                </div>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <Field label="Latitude">
+                    <input
+                      style={input}
+                      type="number"
+                      step="any"
+                      value={form.latitude ?? ''}
+                      onChange={(e) =>
+                        setField(
+                          'latitude',
+                          e.target.value === ''
+                            ? undefined
+                            : Number(e.target.value)
+                        )
+                      }
+                    />
+                  </Field>
+                  <Field label="Longitude">
+                    <input
+                      style={input}
+                      type="number"
+                      step="any"
+                      value={form.longitude ?? ''}
+                      onChange={(e) =>
+                        setField(
+                          'longitude',
+                          e.target.value === ''
+                            ? undefined
+                            : Number(e.target.value)
+                        )
+                      }
+                    />
+                  </Field>
+                </div>
               </>
             ) : (
               <Field label="SumUp API Key">
@@ -279,6 +389,20 @@ export default function Tenants() {
                   onChange={(e) => setField('sumup_api_key', e.target.value)}
                 />
               </Field>
+            )}
+
+            {aviso && (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  background: '#fef3c7',
+                  color: '#92400e',
+                  fontSize: 13,
+                }}
+              >
+                {aviso}
+              </div>
             )}
 
             <div
@@ -294,7 +418,7 @@ export default function Tenants() {
                 onClick={() => setModalOpen(false)}
                 style={secondaryBtn}
               >
-                Cancelar
+                {aviso ? 'Fechar' : 'Cancelar'}
               </button>
               <button type="submit" disabled={saving} style={primaryBtn}>
                 {saving ? 'Salvando...' : 'Salvar'}

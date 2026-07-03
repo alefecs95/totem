@@ -34,6 +34,18 @@ CREATE TABLE IF NOT EXISTS totens (
   criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Colunas adicionais (idempotentes) para integração de Loja/Caixa do Mercado Pago
+-- e localização da loja (obrigatória na API de stores do MP).
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS mp_user_id VARCHAR(50);
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS mp_store_id VARCHAR(50);
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS endereco VARCHAR(200);
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS numero VARCHAR(20);
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS cidade VARCHAR(100);
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS estado VARCHAR(100);
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS latitude NUMERIC(10,7);
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS longitude NUMERIC(10,7);
+ALTER TABLE totens ADD COLUMN IF NOT EXISTS mp_pos_id VARCHAR(50);
+
 -- TABELA: produtos (por tenant — cada organizador configura seus produtos)
 CREATE TABLE IF NOT EXISTS produtos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

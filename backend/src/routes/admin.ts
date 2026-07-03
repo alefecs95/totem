@@ -6,6 +6,11 @@ import { query } from '../config/database';
 import { seedDefaultProducts } from '../config/seed';
 import { env } from '../config/env';
 import { verifyAdmin } from '../middleware/auth';
+import {
+  createMpPos,
+  createMpStore,
+  getMpUserId,
+} from '../services/mercadopago';
 
 const router = Router();
 
@@ -71,7 +76,103 @@ const tenantSchema = z.object({
   mp_device_id: z.string().optional().nullable(),
   sumup_api_key: z.string().optional().nullable(),
   sumup_reader_id: z.string().optional().nullable(),
+  endereco: z.string().optional().nullable(),
+  numero: z.string().optional().nullable(),
+  cidade: z.string().optional().nullable(),
+  estado: z.string().optional().nullable(),
+  latitude: z.number().optional().nullable(),
+  longitude: z.number().optional().nullable(),
 });
+
+type TenantRow = Record<string, unknown> & {
+  id: string;
+  nome: string;
+  gateway: string;
+  mp_access_token: string | null;
+  mp_store_id: string | null;
+  mp_user_id: string | null;
+  cidade: string | null;
+  estado: string | null;
+  latitude: string | number | null;
+  longitude: string | number | null;
+  endereco: string | null;
+  numero: string | null;
+};
+
+// Cria (best-effort) a loja do Mercado Pago para o tenant. Nunca lança:
+// retorna um status para o admin exibir, sem quebrar o cadastro.
+async function tryCreateMpStore(
+  tenant: TenantRow
+): Promise<{ ok: boolean; motivo?: string }> {
+  if (tenant.mp_store_id) return { ok: true };
+
+  const accessToken = tenant.mp_access_token || env.mercadopago.accessToken;
+  if (tenant.gateway !== 'mercadopago' || !accessToken) {
+    return { ok: false, motivo: 'sem_access_token' };
+  }
+
+  const lat = tenant.latitude != null ? Number(tenant.latitude) : null;
+  const lng = tenant.longitude != null ? Number(tenant.longitude) : null;
+  if (!tenant.cidade || !tenant.estado || lat == null || lng == null) {
+    return { ok: false, motivo: 'localizacao_incompleta' };
+  }
+
+  try {
+    const userId = tenant.mp_user_id || (await getMpUserId(accessToken));
+    const { storeId } = await createMpStore({
+      accessToken,
+      userId,
+      name: tenant.nome,
+      externalId: tenant.id,
+      location: {
+        street_name: tenant.endereco || undefined,
+        street_number: tenant.numero || undefined,
+        city_name: tenant.cidade,
+        state_name: tenant.estado,
+        latitude: lat,
+        longitude: lng,
+      },
+    });
+    await query(
+      'UPDATE tenants SET mp_user_id = $1, mp_store_id = $2, atualizado_em = NOW() WHERE id = $3',
+      [userId, storeId, tenant.id]
+    );
+    return { ok: true };
+  } catch (err) {
+    console.error('Erro ao criar loja no Mercado Pago:', err);
+    return { ok: false, motivo: 'mp_store_failed' };
+  }
+}
+
+// Cria (best-effort) o caixa (POS) do Mercado Pago para o totem.
+async function tryCreateMpPos(
+  tenant: TenantRow,
+  totem: { id: string; nome: string }
+): Promise<{ ok: boolean; motivo?: string }> {
+  const accessToken = tenant.mp_access_token || env.mercadopago.accessToken;
+  if (tenant.gateway !== 'mercadopago' || !accessToken || !tenant.mp_store_id) {
+    return { ok: false, motivo: 'loja_indisponivel' };
+  }
+
+  try {
+    const { posId } = await createMpPos({
+      accessToken,
+      name: totem.nome,
+      storeId: tenant.mp_store_id,
+      externalStoreId: tenant.id,
+      externalId: totem.id,
+      category: env.mercadopago.posCategory,
+    });
+    await query('UPDATE totens SET mp_pos_id = $1 WHERE id = $2', [
+      posId,
+      totem.id,
+    ]);
+    return { ok: true };
+  } catch (err) {
+    console.error('Erro ao criar caixa no Mercado Pago:', err);
+    return { ok: false, motivo: 'mp_pos_failed' };
+  }
+}
 
 // GET /api/admin/tenants
 router.get('/tenants', verifyAdmin, async (_req, res) => {
@@ -94,12 +195,14 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
 
   const t = parsed.data;
   try {
-    const result = await query<{ id: string }>(
+    const result = await query<TenantRow>(
       `INSERT INTO tenants
         (nome, responsavel, telefone, email, gateway, comissao_pct,
          mp_access_token, mp_webhook_secret, mp_device_id,
-         sumup_api_key, sumup_reader_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         sumup_api_key, sumup_reader_id,
+         endereco, numero, cidade, estado, latitude, longitude)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+         $12, $13, $14, $15, $16, $17)
        RETURNING *`,
       [
         t.nome,
@@ -113,6 +216,12 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
         t.mp_device_id ?? null,
         t.sumup_api_key ?? null,
         t.sumup_reader_id ?? null,
+        t.endereco ?? null,
+        t.numero ?? null,
+        t.cidade ?? null,
+        t.estado ?? null,
+        t.latitude ?? null,
+        t.longitude ?? null,
       ]
     );
 
@@ -120,7 +229,14 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
     // Cada novo tenant já nasce com os 4 produtos padrão.
     await seedDefaultProducts(tenant.id);
 
-    res.status(201).json({ tenant });
+    // Cria a loja no Mercado Pago (best-effort — não bloqueia o cadastro).
+    const mpStore = await tryCreateMpStore(tenant);
+
+    const finalResult = await query('SELECT * FROM tenants WHERE id = $1', [
+      tenant.id,
+    ]);
+
+    res.status(201).json({ tenant: finalResult.rows[0], mpStore });
   } catch (err) {
     console.error('Erro ao criar tenant:', err);
     res.status(500).json({ error: 'create_tenant_failed' });
@@ -147,7 +263,7 @@ router.put('/tenants/:id', verifyAdmin, async (req, res) => {
     setClauses.push('atualizado_em = NOW()');
     const values = keys.map((key) => (fields as Record<string, unknown>)[key]);
 
-    const result = await query(
+    const result = await query<TenantRow>(
       `UPDATE tenants SET ${setClauses.join(', ')} WHERE id = $${keys.length + 1} RETURNING *`,
       [...values, req.params.id]
     );
@@ -157,7 +273,14 @@ router.put('/tenants/:id', verifyAdmin, async (req, res) => {
       return;
     }
 
-    res.json({ tenant: result.rows[0] });
+    // Se agora tem access token + localização e ainda não tem loja, cria.
+    const mpStore = await tryCreateMpStore(result.rows[0]);
+
+    const finalResult = await query('SELECT * FROM tenants WHERE id = $1', [
+      req.params.id,
+    ]);
+
+    res.json({ tenant: finalResult.rows[0], mpStore });
   } catch (err) {
     console.error('Erro ao atualizar tenant:', err);
     res.status(500).json({ error: 'update_tenant_failed' });
@@ -206,6 +329,7 @@ function mapTotemRow(row: Record<string, unknown>, tenantId: string) {
     ativo: row.ativo as boolean,
     ultimo_acesso: row.ultimo_acesso as string | null,
     criado_em: row.criado_em as string,
+    mp_pos_id: (row.mp_pos_id as string | null) ?? null,
     setupUrl: buildSetupUrl(tenantId, id),
   };
 }
@@ -239,11 +363,12 @@ router.post('/tenants/:tenantId/totens', verifyAdmin, async (req, res) => {
   const { nome, local } = parsed.data;
 
   try {
-    const tenantResult = await query(
-      'SELECT id FROM tenants WHERE id = $1 AND ativo = true',
+    const tenantResult = await query<TenantRow>(
+      'SELECT * FROM tenants WHERE id = $1 AND ativo = true',
       [tenantId]
     );
-    if (!tenantResult.rows[0]) {
+    const tenant = tenantResult.rows[0];
+    if (!tenant) {
       res.status(404).json({ error: 'tenant_not_found' });
       return;
     }
@@ -255,8 +380,16 @@ router.post('/tenants/:tenantId/totens', verifyAdmin, async (req, res) => {
       [tenantId, nome, local ?? null]
     );
 
-    const totem = mapTotemRow(result.rows[0], tenantId);
-    res.status(201).json({ totem });
+    const row = result.rows[0];
+    // Cria o caixa (POS) no Mercado Pago (best-effort).
+    const mpPos = await tryCreateMpPos(tenant, {
+      id: row.id as string,
+      nome: row.nome as string,
+    });
+
+    const finalRow = await query('SELECT * FROM totens WHERE id = $1', [row.id]);
+    const totem = mapTotemRow(finalRow.rows[0], tenantId);
+    res.status(201).json({ totem, mpPos });
   } catch (err) {
     console.error('Erro ao criar totem:', err);
     res.status(500).json({ error: 'create_totem_failed' });

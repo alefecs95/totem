@@ -14,6 +14,17 @@ interface TotensModalProps {
   onClose: () => void;
 }
 
+function mensagemMpPos(motivo?: string): string {
+  switch (motivo) {
+    case 'loja_indisponivel':
+      return 'Totem criado, mas o caixa do Mercado Pago não foi gerado: a loja do organizador ainda não existe. Edite o organizador preenchendo Access Token e localização.';
+    case 'mp_pos_failed':
+      return 'Totem criado, mas houve erro ao criar o caixa no Mercado Pago. Verifique o Access Token do organizador.';
+    default:
+      return 'Totem criado, mas o caixa do Mercado Pago não foi gerado.';
+  }
+}
+
 export default function TotensModal({ tenant, onClose }: TotensModalProps) {
   const [totens, setTotens] = useState<Totem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,6 +33,7 @@ export default function TotensModal({ tenant, onClose }: TotensModalProps) {
   const [saving, setSaving] = useState(false);
   const [qrTotem, setQrTotem] = useState<Totem | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
+  const [aviso, setAviso] = useState('');
 
   const carregar = () => {
     setLoading(true);
@@ -46,8 +58,9 @@ export default function TotensModal({ tenant, onClose }: TotensModalProps) {
   const criar = async (e: FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setAviso('');
     try {
-      const totem = await createTotem(tenant.id, {
+      const { totem, mpPos } = await createTotem(tenant.id, {
         nome,
         local: local || undefined,
       });
@@ -55,6 +68,9 @@ export default function TotensModal({ tenant, onClose }: TotensModalProps) {
       setLocal('');
       carregar();
       setQrTotem(totem);
+      if (tenant.gateway === 'mercadopago' && mpPos && !mpPos.ok) {
+        setAviso(mensagemMpPos(mpPos.motivo));
+      }
     } finally {
       setSaving(false);
     }
@@ -123,6 +139,21 @@ export default function TotensModal({ tenant, onClose }: TotensModalProps) {
           </button>
         </form>
 
+        {aviso && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: '10px 12px',
+              borderRadius: 8,
+              background: '#fef3c7',
+              color: '#92400e',
+              fontSize: 13,
+            }}
+          >
+            {aviso}
+          </div>
+        )}
+
         {loading ? (
           <p style={{ marginTop: 20 }}>Carregando totens...</p>
         ) : (
@@ -131,6 +162,7 @@ export default function TotensModal({ tenant, onClose }: TotensModalProps) {
               <tr>
                 <th style={th}>Nome</th>
                 <th style={th}>Local</th>
+                <th style={th}>Caixa MP</th>
                 <th style={th}>Último acesso</th>
                 <th style={th}>Status</th>
                 <th style={th}></th>
@@ -141,6 +173,7 @@ export default function TotensModal({ tenant, onClose }: TotensModalProps) {
                 <tr key={t.id}>
                   <td style={td}>{t.nome}</td>
                   <td style={td}>{t.local ?? '—'}</td>
+                  <td style={td}>{t.mp_pos_id ?? '—'}</td>
                   <td style={td}>
                     {t.ultimo_acesso ? formatDateTime(t.ultimo_acesso) : '—'}
                   </td>
@@ -171,7 +204,7 @@ export default function TotensModal({ tenant, onClose }: TotensModalProps) {
               ))}
               {totens.length === 0 && (
                 <tr>
-                  <td style={td} colSpan={5}>
+                  <td style={td} colSpan={6}>
                     Nenhum totem cadastrado para este organizador.
                   </td>
                 </tr>
