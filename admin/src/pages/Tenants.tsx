@@ -9,6 +9,7 @@ import {
   type TenantInput,
 } from '../services/api';
 import TotensModal from '../components/TotensModal';
+import MapPicker from '../components/MapPicker';
 
 const emptyForm: TenantInput = {
   nome: '',
@@ -457,6 +458,27 @@ export default function Tenants() {
                       {Number(form.longitude).toFixed(6)}
                     </div>
                   )}
+
+                  <div style={{ marginTop: 12 }}>
+                    <MapPicker
+                      latitude={
+                        form.latitude != null
+                          ? Number(form.latitude)
+                          : undefined
+                      }
+                      longitude={
+                        form.longitude != null
+                          ? Number(form.longitude)
+                          : undefined
+                      }
+                      onChange={(lat, lng) => {
+                        setField('latitude', lat);
+                        setField('longitude', lng);
+                        setEnderecoErro('');
+                        setEnderecoOk('Local definido pelo mapa.');
+                      }}
+                    />
+                  </div>
                 </div>
               </>
             ) : (
