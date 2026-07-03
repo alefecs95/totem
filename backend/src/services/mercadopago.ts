@@ -133,22 +133,40 @@ interface CreateCardParams {
   webhookUrl?: string;
 }
 
-// Cria uma intenção de pagamento no Point Smart (cartão débito/crédito).
-export async function createCardPayment({
-  accessToken,
-  total,
-  deviceId,
-  transactionId,
-}: CreateCardParams): Promise<{ intentId: string }> {
+// Cancela uma intenção de pagamento em fila (status "open") no Point.
+export async function cancelCardPaymentIntent(
+  accessToken: string,
+  deviceId: string,
+  intentId: string
+): Promise<boolean> {
   const response = await fetch(
-    `${MP_API_BASE}/point/integration-api/devices/${deviceId}/payment-intents`,
+    `${MP_API_BASE}/point/integration-api/devices/${encodeURIComponent(deviceId)}/payment-intents/${encodeURIComponent(intentId)}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+  return response.ok;
+}
+
+async function postCardPaymentIntent(
+  accessToken: string,
+  deviceId: string,
+  total: number,
+  transactionId: string,
+  sandbox: boolean
+): Promise<Response> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  };
+  if (sandbox) headers['x-test-scope'] = 'sandbox';
+
+  return fetch(
+    `${MP_API_BASE}/point/integration-api/devices/${encodeURIComponent(deviceId)}/payment-intents`,
     {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        'x-test-scope': 'sandbox',
-      },
+      headers,
       body: JSON.stringify({
         amount: Math.round(total * 100),
         description: 'Fichas Festival',
@@ -159,6 +177,50 @@ export async function createCardPayment({
       }),
     }
   );
+}
+
+// Cria uma intenção de pagamento no Point Smart (cartão débito/crédito).
+export async function createCardPayment({
+  accessToken,
+  total,
+  deviceId,
+  transactionId,
+  sandbox = false,
+  pendingIntentIds = [],
+}: CreateCardParams & {
+  sandbox?: boolean;
+  pendingIntentIds?: string[];
+}): Promise<{ intentId: string }> {
+  // Limpa intenções antigas presas na fila do dispositivo.
+  for (const intentId of pendingIntentIds) {
+    try {
+      await cancelCardPaymentIntent(accessToken, deviceId, intentId);
+    } catch {
+      // best-effort
+    }
+  }
+
+  let response = await postCardPaymentIntent(
+    accessToken,
+    deviceId,
+    total,
+    transactionId,
+    sandbox
+  );
+
+  // 409 = já existe intenção na fila — cancela e tenta de novo uma vez.
+  if (response.status === 409 && pendingIntentIds.length > 0) {
+    for (const intentId of pendingIntentIds) {
+      await cancelCardPaymentIntent(accessToken, deviceId, intentId);
+    }
+    response = await postCardPaymentIntent(
+      accessToken,
+      deviceId,
+      total,
+      transactionId,
+      sandbox
+    );
+  }
 
   if (!response.ok) {
     const detail = await response.text();

@@ -6,6 +6,7 @@ import { env } from '../config/env';
 import {
   createCardPayment,
   createPixPayment,
+  cancelCardPaymentIntent,
   getCardPaymentStatus,
   getPaymentStatus,
   isValidMpDeviceId,
@@ -303,6 +304,33 @@ router.post('/card', async (req, res) => {
       intentId = result.paymentId;
     } else {
       const accessToken = tenant.mp_access_token || env.mercadopago.accessToken;
+
+      // Cancela intenções pendentes anteriores (evita erro 409 na maquininha).
+      const pendingResult = await query<{ payment_id: string }>(
+        `SELECT payment_id FROM transactions
+         WHERE tenant_id = $1 AND metodo = 'cartao' AND status = 'pending'
+           AND payment_id IS NOT NULL
+         ORDER BY criado_em DESC
+         LIMIT 10`,
+        [tenantId]
+      );
+      const pendingIntentIds = pendingResult.rows.map((r) => r.payment_id);
+      for (const oldIntentId of pendingIntentIds) {
+        await cancelCardPaymentIntent(
+          accessToken,
+          deviceId as string,
+          oldIntentId
+        );
+      }
+      if (pendingIntentIds.length > 0) {
+        await query(
+          `UPDATE transactions SET status = 'rejected', atualizado_em = NOW()
+           WHERE tenant_id = $1 AND metodo = 'cartao' AND status = 'pending'
+             AND payment_id = ANY($2::text[])`,
+          [tenantId, pendingIntentIds]
+        );
+      }
+
       const result = await createCardPayment({
         accessToken,
         total,
@@ -310,6 +338,8 @@ router.post('/card', async (req, res) => {
         items,
         tenantId,
         transactionId,
+        sandbox: env.mercadopago.sandbox,
+        pendingIntentIds,
       });
       intentId = result.intentId;
     }
@@ -323,9 +353,14 @@ router.post('/card', async (req, res) => {
     res.json({ intentId, transactionId, status: 'aguardando_maquininha' });
   } catch (err) {
     console.error('Erro ao criar pagamento no cartão:', err);
-    res.status(500).json({
-      error: 'card_payment_failed',
-      detalhe: err instanceof Error ? err.message : String(err),
+    const msg = err instanceof Error ? err.message : String(err);
+    const isQueued =
+      msg.includes('409') || msg.includes('queued intent') || msg.includes('2205');
+    res.status(isQueued ? 409 : 500).json({
+      error: isQueued ? 'queued_intent' : 'card_payment_failed',
+      detalhe: isQueued
+        ? 'Há um pagamento pendente na maquininha. Cancele na Point (segure o botão inferior direito → Sair) e tente de novo.'
+        : msg,
     });
   }
 });

@@ -52,6 +52,8 @@ export default function Payment() {
         return 'Maquininha não configurada. Preencha o Device ID no admin.';
       case 'invalid_device_id':
         return 'Device ID inválido. Use "Buscar maquininhas" no admin.';
+      case 'queued_intent':
+        return 'Pagamento anterior ainda na maquininha. Cancele na Point e tente de novo.';
       case 'missing_sumup_config':
         return 'SumUp não configurado. Preencha API Key e Reader ID no admin.';
       case 'tenant_not_found':

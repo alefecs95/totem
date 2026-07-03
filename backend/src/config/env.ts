@@ -29,8 +29,9 @@ export const env = {
   mercadopago: {
     accessToken: process.env.MP_ACCESS_TOKEN ?? '',
     webhookSecret: process.env.MP_WEBHOOK_SECRET ?? '',
-    // Código MCC do caixa (POS). Padrão do exemplo da doc do MP.
     posCategory: Number(process.env.MP_POS_CATEGORY ?? 621102),
+    // Só use sandbox=true com credenciais de teste do MP.
+    sandbox: process.env.MP_SANDBOX === 'true',
   },
   sumup: {
     apiKey: process.env.SUMUP_API_KEY ?? '',
