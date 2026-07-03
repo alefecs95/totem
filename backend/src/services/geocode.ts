@@ -45,6 +45,7 @@ export async function geocodeAddress(
 export interface AddressParts {
   endereco?: string | null;
   numero?: string | null;
+  bairro?: string | null;
   cidade?: string | null;
   estado?: string | null;
 }
@@ -55,11 +56,13 @@ export interface AddressParts {
 export async function geocodeBrazil(
   parts: AddressParts
 ): Promise<GeocodeResult | null> {
-  const { endereco, numero, cidade, estado } = parts;
+  const { endereco, numero, bairro, cidade, estado } = parts;
 
   const attempts = [
-    [endereco, numero, cidade, estado, 'Brasil'],
+    [endereco, numero, bairro, cidade, estado, 'Brasil'],
+    [endereco, bairro, cidade, estado, 'Brasil'],
     [endereco, cidade, estado, 'Brasil'],
+    [bairro, cidade, estado, 'Brasil'],
     [cidade, estado, 'Brasil'],
     [cidade, 'Brasil'],
   ];

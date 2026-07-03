@@ -10,6 +10,7 @@ import {
 } from '../services/api';
 import TotensModal from '../components/TotensModal';
 import MapPicker from '../components/MapPicker';
+import { getCidades, getEstados, type UF } from '../services/ibge';
 
 const emptyForm: TenantInput = {
   nome: '',
@@ -24,6 +25,7 @@ const emptyForm: TenantInput = {
   sumup_api_key: '',
   endereco: '',
   numero: '',
+  bairro: '',
   cidade: '',
   estado: '',
   latitude: undefined,
@@ -54,6 +56,9 @@ export default function Tenants() {
   const [geocoding, setGeocoding] = useState(false);
   const [enderecoOk, setEnderecoOk] = useState('');
   const [enderecoErro, setEnderecoErro] = useState('');
+  const [estados, setEstados] = useState<UF[]>([]);
+  const [cidades, setCidades] = useState<string[]>([]);
+  const [carregandoCidades, setCarregandoCidades] = useState(false);
   const [totensTenant, setTotensTenant] = useState<Tenant | null>(null);
 
   const carregar = () => {
@@ -65,6 +70,36 @@ export default function Tenants() {
 
   useEffect(carregar, []);
 
+  useEffect(() => {
+    getEstados()
+      .then(setEstados)
+      .catch(() => setEstados([]));
+  }, []);
+
+  // Carrega as cidades sempre que o estado selecionado muda.
+  const carregarCidades = (uf: string) => {
+    if (!uf) {
+      setCidades([]);
+      return;
+    }
+    setCarregandoCidades(true);
+    getCidades(uf)
+      .then(setCidades)
+      .catch(() => setCidades([]))
+      .finally(() => setCarregandoCidades(false));
+  };
+
+  // Dado o nome completo do estado salvo, acha a sigla (UF).
+  const ufDoEstado = (estadoNome?: string | null): string => {
+    if (!estadoNome) return '';
+    const match = estados.find(
+      (e) =>
+        e.nome.toLowerCase() === estadoNome.toLowerCase() ||
+        e.sigla.toLowerCase() === estadoNome.toLowerCase()
+    );
+    return match?.sigla ?? '';
+  };
+
   const limparFeedback = () => {
     setAviso('');
     setEnderecoOk('');
@@ -74,6 +109,7 @@ export default function Tenants() {
   const abrirNovo = () => {
     setEditingId(null);
     setForm(emptyForm);
+    setCidades([]);
     limparFeedback();
     setModalOpen(true);
   };
@@ -81,6 +117,7 @@ export default function Tenants() {
   const abrirEdicao = (t: Tenant) => {
     setEditingId(t.id);
     limparFeedback();
+    carregarCidades(ufDoEstado(t.estado));
     setForm({
       nome: t.nome,
       responsavel: t.responsavel,
@@ -94,6 +131,7 @@ export default function Tenants() {
       sumup_api_key: t.sumup_api_key ?? '',
       endereco: t.endereco ?? '',
       numero: t.numero ?? '',
+      bairro: t.bairro ?? '',
       cidade: t.cidade ?? '',
       estado: t.estado ?? '',
       latitude: t.latitude != null ? Number(t.latitude) : undefined,
@@ -172,6 +210,7 @@ export default function Tenants() {
       const result = await geocode({
         endereco: form.endereco ?? undefined,
         numero: form.numero ?? undefined,
+        bairro: form.bairro ?? undefined,
         cidade: form.cidade ?? undefined,
         estado: form.estado ?? undefined,
       });
@@ -383,11 +422,71 @@ export default function Tenants() {
                     Endereço da loja
                   </strong>
                   <p style={{ margin: '4px 0 12px', fontSize: 12, color: '#64748b' }}>
-                    Preencha cidade e estado, use <b>localização atual</b> ou o
-                    mapa. Rua e número são opcionais (o sistema usa um padrão se
-                    estiverem vazios).
+                    Escolha o estado e a cidade nas listas, informe bairro e rua.
+                    Depois clique em <b>Buscar pelo endereço</b> ou use o mapa /
+                    localização atual.
                   </p>
 
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div style={{ flex: 1 }}>
+                      <Field label="Estado">
+                        <select
+                          style={input}
+                          value={ufDoEstado(form.estado)}
+                          onChange={(e) => {
+                            const uf = e.target.value;
+                            const estadoNome =
+                              estados.find((x) => x.sigla === uf)?.nome ?? '';
+                            setField('estado', estadoNome);
+                            setField('cidade', '');
+                            carregarCidades(uf);
+                          }}
+                        >
+                          <option value="">Selecione o estado</option>
+                          {estados.map((e) => (
+                            <option key={e.id} value={e.sigla}>
+                              {e.nome}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <Field label="Cidade">
+                        <select
+                          style={input}
+                          value={form.cidade ?? ''}
+                          disabled={!form.estado || carregandoCidades}
+                          onChange={(e) => setField('cidade', e.target.value)}
+                        >
+                          <option value="">
+                            {carregandoCidades
+                              ? 'Carregando...'
+                              : !form.estado
+                                ? 'Escolha o estado antes'
+                                : 'Selecione a cidade'}
+                          </option>
+                          {cidades.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div style={{ flex: 2 }}>
+                      <Field label="Bairro">
+                        <input
+                          style={input}
+                          value={form.bairro ?? ''}
+                          onChange={(e) => setField('bairro', e.target.value)}
+                          placeholder="Centro"
+                        />
+                      </Field>
+                    </div>
+                  </div>
                   <div style={{ display: 'flex', gap: 12 }}>
                     <div style={{ flex: 3 }}>
                       <Field label="Rua / Avenida">
@@ -406,28 +505,6 @@ export default function Tenants() {
                           value={form.numero ?? ''}
                           onChange={(e) => setField('numero', e.target.value)}
                           placeholder="123"
-                        />
-                      </Field>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 12 }}>
-                    <div style={{ flex: 2 }}>
-                      <Field label="Cidade">
-                        <input
-                          style={input}
-                          value={form.cidade ?? ''}
-                          onChange={(e) => setField('cidade', e.target.value)}
-                          placeholder="Fortaleza"
-                        />
-                      </Field>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <Field label="Estado (UF ou nome)">
-                        <input
-                          style={input}
-                          value={form.estado ?? ''}
-                          onChange={(e) => setField('estado', e.target.value)}
-                          placeholder="MA ou Maranhão"
                         />
                       </Field>
                     </div>

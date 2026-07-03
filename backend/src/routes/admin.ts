@@ -79,6 +79,7 @@ const tenantSchema = z.object({
   sumup_reader_id: z.string().optional().nullable(),
   endereco: z.string().optional().nullable(),
   numero: z.string().optional().nullable(),
+  bairro: z.string().optional().nullable(),
   cidade: z.string().optional().nullable(),
   estado: z.string().optional().nullable(),
   latitude: z.number().optional().nullable(),
@@ -98,6 +99,7 @@ type TenantRow = Record<string, unknown> & {
   longitude: string | number | null;
   endereco: string | null;
   numero: string | null;
+  bairro: string | null;
 };
 
 // Cria (best-effort) a loja do Mercado Pago para o tenant. Nunca lança:
@@ -121,6 +123,7 @@ async function tryCreateMpStore(
       const geo = await geocodeBrazil({
         endereco: tenant.endereco,
         numero: tenant.numero,
+        bairro: tenant.bairro,
         cidade: tenant.cidade,
         estado: tenant.estado,
       });
@@ -151,6 +154,7 @@ async function tryCreateMpStore(
         state_name: tenant.estado,
         latitude: lat,
         longitude: lng,
+        reference: tenant.bairro?.trim() || undefined,
       },
     });
     await query(
@@ -212,6 +216,7 @@ router.get('/geocode', verifyAdmin, async (req, res) => {
   const estado = String(req.query.estado ?? '').trim();
   const endereco = String(req.query.endereco ?? '').trim();
   const numero = String(req.query.numero ?? '').trim();
+  const bairro = String(req.query.bairro ?? '').trim();
   const q = String(req.query.q ?? '').trim();
 
   if (!cidade && !estado && !q) {
@@ -222,7 +227,7 @@ router.get('/geocode', verifyAdmin, async (req, res) => {
   try {
     const result = q
       ? await geocodeBrazil({ endereco: q })
-      : await geocodeBrazil({ endereco, numero, cidade, estado });
+      : await geocodeBrazil({ endereco, numero, bairro, cidade, estado });
     if (!result) {
       res.status(404).json({ error: 'not_found' });
       return;
@@ -260,9 +265,9 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
         (nome, responsavel, telefone, email, gateway, comissao_pct,
          mp_access_token, mp_webhook_secret, mp_device_id,
          sumup_api_key, sumup_reader_id,
-         endereco, numero, cidade, estado, latitude, longitude)
+         endereco, numero, bairro, cidade, estado, latitude, longitude)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-         $12, $13, $14, $15, $16, $17)
+         $12, $13, $14, $15, $16, $17, $18)
        RETURNING *`,
       [
         t.nome,
@@ -278,6 +283,7 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
         t.sumup_reader_id ?? null,
         t.endereco ?? null,
         t.numero ?? null,
+        t.bairro ?? null,
         t.cidade ?? null,
         t.estado ?? null,
         t.latitude ?? null,

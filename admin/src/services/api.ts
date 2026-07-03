@@ -46,6 +46,7 @@ export interface Tenant {
   sumup_reader_id: string | null;
   endereco: string | null;
   numero: string | null;
+  bairro: string | null;
   cidade: string | null;
   estado: string | null;
   latitude: string | number | null;
@@ -68,6 +69,7 @@ export type TenantInput = Partial<
     | 'sumup_api_key'
     | 'endereco'
     | 'numero'
+    | 'bairro'
     | 'cidade'
     | 'estado'
   >
@@ -135,6 +137,7 @@ export interface GeocodeResult {
 export interface GeocodeParams {
   endereco?: string;
   numero?: string;
+  bairro?: string;
   cidade?: string;
   estado?: string;
 }
