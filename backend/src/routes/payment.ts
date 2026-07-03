@@ -1,0 +1,366 @@
+import { Router } from 'express';
+import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
+import { query } from '../config/database';
+import { env } from '../config/env';
+import {
+  createCardPayment,
+  createPixPayment,
+  getCardPaymentStatus,
+  getPaymentStatus,
+} from '../services/mercadopago';
+import {
+  createSumUpCardPayment,
+  createSumUpPixPayment,
+  getSumUpPaymentStatus,
+} from '../services/sumup';
+
+const router = Router();
+
+// Taxas de gateway do Mercado Pago.
+const TAXA_PIX_MP = 0.0099; // 0,99% Pix
+const TAXA_CARD_MP = 0.0199; // 1,99% cartão (padrão por ora)
+
+const pixSchema = z.object({
+  items: z.array(
+    z.object({
+      nome: z.string(),
+      quantidade: z.number().int().positive(),
+      preco: z.number().nonnegative(),
+    })
+  ),
+  total: z.number().positive(),
+  tenantId: z.string().uuid(),
+});
+
+const cardSchema = z.object({
+  items: z.array(
+    z.object({
+      nome: z.string(),
+      quantidade: z.number().int().positive(),
+      preco: z.number().nonnegative(),
+    })
+  ),
+  total: z.number().positive(),
+  tenantId: z.string().uuid(),
+  deviceId: z.string().min(1).optional(),
+});
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+// POST /api/payment/pix -> cria cobrança Pix e registra a transação
+router.post('/pix', async (req, res) => {
+  const parsed = pixSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+    return;
+  }
+
+  const { items, total, tenantId } = parsed.data;
+
+  try {
+    const tenantResult = await query(
+      'SELECT * FROM tenants WHERE id = $1 AND ativo = true',
+      [tenantId]
+    );
+    const tenant = tenantResult.rows[0];
+    if (!tenant) {
+      res.status(404).json({ error: 'tenant_not_found' });
+      return;
+    }
+
+    const gateway = tenant.gateway === 'sumup' ? 'sumup' : 'mercadopago';
+
+    const comissaoPct = Number(tenant.comissao_pct);
+    const taxaGatewayValor = round2(total * TAXA_PIX_MP);
+    const comissaoValor = round2(total * (comissaoPct / 100));
+    const valorLiquido = round2(total - taxaGatewayValor - comissaoValor);
+
+    const totemId = (req.headers['x-totem-id'] as string) || null;
+
+    let paymentId: string;
+    let pixCode: string;
+    let qrCodeBase64: string;
+    let expiresIn = 300;
+
+    if (gateway === 'sumup') {
+      const apiKey = tenant.sumup_api_key || env.sumup.apiKey;
+      if (!apiKey) {
+        res.status(400).json({ error: 'missing_api_key' });
+        return;
+      }
+      const sumup = await createSumUpPixPayment({ apiKey, total, tenantId });
+      paymentId = sumup.checkoutId;
+      pixCode = sumup.pixCode;
+      qrCodeBase64 = sumup.qrCodeBase64;
+    } else {
+      const accessToken = tenant.mp_access_token || env.mercadopago.accessToken;
+      if (!accessToken) {
+        res.status(400).json({ error: 'missing_access_token' });
+        return;
+      }
+      const webhookUrl = process.env.PUBLIC_URL
+        ? `${process.env.PUBLIC_URL}/api/webhook/mercadopago`
+        : undefined;
+      const pix = await createPixPayment({
+        accessToken,
+        total,
+        items,
+        tenantId,
+        webhookUrl,
+      });
+      paymentId = pix.paymentId;
+      pixCode = pix.pixCode;
+      qrCodeBase64 = pix.qrCodeBase64;
+      expiresIn = pix.expiresIn;
+    }
+
+    const itens = items.map((item) => ({
+      nome: item.nome,
+      quantidade: item.quantidade,
+      preco: item.preco,
+      subtotal: round2(item.preco * item.quantidade),
+    }));
+
+    const insert = await query<{ id: string }>(
+      `INSERT INTO transactions
+        (tenant_id, totem_id, payment_id, gateway, metodo, status,
+         valor_bruto, taxa_gateway_pct, taxa_gateway_valor,
+         comissao_pct, comissao_valor, valor_liquido, itens)
+       VALUES ($1, $2, $3, $4, 'pix', 'pending',
+         $5, $6, $7, $8, $9, $10, $11)
+       RETURNING id`,
+      [
+        tenantId,
+        totemId,
+        paymentId,
+        gateway,
+        total,
+        TAXA_PIX_MP,
+        taxaGatewayValor,
+        comissaoPct,
+        comissaoValor,
+        valorLiquido,
+        JSON.stringify(itens),
+      ]
+    );
+
+    res.json({
+      pixCode,
+      qrCodeBase64,
+      paymentId,
+      expiresIn,
+      transactionId: insert.rows[0].id,
+    });
+  } catch (err) {
+    console.error('Erro ao criar pagamento Pix:', err);
+    res.status(500).json({ error: 'payment_creation_failed' });
+  }
+});
+
+// GET /api/payment/status/:paymentId -> consulta e sincroniza status
+router.get('/status/:paymentId', async (req, res) => {
+  const { paymentId } = req.params;
+
+  try {
+    const txResult = await query(
+      'SELECT * FROM transactions WHERE payment_id = $1',
+      [paymentId]
+    );
+    const transaction = txResult.rows[0];
+    if (!transaction) {
+      res.status(404).json({ error: 'transaction_not_found' });
+      return;
+    }
+
+    const tenantResult = await query(
+      'SELECT mp_access_token, sumup_api_key FROM tenants WHERE id = $1',
+      [transaction.tenant_id]
+    );
+    const tenant = tenantResult.rows[0];
+
+    let status: string;
+    if (transaction.gateway === 'sumup') {
+      const apiKey = tenant?.sumup_api_key || env.sumup.apiKey;
+      ({ status } = await getSumUpPaymentStatus(apiKey, paymentId));
+    } else {
+      const accessToken = tenant?.mp_access_token || env.mercadopago.accessToken;
+      ({ status } = await getPaymentStatus(accessToken, paymentId));
+    }
+
+    if (status === 'approved' && transaction.status !== 'approved') {
+      await query(
+        'UPDATE transactions SET status = $1, atualizado_em = NOW() WHERE id = $2',
+        ['approved', transaction.id]
+      );
+    }
+
+    res.json({ status, transactionId: transaction.id });
+  } catch (err) {
+    console.error('Erro ao consultar status do pagamento:', err);
+    res.status(500).json({ error: 'status_check_failed' });
+  }
+});
+
+// POST /api/payment/card -> cria intenção de pagamento no Point Smart
+router.post('/card', async (req, res) => {
+  const parsed = cardSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+    return;
+  }
+
+  const { items, total, tenantId, deviceId } = parsed.data;
+
+  try {
+    const tenantResult = await query(
+      'SELECT * FROM tenants WHERE id = $1 AND ativo = true',
+      [tenantId]
+    );
+    const tenant = tenantResult.rows[0];
+    if (!tenant) {
+      res.status(404).json({ error: 'tenant_not_found' });
+      return;
+    }
+
+    const gateway = tenant.gateway === 'sumup' ? 'sumup' : 'mercadopago';
+
+    // Valida as credenciais do gateway antes de registrar a transação.
+    if (gateway === 'sumup') {
+      if (!(tenant.sumup_api_key || env.sumup.apiKey) || !tenant.sumup_reader_id) {
+        res.status(400).json({ error: 'missing_sumup_config' });
+        return;
+      }
+    } else {
+      if (!(tenant.mp_access_token || env.mercadopago.accessToken)) {
+        res.status(400).json({ error: 'missing_access_token' });
+        return;
+      }
+      if (!deviceId) {
+        res.status(400).json({ error: 'missing_device_id' });
+        return;
+      }
+    }
+
+    const comissaoPct = Number(tenant.comissao_pct);
+    const taxaGatewayValor = round2(total * TAXA_CARD_MP);
+    const comissaoValor = round2(total * (comissaoPct / 100));
+    const valorLiquido = round2(total - taxaGatewayValor - comissaoValor);
+
+    const transactionId = uuidv4();
+    const totemId = (req.headers['x-totem-id'] as string) || null;
+
+    const itens = items.map((item) => ({
+      nome: item.nome,
+      quantidade: item.quantidade,
+      preco: item.preco,
+      subtotal: round2(item.preco * item.quantidade),
+    }));
+
+    await query(
+      `INSERT INTO transactions
+        (id, tenant_id, totem_id, gateway, metodo, status,
+         valor_bruto, taxa_gateway_pct, taxa_gateway_valor,
+         comissao_pct, comissao_valor, valor_liquido, itens)
+       VALUES ($1, $2, $3, $4, 'cartao', 'pending',
+         $5, $6, $7, $8, $9, $10, $11)`,
+      [
+        transactionId,
+        tenantId,
+        totemId,
+        gateway,
+        total,
+        TAXA_CARD_MP,
+        taxaGatewayValor,
+        comissaoPct,
+        comissaoValor,
+        valorLiquido,
+        JSON.stringify(itens),
+      ]
+    );
+
+    let intentId: string;
+    if (gateway === 'sumup') {
+      const apiKey = tenant.sumup_api_key || env.sumup.apiKey;
+      const result = await createSumUpCardPayment({
+        apiKey,
+        total,
+        readerId: tenant.sumup_reader_id,
+        tenantId,
+      });
+      intentId = result.paymentId;
+    } else {
+      const accessToken = tenant.mp_access_token || env.mercadopago.accessToken;
+      const result = await createCardPayment({
+        accessToken,
+        total,
+        deviceId: deviceId as string,
+        items,
+        tenantId,
+        transactionId,
+      });
+      intentId = result.intentId;
+    }
+
+    // Guarda o intentId/paymentId para o polling / webhook conseguirem sincronizar.
+    await query(
+      'UPDATE transactions SET payment_id = $1, atualizado_em = NOW() WHERE id = $2',
+      [intentId, transactionId]
+    );
+
+    res.json({ intentId, transactionId, status: 'aguardando_maquininha' });
+  } catch (err) {
+    console.error('Erro ao criar pagamento no cartão:', err);
+    res.status(500).json({ error: 'card_payment_failed' });
+  }
+});
+
+// GET /api/payment/card-status/:intentId?tenantId=&deviceId=
+router.get('/card-status/:intentId', async (req, res) => {
+  const { intentId } = req.params;
+  const tenantId = req.query.tenantId as string | undefined;
+  const deviceId = req.query.deviceId as string | undefined;
+
+  try {
+    let accessToken = env.mercadopago.accessToken;
+    if (tenantId) {
+      const tenantResult = await query(
+        'SELECT mp_access_token FROM tenants WHERE id = $1',
+        [tenantId]
+      );
+      accessToken = tenantResult.rows[0]?.mp_access_token || accessToken;
+    }
+
+    const { status } = await getCardPaymentStatus({
+      accessToken,
+      deviceId,
+      intentId,
+    });
+
+    const txResult = await query<{ id: string; status: string }>(
+      'SELECT id, status FROM transactions WHERE payment_id = $1',
+      [intentId]
+    );
+    const transaction = txResult.rows[0];
+
+    if (
+      status === 'approved' &&
+      transaction &&
+      transaction.status !== 'approved'
+    ) {
+      await query(
+        'UPDATE transactions SET status = $1, atualizado_em = NOW() WHERE id = $2',
+        ['approved', transaction.id]
+      );
+    }
+
+    res.json({ status, transactionId: transaction?.id ?? null });
+  } catch (err) {
+    console.error('Erro ao consultar status do cartão:', err);
+    res.status(500).json({ error: 'card_status_failed' });
+  }
+});
+
+export default router;

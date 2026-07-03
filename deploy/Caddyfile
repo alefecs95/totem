@@ -1,0 +1,24 @@
+seudominio.com {
+    # Admin panel
+    handle /admin/* {
+        root * /var/www/totem-festival/admin/dist
+        try_files {path} /admin/index.html
+        file_server
+    }
+
+    # API backend
+    handle /api/* {
+        reverse_proxy localhost:3001
+    }
+
+    # Frontend PWA (totem)
+    handle {
+        root * /var/www/totem-festival/frontend/dist
+        try_files {path} /index.html
+        file_server
+    }
+
+    log {
+        output file /var/log/caddy/totem.log
+    }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "Totem Festival",
+  "short_name": "Totem",
+  "description": "PWA de autoatendimento do Totem Festival",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "icons": []
+}

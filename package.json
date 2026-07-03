@@ -1,0 +1,13 @@
+{
+  "name": "totem-festival",
+  "private": true,
+  "scripts": {
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:admin": "npm run dev --prefix admin",
+    "dev": "concurrently -n backend,frontend,admin -c blue,green,magenta \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:admin\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
