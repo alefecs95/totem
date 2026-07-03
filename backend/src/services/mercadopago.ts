@@ -626,17 +626,14 @@ export async function createMpPos({
   category: number;
 }): Promise<{ posId: string; externalId: string }> {
   const cleanExternalId = sanitizeExternalId(externalId);
-  const cleanExternalStoreId = externalStoreId
-    ? sanitizeExternalId(externalStoreId)
-    : undefined;
+  // external_store_id é opcional e precisa bater com o external_id da loja no MP.
+  // Como o store_id numérico já identifica a loja, omitimos para evitar conflito.
+  void externalStoreId;
 
   const baseBody: Record<string, unknown> = {
     name,
     store_id: storeId,
     external_id: cleanExternalId,
-    ...(cleanExternalStoreId
-      ? { external_store_id: cleanExternalStoreId }
-      : {}),
   };
 
   // 1) Tenta com a categoria informada.
