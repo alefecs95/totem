@@ -177,6 +177,26 @@ export async function setTerminalPdv(
   return data;
 }
 
+export interface SyncMpResult {
+  store: { ok: boolean; motivo?: string; detalhe?: string };
+  storeId: string | null;
+  userId: string | null;
+  totens: Array<{
+    id: string;
+    nome: string;
+    ok: boolean;
+    motivo?: string;
+    detalhe?: string;
+  }>;
+}
+
+export async function syncTenantMp(tenantId: string): Promise<SyncMpResult> {
+  const { data } = await api.post<SyncMpResult>(
+    `/admin/tenants/${tenantId}/sync-mp`
+  );
+  return data;
+}
+
 export async function getDashboard(): Promise<DashboardData> {
   const { data } = await api.get<DashboardData>('/admin/dashboard');
   return data;

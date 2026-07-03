@@ -156,8 +156,9 @@ export default function CardWaiting() {
             lineHeight: 1.5,
           }}
         >
-          A maquininha não acendeu? Deixe-a na tela inicial (Ponto de venda),
-          com internet e ligada.
+          A maquininha mostra &quot;Inserir valor&quot;? Está no modo errado.
+          Vá em Ajustes → Modo de operação → PDV (integrado). A tela não pode
+          ter botão de digitar valor.
         </div>
       )}
     </div>

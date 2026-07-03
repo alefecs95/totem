@@ -6,6 +6,7 @@ import {
   getTenantTerminals,
   getTenants,
   setTerminalPdv,
+  syncTenantMp,
   updateTenant,
   type Tenant,
   type TenantInput,
@@ -67,6 +68,8 @@ export default function Tenants() {
   const [terminaisErro, setTerminaisErro] = useState('');
   const [ativandoPdv, setAtivandoPdv] = useState(false);
   const [pdvMsg, setPdvMsg] = useState('');
+  const [sincronizando, setSincronizando] = useState(false);
+  const [syncMsg, setSyncMsg] = useState('');
   const [totensTenant, setTotensTenant] = useState<Tenant | null>(null);
 
   const carregar = () => {
@@ -144,6 +147,40 @@ export default function Tenants() {
       setTerminais([]);
     } finally {
       setCarregandoTerminais(false);
+    }
+  };
+
+  const sincronizarMp = async () => {
+    if (!editingId) {
+      setSyncMsg('Salve o organizador primeiro, depois edite.');
+      return;
+    }
+    setSincronizando(true);
+    setSyncMsg('');
+    try {
+      const r = await syncTenantMp(editingId);
+      const linhas: string[] = [];
+      if (r.storeId) {
+        linhas.push(`Loja OK (store_id ${r.storeId}).`);
+      } else {
+        linhas.push(
+          `Loja NÃO criada: ${r.store.detalhe ?? r.store.motivo ?? 'erro'}.`
+        );
+      }
+      const posOk = r.totens.filter((t) => t.ok).length;
+      linhas.push(`Caixas: ${posOk}/${r.totens.length} OK.`);
+      const falhas = r.totens.filter((t) => !t.ok);
+      for (const f of falhas) {
+        linhas.push(`• ${f.nome}: ${f.detalhe ?? f.motivo ?? 'erro'}`);
+      }
+      setSyncMsg(linhas.join('\n'));
+    } catch (err: unknown) {
+      const detalhe = (
+        err as { response?: { data?: { detalhe?: string } } }
+      )?.response?.data?.detalhe;
+      setSyncMsg(detalhe ?? 'Falha ao sincronizar com o Mercado Pago.');
+    } finally {
+      setSincronizando(false);
     }
   };
 
@@ -525,7 +562,37 @@ export default function Tenants() {
                     >
                       {ativandoPdv ? 'Ativando...' : '⚙️ Ativar modo PDV'}
                     </button>
+                    <button
+                      type="button"
+                      onClick={sincronizarMp}
+                      disabled={sincronizando}
+                      style={{
+                        padding: '10px 16px',
+                        borderRadius: 8,
+                        border: '1px solid #7c3aed',
+                        background: '#ede9fe',
+                        color: '#6d28d9',
+                        fontWeight: 600,
+                        cursor: sincronizando ? 'default' : 'pointer',
+                      }}
+                    >
+                      {sincronizando
+                        ? 'Sincronizando...'
+                        : '🔄 Criar loja/caixa no MP'}
+                    </button>
                     </div>
+                    {syncMsg && (
+                      <p
+                        style={{
+                          margin: '8px 0 0',
+                          fontSize: 13,
+                          color: '#0f172a',
+                          whiteSpace: 'pre-wrap',
+                        }}
+                      >
+                        {syncMsg}
+                      </p>
+                    )}
                     {pdvMsg && (
                       <p style={{ margin: '8px 0 0', fontSize: 13, color: '#0f172a' }}>
                         {pdvMsg}

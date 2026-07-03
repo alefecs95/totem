@@ -327,6 +327,79 @@ router.post('/tenants/:id/terminals/pdv', verifyAdmin, async (req, res) => {
   }
 });
 
+// POST /api/admin/tenants/:id/sync-mp -> (re)cria loja e caixas no Mercado Pago
+router.post('/tenants/:id/sync-mp', verifyAdmin, async (req, res) => {
+  try {
+    const result = await query<TenantRow>(
+      'SELECT * FROM tenants WHERE id = $1',
+      [req.params.id]
+    );
+    const tenant = result.rows[0];
+    if (!tenant) {
+      res.status(404).json({ error: 'tenant_not_found' });
+      return;
+    }
+
+    // 1) Garante a loja (store).
+    const store = await tryCreateMpStore(tenant);
+
+    // Recarrega para pegar o mp_store_id recém-criado.
+    const refreshed = await query<TenantRow>(
+      'SELECT * FROM tenants WHERE id = $1',
+      [req.params.id]
+    );
+    const tenantAtualizado = refreshed.rows[0];
+
+    // 2) Cria os caixas (POS) faltantes de cada totem.
+    const totensResult = await query(
+      'SELECT * FROM totens WHERE tenant_id = $1 AND ativo = true',
+      [req.params.id]
+    );
+    const totensStatus: Array<{
+      id: string;
+      nome: string;
+      ok: boolean;
+      motivo?: string;
+      detalhe?: string;
+    }> = [];
+    for (const row of totensResult.rows) {
+      const posId = row.mp_pos_id as string | null;
+      if (posId) {
+        totensStatus.push({
+          id: row.id as string,
+          nome: row.nome as string,
+          ok: true,
+        });
+        continue;
+      }
+      const pos = await tryCreateMpPos(tenantAtualizado, {
+        id: row.id as string,
+        nome: row.nome as string,
+      });
+      totensStatus.push({
+        id: row.id as string,
+        nome: row.nome as string,
+        ok: pos.ok,
+        motivo: pos.motivo,
+        detalhe: pos.detalhe,
+      });
+    }
+
+    res.json({
+      store,
+      storeId: tenantAtualizado.mp_store_id ?? null,
+      userId: tenantAtualizado.mp_user_id ?? null,
+      totens: totensStatus,
+    });
+  } catch (err) {
+    console.error('Erro ao sincronizar MP:', err);
+    res.status(500).json({
+      error: 'sync_mp_failed',
+      detalhe: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
 // GET /api/admin/tenants/:id/orders/:orderId -> diagnóstico da Order no MP
 router.get('/tenants/:id/orders/:orderId', verifyAdmin, async (req, res) => {
   try {
