@@ -132,6 +132,33 @@ export default function Tenants() {
     value: string | number | undefined
   ) => setForm((prev) => ({ ...prev, [key]: value }));
 
+  const usarLocalizacaoAtual = () => {
+    setEnderecoOk('');
+    setEnderecoErro('');
+    if (!('geolocation' in navigator)) {
+      setEnderecoErro('Este dispositivo não suporta geolocalização.');
+      return;
+    }
+    setGeocoding(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setField('latitude', pos.coords.latitude);
+        setField('longitude', pos.coords.longitude);
+        setEnderecoOk('Localização atual capturada.');
+        setGeocoding(false);
+      },
+      (err) => {
+        setEnderecoErro(
+          err.code === err.PERMISSION_DENIED
+            ? 'Permissão de localização negada. Autorize no navegador e tente de novo.'
+            : 'Não foi possível obter a localização atual.'
+        );
+        setGeocoding(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
   const buscarCoordenadas = async () => {
     setEnderecoOk('');
     setEnderecoErro('');
@@ -405,23 +432,47 @@ export default function Tenants() {
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={buscarCoordenadas}
-                    disabled={geocoding}
+                  <div
                     style={{
+                      display: 'flex',
+                      gap: 8,
+                      flexWrap: 'wrap',
                       marginTop: 4,
-                      padding: '10px 16px',
-                      borderRadius: 8,
-                      border: '1px solid #0ea5e9',
-                      background: '#e0f2fe',
-                      color: '#0369a1',
-                      fontWeight: 600,
-                      cursor: geocoding ? 'default' : 'pointer',
                     }}
                   >
-                    {geocoding ? 'Localizando...' : '📍 Localizar endereço'}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={usarLocalizacaoAtual}
+                      disabled={geocoding}
+                      style={{
+                        padding: '10px 16px',
+                        borderRadius: 8,
+                        border: 'none',
+                        background: '#0f172a',
+                        color: '#fff',
+                        fontWeight: 600,
+                        cursor: geocoding ? 'default' : 'pointer',
+                      }}
+                    >
+                      🎯 Usar localização atual
+                    </button>
+                    <button
+                      type="button"
+                      onClick={buscarCoordenadas}
+                      disabled={geocoding}
+                      style={{
+                        padding: '10px 16px',
+                        borderRadius: 8,
+                        border: '1px solid #0ea5e9',
+                        background: '#e0f2fe',
+                        color: '#0369a1',
+                        fontWeight: 600,
+                        cursor: geocoding ? 'default' : 'pointer',
+                      }}
+                    >
+                      {geocoding ? 'Buscando...' : '📍 Buscar pelo endereço'}
+                    </button>
+                  </div>
 
                   {enderecoOk && (
                     <div
