@@ -26,11 +26,10 @@ export interface TotemConfig {
   };
 }
 
-export interface PaymentResponse {
-  paymentId: string;
+export interface CardPaymentResponse {
+  intentId: string;
+  transactionId: string;
   status: string;
-  qrCode?: string;
-  qrCodeBase64?: string;
 }
 
 export interface PixPaymentResponse {
@@ -83,8 +82,8 @@ export async function createCardPayment(
   items: CartItem[],
   total: number,
   tenantId: string
-): Promise<PaymentResponse> {
-  const { data } = await api.post<PaymentResponse>('/payment/card', {
+): Promise<CardPaymentResponse> {
+  const { data } = await api.post<CardPaymentResponse>('/payment/card', {
     items: items.map(({ nome, quantidade, preco }) => ({
       nome,
       quantidade,
@@ -93,5 +92,17 @@ export async function createCardPayment(
     total,
     tenantId,
   });
+  return data;
+}
+
+// GET /api/payment/card-status/:intentId -> status do pagamento no cartão
+export async function getCardPaymentStatus(
+  intentId: string,
+  tenantId: string
+): Promise<PaymentStatusResponse> {
+  const { data } = await api.get<PaymentStatusResponse>(
+    `/payment/card-status/${intentId}`,
+    { params: { tenantId } }
+  );
   return data;
 }

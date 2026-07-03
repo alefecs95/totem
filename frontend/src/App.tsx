@@ -9,6 +9,7 @@ import Home from './pages/Home';
 import Cart from './pages/Cart';
 import Payment from './pages/Payment';
 import PixQRCode from './pages/PixQRCode';
+import CardWaiting from './pages/CardWaiting';
 import Success from './pages/Success';
 import Setup from './pages/Setup';
 
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/cart" element={<Cart />} />
           <Route path="/payment" element={<Payment />} />
           <Route path="/pix" element={<PixQRCode />} />
+          <Route path="/card" element={<CardWaiting />} />
           <Route path="/success" element={<Success />} />
         </Routes>
       </RequireTotemConfig>

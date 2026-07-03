@@ -81,8 +81,13 @@ export default function Payment() {
     setLoading(true);
     try {
       const payment = await createCardPayment(items, total, tenantId);
-      navigate('/success', {
-        state: { items, total, metodo: 'cartao', payment },
+      navigate('/card', {
+        state: {
+          items,
+          total,
+          intentId: payment.intentId,
+          transactionId: payment.transactionId,
+        },
       });
     } catch (err: unknown) {
       const data = (
@@ -109,7 +114,7 @@ export default function Payment() {
       >
         <div className="spinner" />
         <p style={{ fontSize: 20, color: 'var(--text-muted)' }}>
-          Ativando maquininha...
+          Enviando para a maquininha...
         </p>
       </div>
     );
