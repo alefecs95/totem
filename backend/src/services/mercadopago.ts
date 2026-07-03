@@ -1,4 +1,5 @@
 import { MercadoPagoConfig, Payment } from 'mercadopago';
+import { normalizeBrazilStateName } from '../utils/brazil-states';
 
 export interface PixItem {
   nome: string;
@@ -189,7 +190,7 @@ export async function createMpStore({
       street_name: location.street_name?.trim() || 'Local do evento',
       street_number: location.street_number?.trim() || 'S/N',
       city_name: location.city_name,
-      state_name: location.state_name,
+      state_name: normalizeBrazilStateName(location.state_name),
       latitude: location.latitude,
       longitude: location.longitude,
       ...(location.reference ? { reference: location.reference } : {}),

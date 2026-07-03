@@ -422,12 +422,12 @@ export default function Tenants() {
                       </Field>
                     </div>
                     <div style={{ flex: 1 }}>
-                      <Field label="Estado (UF)">
+                      <Field label="Estado (UF ou nome)">
                         <input
                           style={input}
                           value={form.estado ?? ''}
                           onChange={(e) => setField('estado', e.target.value)}
-                          placeholder="CE"
+                          placeholder="MA ou Maranhão"
                         />
                       </Field>
                     </div>
