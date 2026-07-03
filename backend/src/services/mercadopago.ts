@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { normalizeBrazilStateName } from '../utils/brazil-states';
 
@@ -175,12 +176,33 @@ interface CreateCardParams {
   webhookUrl?: string;
 }
 
-// Cancela uma intenção de pagamento em fila (status "open") no Point.
+// IDs da API de Orders começam com "ORD"; os antigos (payment-intents) são UUID.
+function isOrderId(id: string): boolean {
+  return id.startsWith('ORD');
+}
+
+// Cancela uma cobrança (Order ou payment-intent legado) presa na maquininha.
 export async function cancelCardPaymentIntent(
   accessToken: string,
   deviceId: string,
   intentId: string
 ): Promise<boolean> {
+  if (isOrderId(intentId)) {
+    const response = await fetch(
+      `${MP_API_BASE}/v1/orders/${encodeURIComponent(intentId)}/cancel`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          'X-Idempotency-Key': randomUUID(),
+          'x-allow-cancelable-status': 'at_terminal',
+        },
+      }
+    );
+    return response.ok;
+  }
+
   const response = await fetch(
     `${MP_API_BASE}/point/integration-api/devices/${encodeURIComponent(deviceId)}/payment-intents/${encodeURIComponent(intentId)}`,
     {
@@ -189,6 +211,37 @@ export async function cancelCardPaymentIntent(
     }
   );
   return response.ok;
+}
+
+// Cria uma Order do Point (API nova, recomendada pelo Mercado Pago).
+async function postCardOrder(
+  accessToken: string,
+  deviceId: string,
+  total: number,
+  transactionId: string
+): Promise<Response> {
+  return fetch(`${MP_API_BASE}/v1/orders`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      'X-Idempotency-Key': randomUUID(),
+    },
+    body: JSON.stringify({
+      type: 'point',
+      external_reference: transactionId,
+      description: 'Fichas Festival',
+      config: {
+        point: {
+          terminal_id: deviceId,
+          print_on_terminal: 'no_ticket',
+        },
+      },
+      transactions: {
+        payments: [{ amount: total.toFixed(2) }],
+      },
+    }),
+  });
 }
 
 async function postCardPaymentIntent(
@@ -221,7 +274,8 @@ async function postCardPaymentIntent(
   );
 }
 
-// Cria uma intenção de pagamento no Point Smart (cartão débito/crédito).
+// Cria a cobrança no Point Smart (cartão débito/crédito).
+// Usa a API de Orders (nova) e cai para payment-intents (legada) se falhar.
 export async function createCardPayment({
   accessToken,
   total,
@@ -233,7 +287,7 @@ export async function createCardPayment({
   sandbox?: boolean;
   pendingIntentIds?: string[];
 }): Promise<{ intentId: string }> {
-  // Limpa intenções antigas presas na fila do dispositivo.
+  // Limpa cobranças antigas presas na fila do dispositivo.
   for (const intentId of pendingIntentIds) {
     try {
       await cancelCardPaymentIntent(accessToken, deviceId, intentId);
@@ -242,6 +296,37 @@ export async function createCardPayment({
     }
   }
 
+  // 1) Tenta a API de Orders (recomendada).
+  let orderResp = await postCardOrder(
+    accessToken,
+    deviceId,
+    total,
+    transactionId
+  );
+
+  // 409 = já há uma order na fila da maquininha — cancela e tenta de novo.
+  if (orderResp.status === 409 && pendingIntentIds.length > 0) {
+    for (const intentId of pendingIntentIds) {
+      try {
+        await cancelCardPaymentIntent(accessToken, deviceId, intentId);
+      } catch {
+        // best-effort
+      }
+    }
+    orderResp = await postCardOrder(accessToken, deviceId, total, transactionId);
+  }
+
+  if (orderResp.ok) {
+    const data = (await orderResp.json()) as { id: string };
+    return { intentId: data.id };
+  }
+
+  const orderDetail = await orderResp.text();
+  console.warn(
+    `Orders API falhou (${orderResp.status}): ${orderDetail}. Tentando payment-intents legado.`
+  );
+
+  // 2) Fallback: API legada de payment-intents.
   let response = await postCardPaymentIntent(
     accessToken,
     deviceId,
@@ -250,7 +335,6 @@ export async function createCardPayment({
     sandbox
   );
 
-  // 409 = já existe intenção na fila — cancela e tenta de novo uma vez.
   if (response.status === 409 && pendingIntentIds.length > 0) {
     for (const intentId of pendingIntentIds) {
       await cancelCardPaymentIntent(accessToken, deviceId, intentId);
@@ -266,14 +350,59 @@ export async function createCardPayment({
 
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(`Point intent failed (${response.status}): ${detail}`);
+    // Propaga o erro mais informativo (Orders costuma ser mais claro).
+    throw new Error(
+      `Point charge failed. Orders(${orderResp.status}): ${orderDetail} | Intent(${response.status}): ${detail}`
+    );
   }
 
   const data = (await response.json()) as { id: string };
   return { intentId: data.id };
 }
 
-// Consulta o status de uma intenção de pagamento do Point.
+// Consulta o status de uma Order do Point (API nova). Status self-contained.
+async function getCardOrderStatus(
+  accessToken: string,
+  orderId: string
+): Promise<{ status: PaymentStatus; mpPaymentId?: string }> {
+  const response = await fetch(
+    `${MP_API_BASE}/v1/orders/${encodeURIComponent(orderId)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Order status failed (${response.status}): ${detail}`);
+  }
+
+  const data = (await response.json()) as {
+    status?: string;
+    transactions?: {
+      payments?: Array<{ reference_id?: string; status?: string }>;
+    };
+  };
+  const raw = (data.status ?? '').toLowerCase();
+  const mpPaymentId = data.transactions?.payments?.[0]?.reference_id;
+
+  let status: PaymentStatus;
+  if (raw === 'processed') {
+    status = 'approved';
+  } else if (
+    raw === 'failed' ||
+    raw === 'canceled' ||
+    raw === 'expired' ||
+    raw === 'refunded'
+  ) {
+    status = 'rejected';
+  } else {
+    // created, at_terminal, action_required → ainda aguardando.
+    status = 'pending';
+  }
+
+  return { status, mpPaymentId };
+}
+
+// Consulta o status de uma cobrança do Point (Order nova ou intent legado).
 export async function getCardPaymentStatus({
   accessToken,
   intentId,
@@ -282,6 +411,10 @@ export async function getCardPaymentStatus({
   deviceId?: string;
   intentId: string;
 }): Promise<{ status: PaymentStatus; mpPaymentId?: string }> {
+  if (isOrderId(intentId)) {
+    return getCardOrderStatus(accessToken, intentId);
+  }
+
   const response = await fetch(
     `${MP_API_BASE}/point/integration-api/payment-intents/${intentId}`,
     {

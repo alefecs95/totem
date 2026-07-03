@@ -142,6 +142,24 @@ export default function CardWaiting() {
         Expira em {Math.floor(secondsLeft / 60)}:
         {String(secondsLeft % 60).padStart(2, '0')}
       </p>
+      {TIMEOUT_SEC - secondsLeft >= 15 && (
+        <div
+          style={{
+            marginTop: 20,
+            maxWidth: 360,
+            padding: '12px 16px',
+            borderRadius: 10,
+            background: 'rgba(255, 193, 7, 0.12)',
+            color: '#ffca28',
+            fontSize: 14,
+            textAlign: 'center',
+            lineHeight: 1.5,
+          }}
+        >
+          A maquininha não acendeu? Deixe-a na tela inicial (Ponto de venda),
+          com internet e ligada.
+        </div>
+      )}
     </div>
   );
 }
