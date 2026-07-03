@@ -83,9 +83,11 @@ export default function Payment() {
         state: { items, total, metodo: 'cartao', payment },
       });
     } catch (err: unknown) {
-      const code = (err as { response?: { data?: { error?: string } } })
-        ?.response?.data?.error;
-      setErro(mensagemErroPagamento(code));
+      const data = (
+        err as { response?: { data?: { error?: string; detalhe?: string } } }
+      )?.response?.data;
+      const base = mensagemErroPagamento(data?.error);
+      setErro(data?.detalhe ? `${base}\n\n${data.detalhe}` : base);
       console.error('Falha ao ativar a maquininha:', err);
       setLoading(false);
     }
@@ -281,6 +283,8 @@ export default function Payment() {
               color: '#fca5a5',
               fontSize: 14,
               textAlign: 'center',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
             }}
           >
             {erro}

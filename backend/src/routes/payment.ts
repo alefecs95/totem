@@ -314,7 +314,10 @@ router.post('/card', async (req, res) => {
     res.json({ intentId, transactionId, status: 'aguardando_maquininha' });
   } catch (err) {
     console.error('Erro ao criar pagamento no cartão:', err);
-    res.status(500).json({ error: 'card_payment_failed' });
+    res.status(500).json({
+      error: 'card_payment_failed',
+      detalhe: err instanceof Error ? err.message : String(err),
+    });
   }
 });
 
