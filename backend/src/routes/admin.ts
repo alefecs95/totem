@@ -11,7 +11,7 @@ import {
   createMpStore,
   getMpUserId,
 } from '../services/mercadopago';
-import { geocodeAddress } from '../services/geocode';
+import { geocodeBrazil } from '../services/geocode';
 
 const router = Router();
 
@@ -118,16 +118,12 @@ async function tryCreateMpStore(
   // Fallback: se o operador não informou coordenadas, deriva do endereço.
   if ((lat == null || lng == null) && tenant.cidade && tenant.estado) {
     try {
-      const q = [
-        tenant.endereco,
-        tenant.numero,
-        tenant.cidade,
-        tenant.estado,
-        'Brasil',
-      ]
-        .filter(Boolean)
-        .join(', ');
-      const geo = await geocodeAddress(q);
+      const geo = await geocodeBrazil({
+        endereco: tenant.endereco,
+        numero: tenant.numero,
+        cidade: tenant.cidade,
+        estado: tenant.estado,
+      });
       if (geo) {
         lat = geo.latitude;
         lng = geo.longitude;
@@ -201,15 +197,24 @@ async function tryCreateMpPos(
   }
 }
 
-// GET /api/admin/geocode?q=... -> converte endereço em latitude/longitude
+// GET /api/admin/geocode?cidade=&estado=&endereco=&numero= -> lat/long
+// (aceita também ?q= por compatibilidade)
 router.get('/geocode', verifyAdmin, async (req, res) => {
+  const cidade = String(req.query.cidade ?? '').trim();
+  const estado = String(req.query.estado ?? '').trim();
+  const endereco = String(req.query.endereco ?? '').trim();
+  const numero = String(req.query.numero ?? '').trim();
   const q = String(req.query.q ?? '').trim();
-  if (!q) {
+
+  if (!cidade && !estado && !q) {
     res.status(400).json({ error: 'missing_query' });
     return;
   }
+
   try {
-    const result = await geocodeAddress(q);
+    const result = q
+      ? await geocodeBrazil({ endereco: q })
+      : await geocodeBrazil({ endereco, numero, cidade, estado });
     if (!result) {
       res.status(404).json({ error: 'not_found' });
       return;

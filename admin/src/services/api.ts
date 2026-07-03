@@ -131,10 +131,17 @@ export interface GeocodeResult {
   displayName: string;
 }
 
+export interface GeocodeParams {
+  endereco?: string;
+  numero?: string;
+  cidade?: string;
+  estado?: string;
+}
+
 // Converte um endereço em coordenadas (usa OpenStreetMap no backend).
-export async function geocode(q: string): Promise<GeocodeResult> {
+export async function geocode(params: GeocodeParams): Promise<GeocodeResult> {
   const { data } = await api.get<GeocodeResult>('/admin/geocode', {
-    params: { q },
+    params,
   });
   return data;
 }

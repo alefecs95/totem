@@ -138,18 +138,20 @@ export default function Tenants() {
       setEnderecoErro('Preencha ao menos Cidade e Estado.');
       return;
     }
-    const q = [form.endereco, form.numero, form.cidade, form.estado, 'Brasil']
-      .filter(Boolean)
-      .join(', ');
     setGeocoding(true);
     try {
-      const result = await geocode(q);
+      const result = await geocode({
+        endereco: form.endereco ?? undefined,
+        numero: form.numero ?? undefined,
+        cidade: form.cidade ?? undefined,
+        estado: form.estado ?? undefined,
+      });
       setField('latitude', result.latitude);
       setField('longitude', result.longitude);
       setEnderecoOk(`Local encontrado: ${result.displayName}`);
     } catch {
       setEnderecoErro(
-        'Endereço não encontrado. Revise os dados ou informe as coordenadas manualmente.'
+        'Endereço não encontrado. Revise a cidade e o estado e tente novamente.'
       );
     } finally {
       setGeocoding(false);
