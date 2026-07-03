@@ -145,8 +145,8 @@ async function tryCreateMpStore(
       name: tenant.nome,
       externalId: tenant.id,
       location: {
-        street_name: tenant.endereco || undefined,
-        street_number: tenant.numero || undefined,
+        street_name: tenant.endereco?.trim() || tenant.nome,
+        street_number: tenant.numero?.trim() || 'S/N',
         city_name: tenant.cidade,
         state_name: tenant.estado,
         latitude: lat,

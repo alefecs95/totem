@@ -383,9 +383,9 @@ export default function Tenants() {
                     Endereço da loja
                   </strong>
                   <p style={{ margin: '4px 0 12px', fontSize: 12, color: '#64748b' }}>
-                    Necessário para criar a loja no Mercado Pago. Preencha o
-                    endereço e clique em <b>Localizar</b> — as coordenadas são
-                    preenchidas automaticamente.
+                    Preencha cidade e estado, use <b>localização atual</b> ou o
+                    mapa. Rua e número são opcionais (o sistema usa um padrão se
+                    estiverem vazios).
                   </p>
 
                   <div style={{ display: 'flex', gap: 12 }}>

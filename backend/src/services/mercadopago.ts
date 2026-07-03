@@ -181,13 +181,28 @@ export async function createMpStore({
   externalId: string;
   location: MpStoreLocation;
 }): Promise<{ storeId: string }> {
+  // O MP exige street_name (e costuma exigir street_number) mesmo com lat/long.
+  const payload = {
+    name,
+    external_id: externalId,
+    location: {
+      street_name: location.street_name?.trim() || 'Local do evento',
+      street_number: location.street_number?.trim() || 'S/N',
+      city_name: location.city_name,
+      state_name: location.state_name,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      ...(location.reference ? { reference: location.reference } : {}),
+    },
+  };
+
   const response = await fetch(`${MP_API_BASE}/users/${userId}/stores`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ name, external_id: externalId, location }),
+    body: JSON.stringify(payload),
   });
   if (!response.ok) {
     const detail = await response.text();
