@@ -212,7 +212,7 @@ router.post('/card', async (req, res) => {
     return;
   }
 
-  const { items, total, tenantId, deviceId } = parsed.data;
+  const { items, total, tenantId, deviceId: bodyDeviceId } = parsed.data;
 
   try {
     const tenantResult = await query(
@@ -226,6 +226,7 @@ router.post('/card', async (req, res) => {
     }
 
     const gateway = tenant.gateway === 'sumup' ? 'sumup' : 'mercadopago';
+    const deviceId = bodyDeviceId || (tenant.mp_device_id as string | null) || undefined;
 
     // Valida as credenciais do gateway antes de registrar a transação.
     if (gateway === 'sumup') {
@@ -325,17 +326,20 @@ router.get('/card-status/:intentId', async (req, res) => {
 
   try {
     let accessToken = env.mercadopago.accessToken;
+    let resolvedDeviceId = deviceId;
     if (tenantId) {
       const tenantResult = await query(
-        'SELECT mp_access_token FROM tenants WHERE id = $1',
+        'SELECT mp_access_token, mp_device_id FROM tenants WHERE id = $1',
         [tenantId]
       );
-      accessToken = tenantResult.rows[0]?.mp_access_token || accessToken;
+      const tenant = tenantResult.rows[0];
+      accessToken = tenant?.mp_access_token || accessToken;
+      resolvedDeviceId = resolvedDeviceId || tenant?.mp_device_id || undefined;
     }
 
     const { status } = await getCardPaymentStatus({
       accessToken,
-      deviceId,
+      deviceId: resolvedDeviceId,
       intentId,
     });
 

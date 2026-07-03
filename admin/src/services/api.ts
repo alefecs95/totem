@@ -56,6 +56,7 @@ export type TenantInput = Partial<
     | 'gateway'
     | 'mp_access_token'
     | 'mp_webhook_secret'
+    | 'mp_device_id'
     | 'sumup_api_key'
   >
 > & { comissao_pct?: number };

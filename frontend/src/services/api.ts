@@ -53,7 +53,11 @@ export async function createPixPayment(
   tenantId: string
 ): Promise<PixPaymentResponse> {
   const { data } = await api.post<PixPaymentResponse>('/payment/pix', {
-    items,
+    items: items.map(({ nome, quantidade, preco }) => ({
+      nome,
+      quantidade,
+      preco,
+    })),
     total,
     tenantId,
   });
@@ -77,7 +81,11 @@ export async function createCardPayment(
   tenantId: string
 ): Promise<PaymentResponse> {
   const { data } = await api.post<PaymentResponse>('/payment/card', {
-    items,
+    items: items.map(({ nome, quantidade, preco }) => ({
+      nome,
+      quantidade,
+      preco,
+    })),
     total,
     tenantId,
   });

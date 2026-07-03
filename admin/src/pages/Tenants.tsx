@@ -18,6 +18,7 @@ const emptyForm: TenantInput = {
   comissao_pct: 5,
   mp_access_token: '',
   mp_webhook_secret: '',
+  mp_device_id: '',
   sumup_api_key: '',
 };
 
@@ -56,6 +57,7 @@ export default function Tenants() {
       comissao_pct: Number(t.comissao_pct),
       mp_access_token: t.mp_access_token ?? '',
       mp_webhook_secret: t.mp_webhook_secret ?? '',
+      mp_device_id: t.mp_device_id ?? '',
       sumup_api_key: t.sumup_api_key ?? '',
     });
     setModalOpen(true);
@@ -258,6 +260,14 @@ export default function Tenants() {
                     onChange={(e) =>
                       setField('mp_webhook_secret', e.target.value)
                     }
+                  />
+                </Field>
+                <Field label="MP Device ID (Point Smart)">
+                  <input
+                    style={input}
+                    value={form.mp_device_id ?? ''}
+                    onChange={(e) => setField('mp_device_id', e.target.value)}
+                    placeholder="ID da maquininha no Mercado Pago"
                   />
                 </Field>
               </>

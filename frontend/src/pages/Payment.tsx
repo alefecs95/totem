@@ -30,23 +30,50 @@ export default function Payment() {
 
   const [metodo, setMetodo] = useState<Metodo | null>(null);
   const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState('');
+
+  const mensagemErroPagamento = (code?: string): string => {
+    switch (code) {
+      case 'missing_access_token':
+        return 'Mercado Pago não configurado. Preencha o Access Token no admin.';
+      case 'missing_device_id':
+        return 'Maquininha não configurada. Preencha o Device ID no admin.';
+      case 'missing_sumup_config':
+        return 'SumUp não configurado. Preencha API Key e Reader ID no admin.';
+      case 'tenant_not_found':
+        return 'Organizador não encontrado. Reconfigure o totem.';
+      case 'invalid_body':
+        return 'Dados do pedido inválidos. Tente novamente.';
+      default:
+        return 'Não foi possível ativar a maquininha. Tente novamente.';
+    }
+  };
 
   const handleConfirmar = async () => {
     if (!metodo) return;
+    setErro('');
 
     if (metodo === 'pix') {
       navigate('/pix', { state: { items, total } });
       return;
     }
 
+    const tenantId = localStorage.getItem('tenantId');
+    if (!tenantId) {
+      setErro('Totem não configurado. Escaneie o QR Code novamente.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const tenantId = localStorage.getItem('tenantId') ?? '';
       const payment = await createCardPayment(items, total, tenantId);
       navigate('/success', {
         state: { items, total, metodo: 'cartao', payment },
       });
-    } catch (err) {
+    } catch (err: unknown) {
+      const code = (err as { response?: { data?: { error?: string } } })
+        ?.response?.data?.error;
+      setErro(mensagemErroPagamento(code));
       console.error('Falha ao ativar a maquininha:', err);
       setLoading(false);
     }
@@ -213,6 +240,21 @@ export default function Payment() {
           background: 'linear-gradient(to top, var(--bg) 70%, transparent)',
         }}
       >
+        {erro && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: '10px 12px',
+              borderRadius: 8,
+              background: 'rgba(220, 38, 38, 0.15)',
+              color: '#fca5a5',
+              fontSize: 14,
+              textAlign: 'center',
+            }}
+          >
+            {erro}
+          </div>
+        )}
         <button
           className="btn-primary"
           onClick={handleConfirmar}
