@@ -97,8 +97,8 @@ export async function runMigrations(): Promise<void> {
   const senhaHash = bcrypt.hashSync(DEFAULT_ADMIN_PASSWORD, 10);
   await query(
     `INSERT INTO admin_users (email, senha_hash)
-     SELECT $1, $2
-     WHERE NOT EXISTS (SELECT 1 FROM admin_users WHERE email = $1)`,
+     VALUES ($1, $2)
+     ON CONFLICT (email) DO NOTHING`,
     [DEFAULT_ADMIN_EMAIL, senhaHash]
   );
 
