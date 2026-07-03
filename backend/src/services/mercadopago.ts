@@ -589,6 +589,25 @@ export async function createMpStore({
   return { storeId: String(data.id) };
 }
 
+// external_id do POS aceita só letras e números (sem hífens/espaços).
+function sanitizeExternalId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40) || 'POS';
+}
+
+async function postMpPos(
+  accessToken: string,
+  body: Record<string, unknown>
+): Promise<Response> {
+  return fetch(`${MP_API_BASE}/pos`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
 // Cria um caixa (POS) e associa a uma loja. Cada Point Smart em modo PDV
 // precisa de um caixa próprio.
 export async function createMpPos({
@@ -606,24 +625,41 @@ export async function createMpPos({
   externalId: string;
   category: number;
 }): Promise<{ posId: string; externalId: string }> {
-  const response = await fetch(`${MP_API_BASE}/pos`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      name,
-      store_id: storeId,
-      external_store_id: externalStoreId,
-      external_id: externalId,
-      category,
-    }),
+  const cleanExternalId = sanitizeExternalId(externalId);
+  const cleanExternalStoreId = externalStoreId
+    ? sanitizeExternalId(externalStoreId)
+    : undefined;
+
+  const baseBody: Record<string, unknown> = {
+    name,
+    store_id: storeId,
+    external_id: cleanExternalId,
+    ...(cleanExternalStoreId
+      ? { external_store_id: cleanExternalStoreId }
+      : {}),
+  };
+
+  // 1) Tenta com a categoria informada.
+  let response = await postMpPos(accessToken, {
+    ...baseBody,
+    category,
   });
+
+  // Se o MCC não for válido para o país, cria sem categoria (fica genérica).
+  if (!response.ok) {
+    const detail = await response.text();
+    if (detail.includes('pos_unknown_mcc') || detail.includes('INVALID_CATEGORY')) {
+      response = await postMpPos(accessToken, baseBody);
+    } else {
+      throw new Error(`MP create POS failed (${response.status}): ${detail}`);
+    }
+  }
+
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(`MP create POS failed (${response.status}): ${detail}`);
   }
+
   const data = (await response.json()) as {
     id: number | string;
     external_id: string;
