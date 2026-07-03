@@ -101,8 +101,8 @@ router.post('/pix', async (req, res) => {
         res.status(400).json({ error: 'missing_access_token' });
         return;
       }
-      const webhookUrl = process.env.PUBLIC_URL
-        ? `${process.env.PUBLIC_URL}/api/webhook/mercadopago`
+      const webhookUrl = env.publicUrl
+        ? `${env.publicUrl}/api/webhook/mercadopago`
         : undefined;
       const pix = await createPixPayment({
         accessToken,

@@ -1,10 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Servido sob /admin/ em produção (ver deploy/Caddyfile).
+// No EasyPanel o admin fica na raiz do próprio subdomínio (base '/').
 // Em dev, /api é redirecionado para o backend (porta 3001).
 export default defineConfig({
-  base: '/admin/',
   plugins: [react()],
   server: {
     port: 5174,

@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+// Em dev usa o proxy do Vite (/api). Em produção, VITE_API_URL aponta
+// para o domínio da API (ex.: https://totem-api.easypanel.host/api).
 export const api = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_URL ?? '/api',
 });
 
 // Injeta o JWT do admin (sessionStorage) em toda requisição.

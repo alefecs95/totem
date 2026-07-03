@@ -10,7 +10,13 @@ import adminRoutes from './routes/admin';
 // TODO: implementar (middleware de identificação tenant/totem via headers x-tenant-id / x-totem-id, tratamento de erros)
 const app = express();
 
-app.use(cors({ origin: env.frontendUrl }));
+// CORS: PWA e admin ficam em domínios distintos em produção (EasyPanel).
+app.use(
+  cors({
+    origin: env.corsOrigins,
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 // Rotas montadas sob /api para casar com o proxy do Vite (dev) e o Caddy (prod).

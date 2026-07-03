@@ -1,9 +1,10 @@
 import axios from 'axios';
 import type { CartItem, Product } from '../store/cartStore';
 
-// baseURL /api: em dev usa o proxy do Vite; em prod é o mesmo domínio.
+// Em dev usa o proxy do Vite (/api). Em produção (domínios separados),
+// VITE_API_URL aponta para o domínio da API (ex.: https://totem-api.easypanel.host/api).
 export const api = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_URL ?? '/api',
 });
 
 // Injeta os headers de identificação do totem (tenant + totem físico)
