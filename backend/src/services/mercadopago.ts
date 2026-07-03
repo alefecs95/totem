@@ -364,7 +364,11 @@ export async function createCardPayment({
 async function getCardOrderStatus(
   accessToken: string,
   orderId: string
-): Promise<{ status: PaymentStatus; mpPaymentId?: string }> {
+): Promise<{
+  status: PaymentStatus;
+  mpPaymentId?: string;
+  rawStatus?: string;
+}> {
   const response = await fetch(
     `${MP_API_BASE}/v1/orders/${encodeURIComponent(orderId)}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -407,7 +411,11 @@ async function getCardOrderStatus(
     status = 'pending';
   }
 
-  return { status, mpPaymentId };
+  return {
+    status,
+    mpPaymentId,
+    rawStatus: `${data.status ?? '?'}/${data.status_detail ?? '?'}`,
+  };
 }
 
 // Consulta o status de uma cobrança do Point (Order nova ou intent legado).
@@ -418,7 +426,7 @@ export async function getCardPaymentStatus({
   accessToken: string;
   deviceId?: string;
   intentId: string;
-}): Promise<{ status: PaymentStatus; mpPaymentId?: string }> {
+}): Promise<{ status: PaymentStatus; mpPaymentId?: string; rawStatus?: string }> {
   if (isOrderId(intentId)) {
     return getCardOrderStatus(accessToken, intentId);
   }

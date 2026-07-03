@@ -43,6 +43,7 @@ export interface PaymentStatusResponse {
   status: string;
   mpPaymentId?: string | null;
   transactionId?: string | null;
+  rawStatus?: string | null;
 }
 
 // GET /api/config -> nome do festival + produtos do tenant

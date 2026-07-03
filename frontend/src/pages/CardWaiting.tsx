@@ -35,6 +35,7 @@ export default function CardWaiting() {
   const [estado, setEstado] = useState<Estado>('aguardando');
   const [secondsLeft, setSecondsLeft] = useState(TIMEOUT_SEC);
   const [mpPaymentId, setMpPaymentId] = useState('');
+  const [rawStatus, setRawStatus] = useState('');
 
   // Sem intentId não há o que aguardar — volta ao pagamento.
   useEffect(() => {
@@ -52,6 +53,7 @@ export default function CardWaiting() {
     const id = window.setInterval(async () => {
       try {
         const result = await getCardPaymentStatus(intentId, tenantId);
+        if (result.rawStatus) setRawStatus(result.rawStatus);
         if (result.status === 'approved') {
           if (result.mpPaymentId) setMpPaymentId(result.mpPaymentId);
           setEstado('aprovado');
@@ -142,6 +144,11 @@ export default function CardWaiting() {
         Expira em {Math.floor(secondsLeft / 60)}:
         {String(secondsLeft % 60).padStart(2, '0')}
       </p>
+      {rawStatus && (
+        <p style={{ color: '#64748b', fontSize: 12, marginTop: 4 }}>
+          Status MP: {rawStatus}
+        </p>
+      )}
       {TIMEOUT_SEC - secondsLeft >= 15 && (
         <div
           style={{

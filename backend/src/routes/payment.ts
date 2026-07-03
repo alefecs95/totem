@@ -384,7 +384,7 @@ router.get('/card-status/:intentId', async (req, res) => {
       resolvedDeviceId = resolvedDeviceId || tenant?.mp_device_id || undefined;
     }
 
-    const { status, mpPaymentId } = await getCardPaymentStatus({
+    const { status, mpPaymentId, rawStatus } = await getCardPaymentStatus({
       accessToken,
       deviceId: resolvedDeviceId,
       intentId,
@@ -411,6 +411,7 @@ router.get('/card-status/:intentId', async (req, res) => {
       status,
       transactionId: transaction?.id ?? null,
       mpPaymentId: mpPaymentId ?? null,
+      rawStatus: rawStatus ?? null,
     });
   } catch (err) {
     console.error('Erro ao consultar status do cartão:', err);
