@@ -26,6 +26,62 @@ export type PaymentStatus = 'approved' | 'pending' | 'rejected';
 
 const MP_API_BASE = 'https://api.mercadopago.com';
 
+// Formato oficial do terminal Point (ex.: NEWLAND_N950__N950NCB801293324).
+export function isValidMpDeviceId(deviceId: string | null | undefined): boolean {
+  if (!deviceId?.trim()) return false;
+  return /^[A-Z0-9_]+__[A-Z0-9]+$/i.test(deviceId.trim());
+}
+
+export interface MpTerminal {
+  id: string;
+  posId: number | null;
+  storeId: string | null;
+  operatingMode: string;
+}
+
+// Lista maquininhas Point vinculadas à conta do Access Token.
+export async function listMpTerminals(
+  accessToken: string,
+  filters?: { storeId?: string; posId?: string }
+): Promise<MpTerminal[]> {
+  const params = new URLSearchParams({ limit: '50' });
+  if (filters?.storeId) params.set('store_id', filters.storeId);
+  if (filters?.posId) params.set('pos_id', filters.posId);
+
+  const response = await fetch(
+    `${MP_API_BASE}/terminals/v1/list?${params.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`MP list terminals failed (${response.status}): ${detail}`);
+  }
+
+  const body = (await response.json()) as {
+    data?: {
+      terminals?: Array<{
+        id: string;
+        pos_id?: number;
+        store_id?: string;
+        operating_mode?: string;
+      }>;
+    };
+  };
+
+  return (body.data?.terminals ?? []).map((t) => ({
+    id: t.id,
+    posId: t.pos_id ?? null,
+    storeId: t.store_id ?? null,
+    operatingMode: t.operating_mode ?? 'UNDEFINED',
+  }));
+}
+
 interface CreateCardParams {
   accessToken: string;
   total: number;

@@ -8,6 +8,7 @@ import {
   createPixPayment,
   getCardPaymentStatus,
   getPaymentStatus,
+  isValidMpDeviceId,
 } from '../services/mercadopago';
 import {
   createSumUpCardPayment,
@@ -241,6 +242,14 @@ router.post('/card', async (req, res) => {
       }
       if (!deviceId) {
         res.status(400).json({ error: 'missing_device_id' });
+        return;
+      }
+      if (!isValidMpDeviceId(deviceId)) {
+        res.status(400).json({
+          error: 'invalid_device_id',
+          detalhe:
+            'Device ID inválido. Use o botão "Buscar maquininhas" no admin — não confunda com o ID do caixa (POS).',
+        });
         return;
       }
     }

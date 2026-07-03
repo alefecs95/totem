@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { query } from '../config/database';
+import { isValidMpDeviceId } from '../services/mercadopago';
 
 const router = Router();
 
@@ -68,7 +69,10 @@ router.get('/config', async (req, res) => {
     const cartaoDisponivel =
       gateway === 'sumup'
         ? Boolean(tenant.sumup_api_key && tenant.sumup_reader_id)
-        : Boolean(tenant.mp_access_token && tenant.mp_device_id);
+        : Boolean(
+            tenant.mp_access_token &&
+              isValidMpDeviceId(tenant.mp_device_id as string)
+          );
 
     res.json({
       nomeFestival: tenant.nome,

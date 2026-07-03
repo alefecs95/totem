@@ -10,6 +10,8 @@ import {
   createMpPos,
   createMpStore,
   getMpUserId,
+  isValidMpDeviceId,
+  listMpTerminals,
 } from '../services/mercadopago';
 import { geocodeBrazil } from '../services/geocode';
 
@@ -236,6 +238,40 @@ router.get('/geocode', verifyAdmin, async (req, res) => {
   } catch (err) {
     console.error('Erro ao geocodificar endereço:', err);
     res.status(500).json({ error: 'geocode_failed' });
+  }
+});
+
+// GET /api/admin/tenants/:id/terminals -> lista maquininhas Point do tenant
+router.get('/tenants/:id/terminals', verifyAdmin, async (req, res) => {
+  try {
+    const result = await query<TenantRow>(
+      'SELECT * FROM tenants WHERE id = $1 AND ativo = true',
+      [req.params.id]
+    );
+    const tenant = result.rows[0];
+    if (!tenant) {
+      res.status(404).json({ error: 'tenant_not_found' });
+      return;
+    }
+
+    const accessToken =
+      tenant.mp_access_token || env.mercadopago.accessToken;
+    if (!accessToken) {
+      res.status(400).json({ error: 'missing_access_token' });
+      return;
+    }
+
+    const terminals = await listMpTerminals(accessToken, {
+      storeId: tenant.mp_store_id ?? undefined,
+    });
+
+    res.json({ terminals });
+  } catch (err) {
+    console.error('Erro ao listar terminais MP:', err);
+    res.status(500).json({
+      error: 'list_terminals_failed',
+      detalhe: err instanceof Error ? err.message : String(err),
+    });
   }
 });
 

@@ -150,6 +150,22 @@ export async function geocode(params: GeocodeParams): Promise<GeocodeResult> {
   return data;
 }
 
+export interface MpTerminal {
+  id: string;
+  posId: number | null;
+  storeId: string | null;
+  operatingMode: string;
+}
+
+export async function getTenantTerminals(
+  tenantId: string
+): Promise<MpTerminal[]> {
+  const { data } = await api.get<{ terminals: MpTerminal[] }>(
+    `/admin/tenants/${tenantId}/terminals`
+  );
+  return data.terminals;
+}
+
 export async function getDashboard(): Promise<DashboardData> {
   const { data } = await api.get<DashboardData>('/admin/dashboard');
   return data;

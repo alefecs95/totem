@@ -3,10 +3,12 @@ import {
   createTenant,
   deleteTenant,
   geocode,
+  getTenantTerminals,
   getTenants,
   updateTenant,
   type Tenant,
   type TenantInput,
+  type MpTerminal,
 } from '../services/api';
 import TotensModal from '../components/TotensModal';
 import MapPicker from '../components/MapPicker';
@@ -59,6 +61,9 @@ export default function Tenants() {
   const [estados, setEstados] = useState<UF[]>([]);
   const [cidades, setCidades] = useState<string[]>([]);
   const [carregandoCidades, setCarregandoCidades] = useState(false);
+  const [terminais, setTerminais] = useState<MpTerminal[]>([]);
+  const [carregandoTerminais, setCarregandoTerminais] = useState(false);
+  const [terminaisErro, setTerminaisErro] = useState('');
   const [totensTenant, setTotensTenant] = useState<Tenant | null>(null);
 
   const carregar = () => {
@@ -104,12 +109,46 @@ export default function Tenants() {
     setAviso('');
     setEnderecoOk('');
     setEnderecoErro('');
+    setTerminaisErro('');
+  };
+
+  const buscarMaquininhas = async () => {
+    if (!editingId) {
+      setTerminaisErro('Salve o organizador primeiro, depois edite para buscar.');
+      return;
+    }
+    if (!form.mp_access_token?.trim()) {
+      setTerminaisErro('Preencha o MP Access Token antes de buscar.');
+      return;
+    }
+    setCarregandoTerminais(true);
+    setTerminaisErro('');
+    try {
+      const lista = await getTenantTerminals(editingId);
+      setTerminais(lista);
+      if (lista.length === 0) {
+        setTerminaisErro(
+          'Nenhuma maquininha encontrada. Pareie o Point Smart na conta MP e coloque em modo PDV.'
+        );
+      }
+    } catch (err: unknown) {
+      const detalhe = (
+        err as { response?: { data?: { detalhe?: string } } }
+      )?.response?.data?.detalhe;
+      setTerminaisErro(
+        detalhe ?? 'Falha ao buscar maquininhas. Verifique o Access Token.'
+      );
+      setTerminais([]);
+    } finally {
+      setCarregandoTerminais(false);
+    }
   };
 
   const abrirNovo = () => {
     setEditingId(null);
     setForm(emptyForm);
     setCidades([]);
+    setTerminais([]);
     limparFeedback();
     setModalOpen(true);
   };
@@ -405,9 +444,70 @@ export default function Tenants() {
                     style={input}
                     value={form.mp_device_id ?? ''}
                     onChange={(e) => setField('mp_device_id', e.target.value)}
-                    placeholder="ID da maquininha no Mercado Pago"
+                    placeholder="NEWLAND_N950__N950NCB801293324"
                   />
+                  <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
+                    Formato: <code>MODELO__NUMERO_SERIE</code>. Não use o ID do
+                    caixa (POS) — é o ID da maquininha física.
+                  </p>
                 </Field>
+
+                {editingId && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={buscarMaquininhas}
+                      disabled={carregandoTerminais}
+                      style={{
+                        padding: '10px 16px',
+                        borderRadius: 8,
+                        border: '1px solid #0ea5e9',
+                        background: '#e0f2fe',
+                        color: '#0369a1',
+                        fontWeight: 600,
+                        cursor: carregandoTerminais ? 'default' : 'pointer',
+                      }}
+                    >
+                      {carregandoTerminais
+                        ? 'Buscando...'
+                        : '🔍 Buscar maquininhas na conta MP'}
+                    </button>
+                    {terminaisErro && (
+                      <p style={{ margin: '8px 0 0', fontSize: 13, color: '#dc2626' }}>
+                        {terminaisErro}
+                      </p>
+                    )}
+                    {terminais.length > 0 && (
+                      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {terminais.map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setField('mp_device_id', t.id)}
+                            style={{
+                              textAlign: 'left',
+                              padding: '10px 12px',
+                              borderRadius: 8,
+                              border:
+                                form.mp_device_id === t.id
+                                  ? '2px solid #0f172a'
+                                  : '1px solid #cbd5e1',
+                              background:
+                                form.mp_device_id === t.id ? '#f1f5f9' : '#fff',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <div style={{ fontWeight: 600, fontSize: 13 }}>{t.id}</div>
+                            <div style={{ fontSize: 12, color: '#64748b' }}>
+                              Modo: {t.operatingMode}
+                              {t.posId != null ? ` · POS ${t.posId}` : ''}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div
                   style={{
