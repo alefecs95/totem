@@ -23,6 +23,12 @@ export default function Home() {
         setNomeFestival(config.nomeFestival);
         setProdutos(config.produtos);
         localStorage.setItem('tenantName', config.nomeFestival);
+        if (config.pagamentos) {
+          localStorage.setItem(
+            'pagamentos',
+            JSON.stringify(config.pagamentos)
+          );
+        }
       })
       .catch((err) => {
         console.error('Falha ao carregar configuração do totem:', err);

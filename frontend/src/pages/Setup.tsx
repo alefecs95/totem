@@ -26,6 +26,12 @@ export default function Setup() {
       .then((config) => {
         if (!ativo) return;
         localStorage.setItem('tenantName', config.nomeFestival);
+        if (config.pagamentos) {
+          localStorage.setItem(
+            'pagamentos',
+            JSON.stringify(config.pagamentos)
+          );
+        }
         navigate('/', { replace: true });
       })
       .catch(() => {

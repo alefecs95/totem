@@ -20,6 +20,10 @@ api.interceptors.request.use((config) => {
 export interface TotemConfig {
   nomeFestival: string;
   produtos: Product[];
+  pagamentos?: {
+    pix: boolean;
+    cartao: boolean;
+  };
 }
 
 export interface PaymentResponse {

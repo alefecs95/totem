@@ -15,7 +15,9 @@ router.get('/config', async (req, res) => {
 
   try {
     const tenantResult = await query(
-      'SELECT id, nome FROM tenants WHERE id = $1 AND ativo = true',
+      `SELECT id, nome, gateway, mp_device_id, mp_access_token,
+              sumup_api_key, sumup_reader_id
+       FROM tenants WHERE id = $1 AND ativo = true`,
       [tenantId]
     );
     const tenant = tenantResult.rows[0];
@@ -56,9 +58,25 @@ router.get('/config', async (req, res) => {
       cor: row.cor as string,
     }));
 
+    // Métodos de pagamento realmente disponíveis para este tenant.
+    // Pix precisa só de credencial; cartão precisa da maquininha configurada.
+    const gateway = tenant.gateway === 'sumup' ? 'sumup' : 'mercadopago';
+    const pixDisponivel =
+      gateway === 'sumup'
+        ? Boolean(tenant.sumup_api_key)
+        : Boolean(tenant.mp_access_token);
+    const cartaoDisponivel =
+      gateway === 'sumup'
+        ? Boolean(tenant.sumup_api_key && tenant.sumup_reader_id)
+        : Boolean(tenant.mp_access_token && tenant.mp_device_id);
+
     res.json({
       nomeFestival: tenant.nome,
       produtos,
+      pagamentos: {
+        pix: pixDisponivel,
+        cartao: cartaoDisponivel,
+      },
     });
   } catch (err) {
     console.error('Erro ao carregar config do totem:', err);

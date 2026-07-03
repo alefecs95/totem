@@ -32,6 +32,18 @@ export default function Payment() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
+  // Métodos habilitados conforme a configuração do organizador (vinda do /config).
+  const pagamentos = (() => {
+    try {
+      const raw = localStorage.getItem('pagamentos');
+      return raw
+        ? (JSON.parse(raw) as { pix: boolean; cartao: boolean })
+        : { pix: true, cartao: true };
+    } catch {
+      return { pix: true, cartao: true };
+    }
+  })();
+
   const mensagemErroPagamento = (code?: string): string => {
     switch (code) {
       case 'missing_access_token':
@@ -131,6 +143,7 @@ export default function Payment() {
           gap: 16,
         }}
       >
+        {pagamentos.pix && (
         <button
           onClick={() => setMetodo('pix')}
           className="card"
@@ -178,7 +191,9 @@ export default function Payment() {
             Instantâneo · Sem taxas extras
           </span>
         </button>
+        )}
 
+        {pagamentos.cartao && (
         <button
           onClick={() => setMetodo('card')}
           className="card"
@@ -228,6 +243,22 @@ export default function Payment() {
             Passe na maquininha ao lado →
           </span>
         </button>
+        )}
+
+        {!pagamentos.pix && !pagamentos.cartao && (
+          <div
+            style={{
+              padding: 20,
+              borderRadius: 12,
+              background: 'rgba(220, 38, 38, 0.15)',
+              color: '#fca5a5',
+              textAlign: 'center',
+              fontSize: 15,
+            }}
+          >
+            Nenhum método de pagamento configurado. Avise o organizador.
+          </div>
+        )}
       </main>
 
       <footer
