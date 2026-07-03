@@ -239,7 +239,7 @@ export async function getCardPaymentStatus({
   accessToken: string;
   deviceId?: string;
   intentId: string;
-}): Promise<{ status: PaymentStatus }> {
+}): Promise<{ status: PaymentStatus; mpPaymentId?: string }> {
   const response = await fetch(
     `${MP_API_BASE}/point/integration-api/payment-intents/${intentId}`,
     {
@@ -252,19 +252,53 @@ export async function getCardPaymentStatus({
     throw new Error(`Point status failed (${response.status}): ${detail}`);
   }
 
-  const data = (await response.json()) as { state?: string; status?: string };
-  const raw = data.state ?? data.status;
+  const data = (await response.json()) as {
+    state?: string;
+    status?: string;
+    payment?: { id?: number | string; state?: string; status?: string };
+  };
+  const raw = (data.state ?? data.status ?? '').toUpperCase();
 
   let status: PaymentStatus;
+  let mpPaymentId: string | undefined;
   if (raw === 'FINISHED') {
-    status = 'approved';
-  } else if (raw === 'CANCELED' || raw === 'ERROR') {
+    // FINISHED só indica fim do fluxo na Point — o resultado real está em payment.
+    const paymentState = (
+      data.payment?.state ??
+      data.payment?.status ??
+      ''
+    ).toLowerCase();
+    if (data.payment?.id != null) {
+      mpPaymentId = String(data.payment.id);
+    }
+    if (paymentState === 'approved') {
+      status = 'approved';
+    } else if (
+      paymentState === 'rejected' ||
+      paymentState === 'cancelled' ||
+      paymentState === 'refunded'
+    ) {
+      status = 'rejected';
+    } else if (data.payment?.id != null) {
+      const resolved = await getPaymentStatus(
+        accessToken,
+        String(data.payment.id)
+      );
+      status = resolved.status;
+    } else {
+      status = 'pending';
+    }
+  } else if (
+    raw === 'CANCELED' ||
+    raw === 'ERROR' ||
+    raw === 'ABANDONED'
+  ) {
     status = 'rejected';
   } else {
     status = 'pending';
   }
 
-  return { status };
+  return { status, mpPaymentId };
 }
 
 // Cria uma cobrança Pix usando o access token do próprio tenant.

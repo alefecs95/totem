@@ -34,6 +34,7 @@ export default function CardWaiting() {
 
   const [estado, setEstado] = useState<Estado>('aguardando');
   const [secondsLeft, setSecondsLeft] = useState(TIMEOUT_SEC);
+  const [mpPaymentId, setMpPaymentId] = useState('');
 
   // Sem intentId não há o que aguardar — volta ao pagamento.
   useEffect(() => {
@@ -50,10 +51,11 @@ export default function CardWaiting() {
 
     const id = window.setInterval(async () => {
       try {
-        const { status } = await getCardPaymentStatus(intentId, tenantId);
-        if (status === 'approved') {
+        const result = await getCardPaymentStatus(intentId, tenantId);
+        if (result.status === 'approved') {
+          if (result.mpPaymentId) setMpPaymentId(result.mpPaymentId);
           setEstado('aprovado');
-        } else if (status === 'rejected') {
+        } else if (result.status === 'rejected') {
           setEstado('recusado');
         }
       } catch (err) {
@@ -88,11 +90,13 @@ export default function CardWaiting() {
           items,
           total,
           metodo: 'cartao',
-          payment: { paymentId: intentId || transactionId },
+          payment: {
+            paymentId: mpPaymentId || intentId || transactionId,
+          },
         },
       });
     }
-  }, [estado, navigate, items, total, intentId, transactionId]);
+  }, [estado, navigate, items, total, intentId, transactionId, mpPaymentId]);
 
   if (!intentId) return null;
 
