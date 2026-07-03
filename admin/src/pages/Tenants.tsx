@@ -5,6 +5,7 @@ import {
   geocode,
   getTenantTerminals,
   getTenants,
+  setTerminalPdv,
   updateTenant,
   type Tenant,
   type TenantInput,
@@ -64,6 +65,8 @@ export default function Tenants() {
   const [terminais, setTerminais] = useState<MpTerminal[]>([]);
   const [carregandoTerminais, setCarregandoTerminais] = useState(false);
   const [terminaisErro, setTerminaisErro] = useState('');
+  const [ativandoPdv, setAtivandoPdv] = useState(false);
+  const [pdvMsg, setPdvMsg] = useState('');
   const [totensTenant, setTotensTenant] = useState<Tenant | null>(null);
 
   const carregar = () => {
@@ -141,6 +144,39 @@ export default function Tenants() {
       setTerminais([]);
     } finally {
       setCarregandoTerminais(false);
+    }
+  };
+
+  const ativarModoPdv = async (deviceId?: string) => {
+    if (!editingId) {
+      setPdvMsg('Salve o organizador primeiro, depois edite.');
+      return;
+    }
+    const alvo = deviceId ?? form.mp_device_id;
+    if (!alvo?.trim()) {
+      setPdvMsg('Selecione ou informe o Device ID da maquininha primeiro.');
+      return;
+    }
+    setAtivandoPdv(true);
+    setPdvMsg('');
+    try {
+      await setTerminalPdv(editingId, alvo);
+      setPdvMsg('Maquininha colocada em modo PDV. Teste o pagamento no totem.');
+      try {
+        setTerminais(await getTenantTerminals(editingId));
+      } catch {
+        // lista é só informativa
+      }
+    } catch (err: unknown) {
+      const detalhe = (
+        err as { response?: { data?: { detalhe?: string } } }
+      )?.response?.data?.detalhe;
+      setPdvMsg(
+        detalhe ??
+          'Falha ao ativar PDV. Ative pelo app Mercado Pago (Point → Modo de uso → PDV/Integrado).'
+      );
+    } finally {
+      setAtivandoPdv(false);
     }
   };
 
@@ -454,6 +490,7 @@ export default function Tenants() {
 
                 {editingId && (
                   <div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button
                       type="button"
                       onClick={buscarMaquininhas}
@@ -472,6 +509,28 @@ export default function Tenants() {
                         ? 'Buscando...'
                         : '🔍 Buscar maquininhas na conta MP'}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => ativarModoPdv()}
+                      disabled={ativandoPdv}
+                      style={{
+                        padding: '10px 16px',
+                        borderRadius: 8,
+                        border: '1px solid #16a34a',
+                        background: '#dcfce7',
+                        color: '#15803d',
+                        fontWeight: 600,
+                        cursor: ativandoPdv ? 'default' : 'pointer',
+                      }}
+                    >
+                      {ativandoPdv ? 'Ativando...' : '⚙️ Ativar modo PDV'}
+                    </button>
+                    </div>
+                    {pdvMsg && (
+                      <p style={{ margin: '8px 0 0', fontSize: 13, color: '#0f172a' }}>
+                        {pdvMsg}
+                      </p>
+                    )}
                     {terminaisErro && (
                       <p style={{ margin: '8px 0 0', fontSize: 13, color: '#dc2626' }}>
                         {terminaisErro}
@@ -499,9 +558,40 @@ export default function Tenants() {
                           >
                             <div style={{ fontWeight: 600, fontSize: 13 }}>{t.id}</div>
                             <div style={{ fontSize: 12, color: '#64748b' }}>
-                              Modo: {t.operatingMode}
+                              Modo:{' '}
+                              <b
+                                style={{
+                                  color:
+                                    t.operatingMode === 'PDV'
+                                      ? '#15803d'
+                                      : '#dc2626',
+                                }}
+                              >
+                                {t.operatingMode}
+                              </b>
+                              {t.operatingMode !== 'PDV'
+                                ? ' (precisa ser PDV)'
+                                : ''}
                               {t.posId != null ? ` · POS ${t.posId}` : ''}
                             </div>
+                            {t.operatingMode !== 'PDV' && (
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  ativarModoPdv(t.id);
+                                }}
+                                style={{
+                                  display: 'inline-block',
+                                  marginTop: 6,
+                                  fontSize: 12,
+                                  color: '#15803d',
+                                  textDecoration: 'underline',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Colocar em PDV
+                              </span>
+                            )}
                           </button>
                         ))}
                       </div>

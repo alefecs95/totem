@@ -12,6 +12,7 @@ import {
   getMpUserId,
   isValidMpDeviceId,
   listMpTerminals,
+  setTerminalOperatingMode,
 } from '../services/mercadopago';
 import { geocodeBrazil } from '../services/geocode';
 
@@ -270,6 +271,57 @@ router.get('/tenants/:id/terminals', verifyAdmin, async (req, res) => {
     console.error('Erro ao listar terminais MP:', err);
     res.status(500).json({
       error: 'list_terminals_failed',
+      detalhe: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+// POST /api/admin/tenants/:id/terminals/pdv -> coloca a maquininha em modo PDV
+router.post('/tenants/:id/terminals/pdv', verifyAdmin, async (req, res) => {
+  try {
+    const result = await query<TenantRow>(
+      'SELECT * FROM tenants WHERE id = $1 AND ativo = true',
+      [req.params.id]
+    );
+    const tenant = result.rows[0];
+    if (!tenant) {
+      res.status(404).json({ error: 'tenant_not_found' });
+      return;
+    }
+
+    const accessToken =
+      tenant.mp_access_token || env.mercadopago.accessToken;
+    if (!accessToken) {
+      res.status(400).json({ error: 'missing_access_token' });
+      return;
+    }
+
+    const deviceId =
+      (req.body?.deviceId as string | undefined) ||
+      (tenant.mp_device_id as string | null | undefined);
+    if (!isValidMpDeviceId(deviceId)) {
+      res.status(400).json({ error: 'invalid_device_id' });
+      return;
+    }
+
+    const outcome = await setTerminalOperatingMode(
+      accessToken,
+      deviceId as string,
+      'PDV'
+    );
+    if (!outcome.ok) {
+      res.status(502).json({
+        error: 'set_pdv_failed',
+        detalhe: outcome.detail,
+      });
+      return;
+    }
+
+    res.json({ ok: true, mode: outcome.mode });
+  } catch (err) {
+    console.error('Erro ao ativar modo PDV:', err);
+    res.status(500).json({
+      error: 'set_pdv_failed',
       detalhe: err instanceof Error ? err.message : String(err),
     });
   }

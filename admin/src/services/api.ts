@@ -166,6 +166,17 @@ export async function getTenantTerminals(
   return data.terminals;
 }
 
+export async function setTerminalPdv(
+  tenantId: string,
+  deviceId?: string
+): Promise<{ ok: boolean; mode?: string }> {
+  const { data } = await api.post<{ ok: boolean; mode?: string }>(
+    `/admin/tenants/${tenantId}/terminals/pdv`,
+    deviceId ? { deviceId } : {}
+  );
+  return data;
+}
+
 export async function getDashboard(): Promise<DashboardData> {
   const { data } = await api.get<DashboardData>('/admin/dashboard');
   return data;

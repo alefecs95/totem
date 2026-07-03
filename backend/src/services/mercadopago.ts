@@ -123,6 +123,48 @@ export async function listMpTerminals(
   return Array.from(map.values());
 }
 
+// Coloca a maquininha em modo PDV (integrado) para receber cobranças do totem.
+// Sem isso, o Point fica em STANDALONE e ignora as intenções de pagamento.
+export async function setTerminalOperatingMode(
+  accessToken: string,
+  deviceId: string,
+  operatingMode: 'PDV' | 'STANDALONE' = 'PDV'
+): Promise<{ ok: boolean; detail?: string; mode?: string }> {
+  // Tenta primeiro o endpoint novo (/terminals/v1/setup).
+  const newApi = await fetch(`${MP_API_BASE}/terminals/v1/setup`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      terminals: [{ id: deviceId, operating_mode: operatingMode }],
+    }),
+  });
+  if (newApi.ok) {
+    return { ok: true, mode: operatingMode };
+  }
+
+  // Fallback: endpoint clássico do Point (/point/integration-api/devices/{id}).
+  const legacy = await fetch(
+    `${MP_API_BASE}/point/integration-api/devices/${encodeURIComponent(deviceId)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ operating_mode: operatingMode }),
+    }
+  );
+  if (legacy.ok) {
+    return { ok: true, mode: operatingMode };
+  }
+
+  const detail = await legacy.text();
+  return { ok: false, detail };
+}
+
 interface CreateCardParams {
   accessToken: string;
   total: number;
