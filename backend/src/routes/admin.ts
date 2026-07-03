@@ -327,6 +327,42 @@ router.post('/tenants/:id/terminals/pdv', verifyAdmin, async (req, res) => {
   }
 });
 
+// GET /api/admin/tenants/:id/orders/:orderId -> diagnóstico da Order no MP
+router.get('/tenants/:id/orders/:orderId', verifyAdmin, async (req, res) => {
+  try {
+    const result = await query<TenantRow>(
+      'SELECT * FROM tenants WHERE id = $1',
+      [req.params.id]
+    );
+    const tenant = result.rows[0];
+    if (!tenant) {
+      res.status(404).json({ error: 'tenant_not_found' });
+      return;
+    }
+    const accessToken =
+      tenant.mp_access_token || env.mercadopago.accessToken;
+    if (!accessToken) {
+      res.status(400).json({ error: 'missing_access_token' });
+      return;
+    }
+
+    const mpResp = await fetch(
+      `https://api.mercadopago.com/v1/orders/${encodeURIComponent(
+        String(req.params.orderId)
+      )}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const body = await mpResp.text();
+    res.status(mpResp.status).type('application/json').send(body);
+  } catch (err) {
+    console.error('Erro ao consultar order MP:', err);
+    res.status(500).json({
+      error: 'order_lookup_failed',
+      detalhe: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
 // GET /api/admin/tenants
 router.get('/tenants', verifyAdmin, async (_req, res) => {
   try {

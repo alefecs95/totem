@@ -377,12 +377,20 @@ async function getCardOrderStatus(
 
   const data = (await response.json()) as {
     status?: string;
+    status_detail?: string;
     transactions?: {
       payments?: Array<{ reference_id?: string; status?: string }>;
     };
   };
   const raw = (data.status ?? '').toLowerCase();
   const mpPaymentId = data.transactions?.payments?.[0]?.reference_id;
+
+  // Diagnóstico: mostra o estado real da Order (created = aparelho ainda não puxou).
+  console.log(
+    `Order ${orderId} status=${data.status ?? '?'} detail=${
+      data.status_detail ?? '?'
+    } payment=${data.transactions?.payments?.[0]?.status ?? '-'}`
+  );
 
   let status: PaymentStatus;
   if (raw === 'processed') {
