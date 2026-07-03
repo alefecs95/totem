@@ -125,6 +125,20 @@ export async function login(email: string, senha: string): Promise<string> {
   return data.token;
 }
 
+export interface GeocodeResult {
+  latitude: number;
+  longitude: number;
+  displayName: string;
+}
+
+// Converte um endereço em coordenadas (usa OpenStreetMap no backend).
+export async function geocode(q: string): Promise<GeocodeResult> {
+  const { data } = await api.get<GeocodeResult>('/admin/geocode', {
+    params: { q },
+  });
+  return data;
+}
+
 export async function getDashboard(): Promise<DashboardData> {
   const { data } = await api.get<DashboardData>('/admin/dashboard');
   return data;

@@ -11,6 +11,7 @@ import {
   createMpStore,
   getMpUserId,
 } from '../services/mercadopago';
+import { geocodeAddress } from '../services/geocode';
 
 const router = Router();
 
@@ -111,8 +112,31 @@ async function tryCreateMpStore(
     return { ok: false, motivo: 'sem_access_token' };
   }
 
-  const lat = tenant.latitude != null ? Number(tenant.latitude) : null;
-  const lng = tenant.longitude != null ? Number(tenant.longitude) : null;
+  let lat = tenant.latitude != null ? Number(tenant.latitude) : null;
+  let lng = tenant.longitude != null ? Number(tenant.longitude) : null;
+
+  // Fallback: se o operador não informou coordenadas, deriva do endereço.
+  if ((lat == null || lng == null) && tenant.cidade && tenant.estado) {
+    try {
+      const q = [
+        tenant.endereco,
+        tenant.numero,
+        tenant.cidade,
+        tenant.estado,
+        'Brasil',
+      ]
+        .filter(Boolean)
+        .join(', ');
+      const geo = await geocodeAddress(q);
+      if (geo) {
+        lat = geo.latitude;
+        lng = geo.longitude;
+      }
+    } catch (err) {
+      console.error('Falha ao geocodificar endereço do tenant:', err);
+    }
+  }
+
   if (!tenant.cidade || !tenant.estado || lat == null || lng == null) {
     return { ok: false, motivo: 'localizacao_incompleta' };
   }
@@ -134,8 +158,11 @@ async function tryCreateMpStore(
       },
     });
     await query(
-      'UPDATE tenants SET mp_user_id = $1, mp_store_id = $2, atualizado_em = NOW() WHERE id = $3',
-      [userId, storeId, tenant.id]
+      `UPDATE tenants
+       SET mp_user_id = $1, mp_store_id = $2, latitude = $3, longitude = $4,
+           atualizado_em = NOW()
+       WHERE id = $5`,
+      [userId, storeId, lat, lng, tenant.id]
     );
     return { ok: true };
   } catch (err) {
@@ -173,6 +200,26 @@ async function tryCreateMpPos(
     return { ok: false, motivo: 'mp_pos_failed' };
   }
 }
+
+// GET /api/admin/geocode?q=... -> converte endereço em latitude/longitude
+router.get('/geocode', verifyAdmin, async (req, res) => {
+  const q = String(req.query.q ?? '').trim();
+  if (!q) {
+    res.status(400).json({ error: 'missing_query' });
+    return;
+  }
+  try {
+    const result = await geocodeAddress(q);
+    if (!result) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('Erro ao geocodificar endereço:', err);
+    res.status(500).json({ error: 'geocode_failed' });
+  }
+});
 
 // GET /api/admin/tenants
 router.get('/tenants', verifyAdmin, async (_req, res) => {

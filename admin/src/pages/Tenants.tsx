@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import {
   createTenant,
   deleteTenant,
+  geocode,
   getTenants,
   updateTenant,
   type Tenant,
@@ -33,7 +34,7 @@ function mensagemMpStore(motivo?: string): string {
     case 'sem_access_token':
       return 'Organizador salvo. A loja do Mercado Pago não foi criada: preencha o MP Access Token.';
     case 'localizacao_incompleta':
-      return 'Organizador salvo. A loja do Mercado Pago não foi criada: preencha Cidade, Estado, Latitude e Longitude.';
+      return 'Organizador salvo. A loja do Mercado Pago não foi criada: preencha o endereço (Cidade e Estado) e clique em Localizar.';
     case 'mp_store_failed':
       return 'Organizador salvo, mas houve erro ao criar a loja no Mercado Pago. Verifique o Access Token.';
     default:
@@ -49,6 +50,9 @@ export default function Tenants() {
   const [form, setForm] = useState<TenantInput>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [aviso, setAviso] = useState('');
+  const [geocoding, setGeocoding] = useState(false);
+  const [enderecoOk, setEnderecoOk] = useState('');
+  const [enderecoErro, setEnderecoErro] = useState('');
   const [totensTenant, setTotensTenant] = useState<Tenant | null>(null);
 
   const carregar = () => {
@@ -60,16 +64,22 @@ export default function Tenants() {
 
   useEffect(carregar, []);
 
+  const limparFeedback = () => {
+    setAviso('');
+    setEnderecoOk('');
+    setEnderecoErro('');
+  };
+
   const abrirNovo = () => {
     setEditingId(null);
     setForm(emptyForm);
-    setAviso('');
+    limparFeedback();
     setModalOpen(true);
   };
 
   const abrirEdicao = (t: Tenant) => {
     setEditingId(t.id);
-    setAviso('');
+    limparFeedback();
     setForm({
       nome: t.nome,
       responsavel: t.responsavel,
@@ -120,6 +130,31 @@ export default function Tenants() {
     key: keyof TenantInput,
     value: string | number | undefined
   ) => setForm((prev) => ({ ...prev, [key]: value }));
+
+  const buscarCoordenadas = async () => {
+    setEnderecoOk('');
+    setEnderecoErro('');
+    if (!form.cidade || !form.estado) {
+      setEnderecoErro('Preencha ao menos Cidade e Estado.');
+      return;
+    }
+    const q = [form.endereco, form.numero, form.cidade, form.estado, 'Brasil']
+      .filter(Boolean)
+      .join(', ');
+    setGeocoding(true);
+    try {
+      const result = await geocode(q);
+      setField('latitude', result.latitude);
+      setField('longitude', result.longitude);
+      setEnderecoOk(`Local encontrado: ${result.displayName}`);
+    } catch {
+      setEnderecoErro(
+        'Endereço não encontrado. Revise os dados ou informe as coordenadas manualmente.'
+      );
+    } finally {
+      setGeocoding(false);
+    }
+  };
 
   return (
     <div>
@@ -304,81 +339,122 @@ export default function Tenants() {
                   />
                 </Field>
 
-                <p
+                <div
                   style={{
-                    margin: '4px 0 0',
-                    fontSize: 12,
-                    color: '#64748b',
+                    marginTop: 8,
+                    padding: 16,
+                    borderRadius: 10,
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
                   }}
                 >
-                  Localização da loja (obrigatória para criar a loja no Mercado
-                  Pago).
-                </p>
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <Field label="Endereço">
-                    <input
-                      style={input}
-                      value={form.endereco ?? ''}
-                      onChange={(e) => setField('endereco', e.target.value)}
-                    />
-                  </Field>
-                  <Field label="Número">
-                    <input
-                      style={input}
-                      value={form.numero ?? ''}
-                      onChange={(e) => setField('numero', e.target.value)}
-                    />
-                  </Field>
-                </div>
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <Field label="Cidade">
-                    <input
-                      style={input}
-                      value={form.cidade ?? ''}
-                      onChange={(e) => setField('cidade', e.target.value)}
-                    />
-                  </Field>
-                  <Field label="Estado">
-                    <input
-                      style={input}
-                      value={form.estado ?? ''}
-                      onChange={(e) => setField('estado', e.target.value)}
-                    />
-                  </Field>
-                </div>
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <Field label="Latitude">
-                    <input
-                      style={input}
-                      type="number"
-                      step="any"
-                      value={form.latitude ?? ''}
-                      onChange={(e) =>
-                        setField(
-                          'latitude',
-                          e.target.value === ''
-                            ? undefined
-                            : Number(e.target.value)
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field label="Longitude">
-                    <input
-                      style={input}
-                      type="number"
-                      step="any"
-                      value={form.longitude ?? ''}
-                      onChange={(e) =>
-                        setField(
-                          'longitude',
-                          e.target.value === ''
-                            ? undefined
-                            : Number(e.target.value)
-                        )
-                      }
-                    />
-                  </Field>
+                  <strong style={{ fontSize: 14, color: '#0f172a' }}>
+                    Endereço da loja
+                  </strong>
+                  <p style={{ margin: '4px 0 12px', fontSize: 12, color: '#64748b' }}>
+                    Necessário para criar a loja no Mercado Pago. Preencha o
+                    endereço e clique em <b>Localizar</b> — as coordenadas são
+                    preenchidas automaticamente.
+                  </p>
+
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div style={{ flex: 3 }}>
+                      <Field label="Rua / Avenida">
+                        <input
+                          style={input}
+                          value={form.endereco ?? ''}
+                          onChange={(e) => setField('endereco', e.target.value)}
+                          placeholder="Av. Brasil"
+                        />
+                      </Field>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <Field label="Número">
+                        <input
+                          style={input}
+                          value={form.numero ?? ''}
+                          onChange={(e) => setField('numero', e.target.value)}
+                          placeholder="123"
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div style={{ flex: 2 }}>
+                      <Field label="Cidade">
+                        <input
+                          style={input}
+                          value={form.cidade ?? ''}
+                          onChange={(e) => setField('cidade', e.target.value)}
+                          placeholder="Fortaleza"
+                        />
+                      </Field>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <Field label="Estado (UF)">
+                        <input
+                          style={input}
+                          value={form.estado ?? ''}
+                          onChange={(e) => setField('estado', e.target.value)}
+                          placeholder="CE"
+                        />
+                      </Field>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={buscarCoordenadas}
+                    disabled={geocoding}
+                    style={{
+                      marginTop: 4,
+                      padding: '10px 16px',
+                      borderRadius: 8,
+                      border: '1px solid #0ea5e9',
+                      background: '#e0f2fe',
+                      color: '#0369a1',
+                      fontWeight: 600,
+                      cursor: geocoding ? 'default' : 'pointer',
+                    }}
+                  >
+                    {geocoding ? 'Localizando...' : '📍 Localizar endereço'}
+                  </button>
+
+                  {enderecoOk && (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        fontSize: 13,
+                        color: '#15803d',
+                      }}
+                    >
+                      ✓ {enderecoOk}
+                    </div>
+                  )}
+                  {enderecoErro && (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        fontSize: 13,
+                        color: '#dc2626',
+                      }}
+                    >
+                      {enderecoErro}
+                    </div>
+                  )}
+
+                  {form.latitude != null && form.longitude != null && (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        fontSize: 12,
+                        color: '#64748b',
+                      }}
+                    >
+                      Coordenadas: {Number(form.latitude).toFixed(6)},{' '}
+                      {Number(form.longitude).toFixed(6)}
+                    </div>
+                  )}
                 </div>
               </>
             ) : (
