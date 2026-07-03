@@ -104,7 +104,7 @@ type TenantRow = Record<string, unknown> & {
 // retorna um status para o admin exibir, sem quebrar o cadastro.
 async function tryCreateMpStore(
   tenant: TenantRow
-): Promise<{ ok: boolean; motivo?: string }> {
+): Promise<{ ok: boolean; motivo?: string; detalhe?: string }> {
   if (tenant.mp_store_id) return { ok: true };
 
   const accessToken = tenant.mp_access_token || env.mercadopago.accessToken;
@@ -163,7 +163,11 @@ async function tryCreateMpStore(
     return { ok: true };
   } catch (err) {
     console.error('Erro ao criar loja no Mercado Pago:', err);
-    return { ok: false, motivo: 'mp_store_failed' };
+    return {
+      ok: false,
+      motivo: 'mp_store_failed',
+      detalhe: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -171,7 +175,7 @@ async function tryCreateMpStore(
 async function tryCreateMpPos(
   tenant: TenantRow,
   totem: { id: string; nome: string }
-): Promise<{ ok: boolean; motivo?: string }> {
+): Promise<{ ok: boolean; motivo?: string; detalhe?: string }> {
   const accessToken = tenant.mp_access_token || env.mercadopago.accessToken;
   if (tenant.gateway !== 'mercadopago' || !accessToken || !tenant.mp_store_id) {
     return { ok: false, motivo: 'loja_indisponivel' };
@@ -193,7 +197,11 @@ async function tryCreateMpPos(
     return { ok: true };
   } catch (err) {
     console.error('Erro ao criar caixa no Mercado Pago:', err);
-    return { ok: false, motivo: 'mp_pos_failed' };
+    return {
+      ok: false,
+      motivo: 'mp_pos_failed',
+      detalhe: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 

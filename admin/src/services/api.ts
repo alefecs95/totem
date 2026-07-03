@@ -77,6 +77,7 @@ export type TenantInput = Partial<
 export interface MpProvisionStatus {
   ok: boolean;
   motivo?: string;
+  detalhe?: string;
 }
 
 export interface Transaction {

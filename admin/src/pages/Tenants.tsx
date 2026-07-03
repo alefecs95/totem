@@ -112,7 +112,8 @@ export default function Tenants() {
         : await createTenant(form);
       carregar();
       if (form.gateway === 'mercadopago' && mpStore && !mpStore.ok) {
-        setAviso(mensagemMpStore(mpStore.motivo));
+        const base = mensagemMpStore(mpStore.motivo);
+        setAviso(mpStore.detalhe ? `${base}\n\nDetalhe: ${mpStore.detalhe}` : base);
       } else {
         setModalOpen(false);
       }
@@ -550,6 +551,8 @@ export default function Tenants() {
                   background: '#fef3c7',
                   color: '#92400e',
                   fontSize: 13,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
                 }}
               >
                 {aviso}
