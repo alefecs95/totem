@@ -182,6 +182,22 @@ export async function setTerminalPdv(
   return data;
 }
 
+export interface SumUpReader {
+  id: string;
+  name: string;
+  status: string;
+  model: string;
+}
+
+export async function getTenantSumUpReaders(
+  tenantId: string
+): Promise<SumUpReader[]> {
+  const { data } = await api.get<{ readers: SumUpReader[] }>(
+    `/admin/tenants/${tenantId}/sumup-readers`
+  );
+  return data.readers;
+}
+
 export interface SyncMpResult {
   store: { ok: boolean; motivo?: string; detalhe?: string };
   storeId: string | null;

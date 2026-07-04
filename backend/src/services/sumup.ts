@@ -95,6 +95,45 @@ export async function getSumUpPaymentStatus(
   return { status };
 }
 
+export interface SumUpReader {
+  id: string;
+  name: string;
+  status: string;
+  model: string;
+}
+
+// Lista os leitores (readers) pareados na conta SumUp do merchant.
+export async function listSumUpReaders(
+  apiKey: string,
+  merchantCode: string
+): Promise<SumUpReader[]> {
+  const response = await fetch(
+    `${SUMUP_API_BASE}/merchants/${encodeURIComponent(merchantCode)}/readers`,
+    { headers: { Authorization: `Bearer ${apiKey}` } }
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`SumUp list readers failed (${response.status}): ${detail}`);
+  }
+
+  const data = (await response.json()) as {
+    items?: Array<{
+      id: string;
+      name?: string;
+      status?: string;
+      device?: { model?: string };
+    }>;
+  };
+
+  return (data.items ?? []).map((r) => ({
+    id: r.id,
+    name: r.name ?? '',
+    status: r.status ?? 'unknown',
+    model: r.device?.model ?? '',
+  }));
+}
+
 // Cria um pagamento de cartão no leitor físico SumUp Solo (Cloud API / Readers).
 // Retorna o client_transaction_id usado depois para consultar o status.
 export async function createSumUpCardPayment({

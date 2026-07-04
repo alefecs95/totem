@@ -3,6 +3,7 @@ import {
   createTenant,
   deleteTenant,
   geocode,
+  getTenantSumUpReaders,
   getTenantTerminals,
   getTenants,
   setTerminalPdv,
@@ -11,6 +12,7 @@ import {
   type Tenant,
   type TenantInput,
   type MpTerminal,
+  type SumUpReader,
 } from '../services/api';
 import TotensModal from '../components/TotensModal';
 import MapPicker from '../components/MapPicker';
@@ -73,6 +75,9 @@ export default function Tenants() {
   const [pdvMsg, setPdvMsg] = useState('');
   const [sincronizando, setSincronizando] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
+  const [sumupReaders, setSumupReaders] = useState<SumUpReader[]>([]);
+  const [buscandoReaders, setBuscandoReaders] = useState(false);
+  const [readersMsg, setReadersMsg] = useState('');
   const [totensTenant, setTotensTenant] = useState<Tenant | null>(null);
 
   const carregar = () => {
@@ -150,6 +155,36 @@ export default function Tenants() {
       setTerminais([]);
     } finally {
       setCarregandoTerminais(false);
+    }
+  };
+
+  const buscarSumupReaders = async () => {
+    if (!editingId) {
+      setReadersMsg('Salve o organizador primeiro, depois edite.');
+      return;
+    }
+    if (!form.sumup_api_key?.trim() || !form.sumup_merchant_code?.trim()) {
+      setReadersMsg('Preencha API Key e Merchant Code antes de buscar.');
+      return;
+    }
+    setBuscandoReaders(true);
+    setReadersMsg('');
+    try {
+      const lista = await getTenantSumUpReaders(editingId);
+      setSumupReaders(lista);
+      if (lista.length === 0) {
+        setReadersMsg(
+          'Nenhum leitor pareado. Pareie a Solo (Conexões → API → Conectar).'
+        );
+      }
+    } catch (err: unknown) {
+      const detalhe = (
+        err as { response?: { data?: { detalhe?: string } } }
+      )?.response?.data?.detalhe;
+      setReadersMsg(detalhe ?? 'Falha ao buscar leitores. Verifique API Key/Merchant.');
+      setSumupReaders([]);
+    } finally {
+      setBuscandoReaders(false);
     }
   };
 
@@ -927,6 +962,83 @@ export default function Tenants() {
                     retornado (começa com <code>rdr_</code>).
                   </p>
                 </Field>
+
+                {editingId && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={buscarSumupReaders}
+                      disabled={buscandoReaders}
+                      style={{
+                        padding: '10px 16px',
+                        borderRadius: 8,
+                        border: '1px solid #0ea5e9',
+                        background: '#e0f2fe',
+                        color: '#0369a1',
+                        fontWeight: 600,
+                        cursor: buscandoReaders ? 'default' : 'pointer',
+                      }}
+                    >
+                      {buscandoReaders
+                        ? 'Buscando...'
+                        : '🔍 Buscar leitores SumUp pareados'}
+                    </button>
+                    {readersMsg && (
+                      <p style={{ margin: '8px 0 0', fontSize: 13, color: '#dc2626' }}>
+                        {readersMsg}
+                      </p>
+                    )}
+                    {sumupReaders.length > 0 && (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 8,
+                        }}
+                      >
+                        {sumupReaders.map((r) => (
+                          <button
+                            key={r.id}
+                            type="button"
+                            onClick={() => setField('sumup_reader_id', r.id)}
+                            style={{
+                              textAlign: 'left',
+                              padding: '10px 12px',
+                              borderRadius: 8,
+                              border:
+                                form.sumup_reader_id === r.id
+                                  ? '2px solid #0f172a'
+                                  : '1px solid #cbd5e1',
+                              background:
+                                form.sumup_reader_id === r.id
+                                  ? '#f1f5f9'
+                                  : '#fff',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <div style={{ fontWeight: 600, fontSize: 13 }}>
+                              {r.name || r.id}
+                            </div>
+                            <div style={{ fontSize: 12, color: '#64748b' }}>
+                              {r.id} · {r.model || 'reader'} ·{' '}
+                              <b
+                                style={{
+                                  color:
+                                    r.status === 'paired'
+                                      ? '#15803d'
+                                      : '#dc2626',
+                                }}
+                              >
+                                {r.status}
+                              </b>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
 
