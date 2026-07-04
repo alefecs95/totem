@@ -300,12 +300,14 @@ router.post('/card', async (req, res) => {
     if (gateway === 'sumup') {
       const apiKey = tenant.sumup_api_key || env.sumup.apiKey;
       const merchantCode = tenant.sumup_merchant_code || env.sumup.merchantCode;
+      const affiliateKey =
+        tenant.sumup_affiliate_key || env.sumup.affiliateKey;
       const result = await createSumUpCardPayment({
         apiKey,
         total,
         readerId: tenant.sumup_reader_id,
         merchantCode,
-        affiliateKey: env.sumup.affiliateKey,
+        affiliateKey,
         tenantId,
       });
       intentId = result.paymentId;

@@ -45,6 +45,7 @@ export interface Tenant {
   sumup_api_key: string | null;
   sumup_reader_id: string | null;
   sumup_merchant_code: string | null;
+  sumup_affiliate_key: string | null;
   endereco: string | null;
   numero: string | null;
   bairro: string | null;
@@ -70,6 +71,7 @@ export type TenantInput = Partial<
     | 'sumup_api_key'
     | 'sumup_reader_id'
     | 'sumup_merchant_code'
+    | 'sumup_affiliate_key'
     | 'endereco'
     | 'numero'
     | 'bairro'

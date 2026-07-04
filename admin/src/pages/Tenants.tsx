@@ -29,6 +29,7 @@ const emptyForm: TenantInput = {
   sumup_api_key: '',
   sumup_reader_id: '',
   sumup_merchant_code: '',
+  sumup_affiliate_key: '',
   endereco: '',
   numero: '',
   bairro: '',
@@ -245,6 +246,7 @@ export default function Tenants() {
       sumup_api_key: t.sumup_api_key ?? '',
       sumup_reader_id: t.sumup_reader_id ?? '',
       sumup_merchant_code: t.sumup_merchant_code ?? '',
+      sumup_affiliate_key: t.sumup_affiliate_key ?? '',
       endereco: t.endereco ?? '',
       numero: t.numero ?? '',
       bairro: t.bairro ?? '',
@@ -895,6 +897,20 @@ export default function Tenants() {
                   />
                   <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
                     Está em me.sumup.com → Configurações (código do comerciante).
+                  </p>
+                </Field>
+                <Field label="SumUp Affiliate Key">
+                  <input
+                    style={input}
+                    value={form.sumup_affiliate_key ?? ''}
+                    onChange={(e) =>
+                      setField('sumup_affiliate_key', e.target.value)
+                    }
+                    placeholder="sup_afk_..."
+                  />
+                  <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
+                    Obrigatória para a maquininha. Gere em me.sumup.com →
+                    Configurações → Affiliate Keys.
                   </p>
                 </Field>
                 <Field label="SumUp Reader ID (maquininha Solo)">
