@@ -35,5 +35,8 @@ export const env = {
   },
   sumup: {
     apiKey: process.env.SUMUP_API_KEY ?? '',
+    merchantCode: process.env.SUMUP_MERCHANT_CODE ?? '',
+    // Affiliate Key: obrigatória para pagamentos presenciais (leitor).
+    affiliateKey: process.env.SUMUP_AFFILIATE_KEY ?? '',
   },
 };

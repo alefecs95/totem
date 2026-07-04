@@ -44,6 +44,7 @@ export interface Tenant {
   mp_store_id: string | null;
   sumup_api_key: string | null;
   sumup_reader_id: string | null;
+  sumup_merchant_code: string | null;
   endereco: string | null;
   numero: string | null;
   bairro: string | null;
@@ -67,6 +68,8 @@ export type TenantInput = Partial<
     | 'mp_webhook_secret'
     | 'mp_device_id'
     | 'sumup_api_key'
+    | 'sumup_reader_id'
+    | 'sumup_merchant_code'
     | 'endereco'
     | 'numero'
     | 'bairro'

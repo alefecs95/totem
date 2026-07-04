@@ -27,6 +27,8 @@ const emptyForm: TenantInput = {
   mp_webhook_secret: '',
   mp_device_id: '',
   sumup_api_key: '',
+  sumup_reader_id: '',
+  sumup_merchant_code: '',
   endereco: '',
   numero: '',
   bairro: '',
@@ -241,6 +243,8 @@ export default function Tenants() {
       mp_webhook_secret: t.mp_webhook_secret ?? '',
       mp_device_id: t.mp_device_id ?? '',
       sumup_api_key: t.sumup_api_key ?? '',
+      sumup_reader_id: t.sumup_reader_id ?? '',
+      sumup_merchant_code: t.sumup_merchant_code ?? '',
       endereco: t.endereco ?? '',
       numero: t.numero ?? '',
       bairro: t.bairro ?? '',
@@ -868,13 +872,46 @@ export default function Tenants() {
                 </div>
               </>
             ) : (
-              <Field label="SumUp API Key">
-                <input
-                  style={input}
-                  value={form.sumup_api_key ?? ''}
-                  onChange={(e) => setField('sumup_api_key', e.target.value)}
-                />
-              </Field>
+              <>
+                <Field label="SumUp API Key">
+                  <input
+                    style={input}
+                    value={form.sumup_api_key ?? ''}
+                    onChange={(e) => setField('sumup_api_key', e.target.value)}
+                    placeholder="sup_sk_..."
+                  />
+                  <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
+                    Gere em me.sumup.com → Configurações → Chaves de API.
+                  </p>
+                </Field>
+                <Field label="SumUp Merchant Code">
+                  <input
+                    style={input}
+                    value={form.sumup_merchant_code ?? ''}
+                    onChange={(e) =>
+                      setField('sumup_merchant_code', e.target.value)
+                    }
+                    placeholder="MXXXXXXX"
+                  />
+                  <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
+                    Está em me.sumup.com → Configurações (código do comerciante).
+                  </p>
+                </Field>
+                <Field label="SumUp Reader ID (maquininha Solo)">
+                  <input
+                    style={input}
+                    value={form.sumup_reader_id ?? ''}
+                    onChange={(e) =>
+                      setField('sumup_reader_id', e.target.value)
+                    }
+                    placeholder="rdr_XXXXXXXXXXXXXXXXXXXXXXXXXX"
+                  />
+                  <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
+                    Pareie a Solo (Conexões → API → Conectar) e cole o ID
+                    retornado (começa com <code>rdr_</code>).
+                  </p>
+                </Field>
+              </>
             )}
 
             {aviso && (

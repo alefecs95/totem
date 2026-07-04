@@ -17,7 +17,7 @@ router.get('/config', async (req, res) => {
   try {
     const tenantResult = await query(
       `SELECT id, nome, gateway, mp_device_id, mp_access_token,
-              sumup_api_key, sumup_reader_id
+              sumup_api_key, sumup_reader_id, sumup_merchant_code
        FROM tenants WHERE id = $1 AND ativo = true`,
       [tenantId]
     );
@@ -68,7 +68,11 @@ router.get('/config', async (req, res) => {
         : Boolean(tenant.mp_access_token);
     const cartaoDisponivel =
       gateway === 'sumup'
-        ? Boolean(tenant.sumup_api_key && tenant.sumup_reader_id)
+        ? Boolean(
+            tenant.sumup_api_key &&
+              tenant.sumup_reader_id &&
+              tenant.sumup_merchant_code
+          )
         : Boolean(
             tenant.mp_access_token &&
               isValidMpDeviceId(tenant.mp_device_id as string)

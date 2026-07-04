@@ -10,11 +10,13 @@ import {
   getCardPaymentStatus,
   getPaymentStatus,
   isValidMpDeviceId,
+  type PaymentStatus,
 } from '../services/mercadopago';
 import {
   createSumUpCardPayment,
   createSumUpPixPayment,
   getSumUpPaymentStatus,
+  getSumUpReaderStatus,
 } from '../services/sumup';
 
 const router = Router();
@@ -232,7 +234,9 @@ router.post('/card', async (req, res) => {
 
     // Valida as credenciais do gateway antes de registrar a transação.
     if (gateway === 'sumup') {
-      if (!(tenant.sumup_api_key || env.sumup.apiKey) || !tenant.sumup_reader_id) {
+      const hasKey = tenant.sumup_api_key || env.sumup.apiKey;
+      const hasMerchant = tenant.sumup_merchant_code || env.sumup.merchantCode;
+      if (!hasKey || !tenant.sumup_reader_id || !hasMerchant) {
         res.status(400).json({ error: 'missing_sumup_config' });
         return;
       }
@@ -295,10 +299,13 @@ router.post('/card', async (req, res) => {
     let intentId: string;
     if (gateway === 'sumup') {
       const apiKey = tenant.sumup_api_key || env.sumup.apiKey;
+      const merchantCode = tenant.sumup_merchant_code || env.sumup.merchantCode;
       const result = await createSumUpCardPayment({
         apiKey,
         total,
         readerId: tenant.sumup_reader_id,
+        merchantCode,
+        affiliateKey: env.sumup.affiliateKey,
         tenantId,
       });
       intentId = result.paymentId;
@@ -374,21 +381,42 @@ router.get('/card-status/:intentId', async (req, res) => {
   try {
     let accessToken = env.mercadopago.accessToken;
     let resolvedDeviceId = deviceId;
+    let tenant:
+      | {
+          gateway?: string;
+          mp_access_token?: string;
+          mp_device_id?: string;
+          sumup_api_key?: string;
+          sumup_merchant_code?: string;
+        }
+      | undefined;
     if (tenantId) {
       const tenantResult = await query(
-        'SELECT mp_access_token, mp_device_id FROM tenants WHERE id = $1',
+        `SELECT gateway, mp_access_token, mp_device_id,
+                sumup_api_key, sumup_merchant_code
+         FROM tenants WHERE id = $1`,
         [tenantId]
       );
-      const tenant = tenantResult.rows[0];
+      tenant = tenantResult.rows[0];
       accessToken = tenant?.mp_access_token || accessToken;
       resolvedDeviceId = resolvedDeviceId || tenant?.mp_device_id || undefined;
     }
 
-    const { status, mpPaymentId, rawStatus } = await getCardPaymentStatus({
-      accessToken,
-      deviceId: resolvedDeviceId,
-      intentId,
-    });
+    let status: PaymentStatus;
+    let mpPaymentId: string | undefined;
+    let rawStatus: string | undefined;
+
+    if (tenant?.gateway === 'sumup') {
+      const apiKey = tenant.sumup_api_key || env.sumup.apiKey;
+      const merchantCode = tenant.sumup_merchant_code || env.sumup.merchantCode;
+      ({ status } = await getSumUpReaderStatus(apiKey, merchantCode, intentId));
+    } else {
+      ({ status, mpPaymentId, rawStatus } = await getCardPaymentStatus({
+        accessToken,
+        deviceId: resolvedDeviceId,
+        intentId,
+      }));
+    }
 
     const txResult = await query<{ id: string; status: string }>(
       'SELECT id, status FROM transactions WHERE payment_id = $1',

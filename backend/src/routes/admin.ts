@@ -80,6 +80,7 @@ const tenantSchema = z.object({
   mp_device_id: z.string().optional().nullable(),
   sumup_api_key: z.string().optional().nullable(),
   sumup_reader_id: z.string().optional().nullable(),
+  sumup_merchant_code: z.string().optional().nullable(),
   endereco: z.string().optional().nullable(),
   numero: z.string().optional().nullable(),
   bairro: z.string().optional().nullable(),
@@ -461,10 +462,10 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
       `INSERT INTO tenants
         (nome, responsavel, telefone, email, gateway, comissao_pct,
          mp_access_token, mp_webhook_secret, mp_device_id,
-         sumup_api_key, sumup_reader_id,
+         sumup_api_key, sumup_reader_id, sumup_merchant_code,
          endereco, numero, bairro, cidade, estado, latitude, longitude)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-         $12, $13, $14, $15, $16, $17, $18)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+         $13, $14, $15, $16, $17, $18, $19)
        RETURNING *`,
       [
         t.nome,
@@ -478,6 +479,7 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
         t.mp_device_id ?? null,
         t.sumup_api_key ?? null,
         t.sumup_reader_id ?? null,
+        t.sumup_merchant_code ?? null,
         t.endereco ?? null,
         t.numero ?? null,
         t.bairro ?? null,
