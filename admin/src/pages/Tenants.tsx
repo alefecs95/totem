@@ -212,7 +212,14 @@ export default function Tenants() {
       const detalhe = (
         err as { response?: { data?: { detalhe?: string } } }
       )?.response?.data?.detalhe;
-      setReadersMsg(detalhe ?? 'Falha ao parear. Confira o código e a conta.');
+      const msg = detalhe ?? 'Falha ao parear. Confira o código e a conta.';
+      if (msg.includes('no pairing for code')) {
+        setReadersMsg(
+          'Código inválido ou expirado. Na Solo: deslogue → Conexões → API → Conectar → gere um código novo (válido por 5 min).'
+        );
+      } else {
+        setReadersMsg(msg);
+      }
     } finally {
       setPareando(false);
     }
@@ -1041,8 +1048,9 @@ export default function Tenants() {
                       </button>
                     </div>
                     <p style={{ margin: '0 0 10px', fontSize: 12, color: '#64748b' }}>
-                      Na Solo: Conexões → API → Conectar. Copie o código exibido
-                      e cole acima.
+                      Na Solo (ou virtual): <b>deslogue</b> da conta → Conexões →
+                      API → Conectar → copie o código (expira em 5 min). Use a
+                      mesma conta sandbox da API Key.
                     </p>
                     <button
                       type="button"
