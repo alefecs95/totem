@@ -15,7 +15,7 @@ import {
   setTerminalOperatingMode,
 } from '../services/mercadopago';
 import { geocodeBrazil } from '../services/geocode';
-import { listSumUpReaders } from '../services/sumup';
+import { listSumUpReaders, pairSumUpReader } from '../services/sumup';
 
 const router = Router();
 
@@ -358,6 +358,57 @@ router.get('/tenants/:id/sumup-readers', verifyAdmin, async (req, res) => {
     console.error('Erro ao listar leitores SumUp:', err);
     res.status(500).json({
       error: 'list_sumup_readers_failed',
+      detalhe: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+// POST /api/admin/tenants/:id/sumup-readers -> pareia um leitor SumUp
+router.post('/tenants/:id/sumup-readers', verifyAdmin, async (req, res) => {
+  try {
+    const result = await query<TenantRow>(
+      'SELECT * FROM tenants WHERE id = $1',
+      [req.params.id]
+    );
+    const tenant = result.rows[0];
+    if (!tenant) {
+      res.status(404).json({ error: 'tenant_not_found' });
+      return;
+    }
+
+    const apiKey =
+      (tenant.sumup_api_key as string | null) || env.sumup.apiKey;
+    const merchantCode =
+      (tenant.sumup_merchant_code as string | null) || env.sumup.merchantCode;
+    if (!apiKey || !merchantCode) {
+      res.status(400).json({ error: 'missing_sumup_config' });
+      return;
+    }
+
+    const pairingCode = String(req.body?.pairingCode ?? '').trim();
+    if (!pairingCode) {
+      res.status(400).json({ error: 'missing_pairing_code' });
+      return;
+    }
+
+    const reader = await pairSumUpReader(
+      apiKey,
+      merchantCode,
+      pairingCode,
+      (tenant.nome as string) || 'Totem'
+    );
+
+    // Já grava o reader_id no tenant para facilitar.
+    await query(
+      'UPDATE tenants SET sumup_reader_id = $1, atualizado_em = NOW() WHERE id = $2',
+      [reader.id, req.params.id]
+    );
+
+    res.json({ reader });
+  } catch (err) {
+    console.error('Erro ao parear leitor SumUp:', err);
+    res.status(500).json({
+      error: 'pair_sumup_reader_failed',
       detalhe: err instanceof Error ? err.message : String(err),
     });
   }

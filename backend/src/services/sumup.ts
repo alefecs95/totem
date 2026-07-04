@@ -134,6 +134,45 @@ export async function listSumUpReaders(
   }));
 }
 
+// Pareia (vincula) um leitor Solo à conta usando o código de pareamento
+// gerado na maquininha (Conexões → API → Conectar).
+export async function pairSumUpReader(
+  apiKey: string,
+  merchantCode: string,
+  pairingCode: string,
+  name = 'Totem'
+): Promise<SumUpReader> {
+  const response = await fetch(
+    `${SUMUP_API_BASE}/merchants/${encodeURIComponent(merchantCode)}/readers`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ pairing_code: pairingCode, name }),
+    }
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`SumUp pair reader failed (${response.status}): ${detail}`);
+  }
+
+  const r = (await response.json()) as {
+    id: string;
+    name?: string;
+    status?: string;
+    device?: { model?: string };
+  };
+  return {
+    id: r.id,
+    name: r.name ?? '',
+    status: r.status ?? 'unknown',
+    model: r.device?.model ?? '',
+  };
+}
+
 // Cria um pagamento de cartão no leitor físico SumUp Solo (Cloud API / Readers).
 // Retorna o client_transaction_id usado depois para consultar o status.
 export async function createSumUpCardPayment({

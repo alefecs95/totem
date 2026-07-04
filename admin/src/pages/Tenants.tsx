@@ -6,6 +6,7 @@ import {
   getTenantSumUpReaders,
   getTenantTerminals,
   getTenants,
+  pairTenantSumUpReader,
   setTerminalPdv,
   syncTenantMp,
   updateTenant,
@@ -78,6 +79,8 @@ export default function Tenants() {
   const [sumupReaders, setSumupReaders] = useState<SumUpReader[]>([]);
   const [buscandoReaders, setBuscandoReaders] = useState(false);
   const [readersMsg, setReadersMsg] = useState('');
+  const [pairingCode, setPairingCode] = useState('');
+  const [pareando, setPareando] = useState(false);
   const [totensTenant, setTotensTenant] = useState<Tenant | null>(null);
 
   const carregar = () => {
@@ -185,6 +188,33 @@ export default function Tenants() {
       setSumupReaders([]);
     } finally {
       setBuscandoReaders(false);
+    }
+  };
+
+  const parearReader = async () => {
+    if (!editingId) {
+      setReadersMsg('Salve o organizador primeiro, depois edite.');
+      return;
+    }
+    if (!pairingCode.trim()) {
+      setReadersMsg('Digite o código de pareamento da maquininha.');
+      return;
+    }
+    setPareando(true);
+    setReadersMsg('');
+    try {
+      const reader = await pairTenantSumUpReader(editingId, pairingCode.trim());
+      setField('sumup_reader_id', reader.id);
+      setSumupReaders([reader]);
+      setPairingCode('');
+      setReadersMsg(`Leitor pareado: ${reader.id}. Salve o organizador.`);
+    } catch (err: unknown) {
+      const detalhe = (
+        err as { response?: { data?: { detalhe?: string } } }
+      )?.response?.data?.detalhe;
+      setReadersMsg(detalhe ?? 'Falha ao parear. Confira o código e a conta.');
+    } finally {
+      setPareando(false);
     }
   };
 
@@ -965,6 +995,55 @@ export default function Tenants() {
 
                 {editingId && (
                   <div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: 8,
+                        alignItems: 'flex-end',
+                        flexWrap: 'wrap',
+                        marginBottom: 10,
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 180 }}>
+                        <label
+                          style={{
+                            display: 'block',
+                            fontSize: 13,
+                            fontWeight: 600,
+                            marginBottom: 4,
+                            color: '#334155',
+                          }}
+                        >
+                          Código de pareamento (da maquininha)
+                        </label>
+                        <input
+                          style={input}
+                          value={pairingCode}
+                          onChange={(e) => setPairingCode(e.target.value)}
+                          placeholder="Ex.: 4WLFDSBF"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={parearReader}
+                        disabled={pareando}
+                        style={{
+                          padding: '10px 16px',
+                          borderRadius: 8,
+                          border: '1px solid #16a34a',
+                          background: '#dcfce7',
+                          color: '#15803d',
+                          fontWeight: 600,
+                          cursor: pareando ? 'default' : 'pointer',
+                        }}
+                      >
+                        {pareando ? 'Pareando...' : '🔗 Parear maquininha'}
+                      </button>
+                    </div>
+                    <p style={{ margin: '0 0 10px', fontSize: 12, color: '#64748b' }}>
+                      Na Solo: Conexões → API → Conectar. Copie o código exibido
+                      e cole acima.
+                    </p>
                     <button
                       type="button"
                       onClick={buscarSumupReaders}
@@ -984,7 +1063,15 @@ export default function Tenants() {
                         : '🔍 Buscar leitores SumUp pareados'}
                     </button>
                     {readersMsg && (
-                      <p style={{ margin: '8px 0 0', fontSize: 13, color: '#dc2626' }}>
+                      <p
+                        style={{
+                          margin: '8px 0 0',
+                          fontSize: 13,
+                          color: readersMsg.startsWith('Leitor pareado')
+                            ? '#15803d'
+                            : '#dc2626',
+                        }}
+                      >
                         {readersMsg}
                       </p>
                     )}

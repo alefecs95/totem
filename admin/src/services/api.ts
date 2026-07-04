@@ -198,6 +198,17 @@ export async function getTenantSumUpReaders(
   return data.readers;
 }
 
+export async function pairTenantSumUpReader(
+  tenantId: string,
+  pairingCode: string
+): Promise<SumUpReader> {
+  const { data } = await api.post<{ reader: SumUpReader }>(
+    `/admin/tenants/${tenantId}/sumup-readers`,
+    { pairingCode }
+  );
+  return data.reader;
+}
+
 export interface SyncMpResult {
   store: { ok: boolean; motivo?: string; detalhe?: string };
   storeId: string | null;
