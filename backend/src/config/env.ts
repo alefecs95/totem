@@ -4,11 +4,13 @@ import 'dotenv/config';
 const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
 // Domínio do painel admin.
 const adminUrl = process.env.ADMIN_URL ?? 'http://localhost:5174';
+// Portal do organizador (dono do totem locado).
+const portalUrl = process.env.PORTAL_URL ?? 'http://localhost:5175';
 
-// Origens permitidas no CORS: PWA + admin + extras (CORS_ORIGINS separados por vírgula).
+// Origens permitidas no CORS: PWA + admin + portal + extras (CORS_ORIGINS separados por vírgula).
 const corsOrigins = [
   ...new Set(
-    [frontendUrl, adminUrl, ...(process.env.CORS_ORIGINS ?? '').split(',')]
+    [frontendUrl, adminUrl, portalUrl, ...(process.env.CORS_ORIGINS ?? '').split(',')]
       .map((s) => s.trim())
       .filter(Boolean)
   ),
@@ -18,6 +20,7 @@ export const env = {
   port: Number(process.env.PORT ?? 3001),
   frontendUrl,
   adminUrl,
+  portalUrl,
   corsOrigins,
   // URL pública da própria API (usada no notification_url dos webhooks).
   publicUrl: process.env.PUBLIC_URL ?? '',

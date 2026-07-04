@@ -1,14 +1,15 @@
 # Deploy no EasyPanel
 
 Guia para publicar o Totem Festival no EasyPanel (Docker + Traefik + SSL automático).
-São **4 serviços** dentro de um projeto (ex.: `totem`):
+São **5 serviços** dentro de um projeto (ex.: `totem`):
 
-| Serviço       | Tipo     | Origem              | Porta |
-|---------------|----------|---------------------|-------|
-| `totem-db`    | Postgres | template EasyPanel  | 5432  |
-| `totem-api`   | App      | GitHub `backend/`   | 3001  |
-| `totem-pwa`   | App      | GitHub `frontend/`  | 80    |
-| `totem-admin` | App      | GitHub `admin/`     | 80    |
+| Serviço        | Tipo     | Origem              | Porta |
+|----------------|----------|---------------------|-------|
+| `totem-db`     | Postgres | template EasyPanel  | 5432  |
+| `totem-api`    | App      | GitHub `backend/`   | 3001  |
+| `totem-pwa`    | App      | GitHub `frontend/`  | 80    |
+| `totem-admin`  | App      | GitHub `admin/`     | 80    |
+| `totem-portal` | App      | GitHub `portal/`    | 80    |
 
 Repositório: https://github.com/alefecs95/totem (branch `main`).
 
@@ -49,6 +50,7 @@ Repositório: https://github.com/alefecs95/totem (branch `main`).
    # preencha depois de conhecer os dominios do PWA e do admin (passo 5):
    FRONTEND_URL=
    ADMIN_URL=
+   PORTAL_URL=
    PUBLIC_URL=
    # opcionais (pagamentos):
    MP_ACCESS_TOKEN=
@@ -96,13 +98,30 @@ esse valor **+ `/api`**.
 
 ---
 
-## 5. Fechar o CORS e os webhooks
+## 5. Portal do organizador (`totem-portal`)
+
+Painel para o **dono do totem locado** acompanhar vendas, produtos e totens.
+
+1. **+ Service → App** → name `totem-portal`.
+2. **Source**: GitHub `alefecs95/totem`, branch `main`, **Build Path**: `portal`.
+3. **Build**: **Dockerfile**.
+   - **Build Args**:
+     ```
+     VITE_API_URL=https://<dominio-da-api>/api
+     ```
+4. **Domains**: domínio, **Container Port: 80**, HTTPS.
+5. **Deploy**.
+
+---
+
+## 6. Fechar o CORS e os webhooks
 
 Volte em `totem-api` → Environment e preencha com os domínios reais:
 
 ```
 FRONTEND_URL=https://<dominio-do-pwa>
 ADMIN_URL=https://<dominio-do-admin>
+PORTAL_URL=https://<dominio-do-portal>
 PUBLIC_URL=https://<dominio-da-api>
 ```
 
@@ -110,14 +129,16 @@ PUBLIC_URL=https://<dominio-da-api>
 
 ---
 
-## 6. Primeiro uso
+## 7. Primeiro uso
 
 1. Acesse o admin: `https://<dominio-do-admin>`
    - Login: `admin@totem.com` / `admin123` → **troque a senha depois**.
-2. **Organizadores → + Novo Tenant** (configure gateway e comissão).
-3. **Totens → criar** → exibe o **QR Code**. A URL aponta para
+2. **Organizadores → + Novo Tenant** — preencha e-mail e **senha do portal** (para o dono).
+3. **Produtos** — cadastre os itens do festival (ou use os 4 padrão criados automaticamente).
+4. **Totens → criar** → exibe o **QR Code**. A URL aponta para
    `https://<dominio-do-pwa>/setup?tenantId=...&totemId=...`.
-4. No tablet, abra essa URL (ou escaneie o QR) → o totem se configura e vai para a Home.
+5. O dono acessa o **portal**: `https://<dominio-do-portal>` com o e-mail e senha definidos no passo 2.
+6. No tablet, abra a URL do QR (ou escaneie) → o totem se configura e vai para a Home.
 
 ---
 
@@ -125,7 +146,7 @@ PUBLIC_URL=https://<dominio-da-api>
 
 - **Migrations**: automáticas no start da API. Não há passo manual de SQL.
 - **Trocar `VITE_API_URL`**: se o domínio da API mudar, é preciso **rebuildar**
-  `totem-pwa` e `totem-admin` (o valor é embutido no bundle em build-time).
+  `totem-pwa`, `totem-admin` e `totem-portal` (o valor é embutido no bundle em build-time).
 - **Webhook do Mercado Pago**: usa `PUBLIC_URL`. Ao migrar para um domínio próprio,
   atualize `PUBLIC_URL` e faça redeploy da API. O PWA também faz *polling* do status,
   então pagamentos Pix funcionam mesmo sem webhook configurado.

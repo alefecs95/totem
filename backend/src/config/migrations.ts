@@ -48,6 +48,7 @@ ALTER TABLE tenants ADD COLUMN IF NOT EXISTS longitude NUMERIC(10,7);
 ALTER TABLE totens ADD COLUMN IF NOT EXISTS mp_pos_id VARCHAR(50);
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sumup_merchant_code VARCHAR(100);
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sumup_affiliate_key TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS portal_senha_hash TEXT;
 
 -- TABELA: produtos (por tenant — cada organizador configura seus produtos)
 CREATE TABLE IF NOT EXISTS produtos (

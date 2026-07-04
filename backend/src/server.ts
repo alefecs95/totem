@@ -6,6 +6,7 @@ import configRoutes from './routes/config';
 import paymentRoutes from './routes/payment';
 import webhookRoutes from './routes/webhook';
 import adminRoutes from './routes/admin';
+import portalRoutes from './routes/portal';
 
 // TODO: implementar (middleware de identificação tenant/totem via headers x-tenant-id / x-totem-id, tratamento de erros)
 const app = express();
@@ -28,6 +29,7 @@ app.use('/api', configRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/portal', portalRoutes);
 
 async function start(): Promise<void> {
   try {

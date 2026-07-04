@@ -16,6 +16,7 @@ import {
 } from '../services/mercadopago';
 import { geocodeBrazil } from '../services/geocode';
 import { listSumUpReaders, pairSumUpReader } from '../services/sumup';
+import { productSchema, mapProductRow, stripTenantSecrets } from '../utils/products';
 
 const router = Router();
 
@@ -54,9 +55,11 @@ router.post('/login', async (req, res) => {
       return;
     }
 
-    const token = jwt.sign({ id: user.id, email: user.email }, env.jwt.secret, {
-      expiresIn: '8h',
-    });
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: 'admin' },
+      env.jwt.secret,
+      { expiresIn: '8h' }
+    );
 
     res.json({ token, email: user.email });
   } catch (err) {
@@ -90,6 +93,7 @@ const tenantSchema = z.object({
   estado: z.string().optional().nullable(),
   latitude: z.number().optional().nullable(),
   longitude: z.number().optional().nullable(),
+  portal_senha: z.string().min(4).optional().nullable(),
 });
 
 type TenantRow = Record<string, unknown> & {
@@ -527,7 +531,7 @@ router.get('/tenants/:id/orders/:orderId', verifyAdmin, async (req, res) => {
 router.get('/tenants', verifyAdmin, async (_req, res) => {
   try {
     const result = await query('SELECT * FROM tenants ORDER BY criado_em DESC');
-    res.json({ tenants: result.rows });
+    res.json({ tenants: result.rows.map(stripTenantSecrets) });
   } catch (err) {
     console.error('Erro ao listar tenants:', err);
     res.status(500).json({ error: 'list_tenants_failed' });
@@ -543,6 +547,11 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
   }
 
   const t = parsed.data;
+  const { portal_senha, ...tenantFields } = t;
+  const portalSenhaHash = portal_senha
+    ? bcrypt.hashSync(portal_senha, 10)
+    : null;
+
   try {
     const result = await query<TenantRow>(
       `INSERT INTO tenants
@@ -550,31 +559,33 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
          mp_access_token, mp_webhook_secret, mp_device_id,
          sumup_api_key, sumup_reader_id, sumup_merchant_code,
          sumup_affiliate_key,
-         endereco, numero, bairro, cidade, estado, latitude, longitude)
+         endereco, numero, bairro, cidade, estado, latitude, longitude,
+         portal_senha_hash)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-         $13, $14, $15, $16, $17, $18, $19, $20)
+         $13, $14, $15, $16, $17, $18, $19, $20, $21)
        RETURNING *`,
       [
-        t.nome,
-        t.responsavel,
-        t.telefone ?? null,
-        t.email ?? null,
-        t.gateway,
-        t.comissao_pct,
-        t.mp_access_token ?? null,
-        t.mp_webhook_secret ?? null,
-        t.mp_device_id ?? null,
-        t.sumup_api_key ?? null,
-        t.sumup_reader_id ?? null,
-        t.sumup_merchant_code ?? null,
-        t.sumup_affiliate_key ?? null,
-        t.endereco ?? null,
-        t.numero ?? null,
-        t.bairro ?? null,
-        t.cidade ?? null,
-        t.estado ?? null,
-        t.latitude ?? null,
-        t.longitude ?? null,
+        tenantFields.nome,
+        tenantFields.responsavel,
+        tenantFields.telefone ?? null,
+        tenantFields.email ?? null,
+        tenantFields.gateway,
+        tenantFields.comissao_pct,
+        tenantFields.mp_access_token ?? null,
+        tenantFields.mp_webhook_secret ?? null,
+        tenantFields.mp_device_id ?? null,
+        tenantFields.sumup_api_key ?? null,
+        tenantFields.sumup_reader_id ?? null,
+        tenantFields.sumup_merchant_code ?? null,
+        tenantFields.sumup_affiliate_key ?? null,
+        tenantFields.endereco ?? null,
+        tenantFields.numero ?? null,
+        tenantFields.bairro ?? null,
+        tenantFields.cidade ?? null,
+        tenantFields.estado ?? null,
+        tenantFields.latitude ?? null,
+        tenantFields.longitude ?? null,
+        portalSenhaHash,
       ]
     );
 
@@ -589,7 +600,10 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
       tenant.id,
     ]);
 
-    res.status(201).json({ tenant: finalResult.rows[0], mpStore });
+    res.status(201).json({
+      tenant: stripTenantSecrets(finalResult.rows[0]),
+      mpStore,
+    });
   } catch (err) {
     console.error('Erro ao criar tenant:', err);
     res.status(500).json({ error: 'create_tenant_failed' });
@@ -605,7 +619,17 @@ router.put('/tenants/:id', verifyAdmin, async (req, res) => {
   }
 
   const fields = parsed.data;
-  const keys = Object.keys(fields);
+  const { portal_senha, ...tenantFields } = fields;
+  const keys = Object.keys(tenantFields);
+  const values: unknown[] = keys.map(
+    (key) => (tenantFields as Record<string, unknown>)[key]
+  );
+
+  if (portal_senha) {
+    keys.push('portal_senha_hash');
+    values.push(bcrypt.hashSync(portal_senha, 10));
+  }
+
   if (keys.length === 0) {
     res.status(400).json({ error: 'no_fields' });
     return;
@@ -614,7 +638,6 @@ router.put('/tenants/:id', verifyAdmin, async (req, res) => {
   try {
     const setClauses = keys.map((key, idx) => `${key} = $${idx + 1}`);
     setClauses.push('atualizado_em = NOW()');
-    const values = keys.map((key) => (fields as Record<string, unknown>)[key]);
 
     const result = await query<TenantRow>(
       `UPDATE tenants SET ${setClauses.join(', ')} WHERE id = $${keys.length + 1} RETURNING *`,
@@ -633,7 +656,7 @@ router.put('/tenants/:id', verifyAdmin, async (req, res) => {
       req.params.id,
     ]);
 
-    res.json({ tenant: finalResult.rows[0], mpStore });
+    res.json({ tenant: stripTenantSecrets(finalResult.rows[0]), mpStore });
   } catch (err) {
     console.error('Erro ao atualizar tenant:', err);
     res.status(500).json({ error: 'update_tenant_failed' });
@@ -891,5 +914,135 @@ router.get('/dashboard', verifyAdmin, async (_req, res) => {
     res.status(500).json({ error: 'dashboard_failed' });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Produtos por tenant (protegido)
+// ---------------------------------------------------------------------------
+
+// GET /api/admin/tenants/:tenantId/produtos
+router.get('/tenants/:tenantId/produtos', verifyAdmin, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT * FROM produtos
+       WHERE tenant_id = $1
+       ORDER BY ordem ASC, criado_em ASC`,
+      [req.params.tenantId]
+    );
+    res.json({ produtos: result.rows.map(mapProductRow) });
+  } catch (err) {
+    console.error('Erro ao listar produtos:', err);
+    res.status(500).json({ error: 'list_products_failed' });
+  }
+});
+
+// POST /api/admin/tenants/:tenantId/produtos
+router.post('/tenants/:tenantId/produtos', verifyAdmin, async (req, res) => {
+  const parsed = productSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+    return;
+  }
+
+  const p = parsed.data;
+  const tenantId = String(req.params.tenantId);
+
+  try {
+    let ordem = p.ordem;
+    if (ordem === undefined) {
+      const maxResult = await query<{ max: number | null }>(
+        'SELECT MAX(ordem) AS max FROM produtos WHERE tenant_id = $1',
+        [tenantId]
+      );
+      ordem = (maxResult.rows[0].max ?? -1) + 1;
+    }
+
+    const result = await query(
+      `INSERT INTO produtos (tenant_id, nome, preco, emoji, cor, ordem, ativo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [
+        tenantId,
+        p.nome,
+        p.preco,
+        p.emoji ?? '🎟️',
+        p.cor ?? '#FF6B00',
+        ordem,
+        p.ativo ?? true,
+      ]
+    );
+
+    res.status(201).json({ produto: mapProductRow(result.rows[0]) });
+  } catch (err) {
+    console.error('Erro ao criar produto:', err);
+    res.status(500).json({ error: 'create_product_failed' });
+  }
+});
+
+// PUT /api/admin/tenants/:tenantId/produtos/:id
+router.put(
+  '/tenants/:tenantId/produtos/:id',
+  verifyAdmin,
+  async (req, res) => {
+    const parsed = productSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+      return;
+    }
+
+    const fields = parsed.data;
+    const keys = Object.keys(fields);
+    if (keys.length === 0) {
+      res.status(400).json({ error: 'no_fields' });
+      return;
+    }
+
+    try {
+      const setClauses = keys.map((key, idx) => `${key} = $${idx + 1}`);
+      const values = keys.map((key) => (fields as Record<string, unknown>)[key]);
+      const tenantId = String(req.params.tenantId);
+
+      const result = await query(
+        `UPDATE produtos SET ${setClauses.join(', ')}
+         WHERE id = $${keys.length + 1} AND tenant_id = $${keys.length + 2}
+         RETURNING *`,
+        [...values, req.params.id, tenantId]
+      );
+
+      if (result.rows.length === 0) {
+        res.status(404).json({ error: 'product_not_found' });
+        return;
+      }
+
+      res.json({ produto: mapProductRow(result.rows[0]) });
+    } catch (err) {
+      console.error('Erro ao atualizar produto:', err);
+      res.status(500).json({ error: 'update_product_failed' });
+    }
+  }
+);
+
+// DELETE /api/admin/tenants/:tenantId/produtos/:id
+router.delete(
+  '/tenants/:tenantId/produtos/:id',
+  verifyAdmin,
+  async (req, res) => {
+    try {
+      const result = await query(
+        `UPDATE produtos SET ativo = false
+         WHERE id = $1 AND tenant_id = $2
+         RETURNING id`,
+        [req.params.id, req.params.tenantId]
+      );
+      if (result.rows.length === 0) {
+        res.status(404).json({ error: 'product_not_found' });
+        return;
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Erro ao desativar produto:', err);
+      res.status(500).json({ error: 'delete_product_failed' });
+    }
+  }
+);
 
 export default router;

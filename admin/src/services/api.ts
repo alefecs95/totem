@@ -55,6 +55,7 @@ export interface Tenant {
   longitude: string | number | null;
   ativo: boolean;
   criado_em: string;
+  portal_ativo?: boolean;
 }
 
 export type TenantInput = Partial<
@@ -78,7 +79,7 @@ export type TenantInput = Partial<
     | 'cidade'
     | 'estado'
   >
-> & { comissao_pct?: number; latitude?: number; longitude?: number };
+> & { comissao_pct?: number; latitude?: number; longitude?: number; portal_senha?: string };
 
 // Status retornado pelo backend ao tentar criar loja/caixa no Mercado Pago.
 export interface MpProvisionStatus {
@@ -314,4 +315,54 @@ export async function getTransactions(
 
 export async function marcarRepasse(id: string): Promise<void> {
   await api.put(`/admin/transactions/${id}/repasse`);
+}
+
+export interface Product {
+  id: string;
+  tenant_id: string;
+  nome: string;
+  preco: number;
+  emoji: string;
+  cor: string;
+  ordem: number;
+  ativo: boolean;
+  criado_em: string;
+}
+
+export type ProductInput = Pick<Product, 'nome' | 'preco' | 'emoji' | 'cor' | 'ativo'> & {
+  ordem?: number;
+};
+
+export async function getProducts(tenantId: string): Promise<Product[]> {
+  const { data } = await api.get<{ produtos: Product[] }>(
+    `/admin/tenants/${tenantId}/produtos`
+  );
+  return data.produtos;
+}
+
+export async function createProduct(
+  tenantId: string,
+  input: ProductInput
+): Promise<Product> {
+  const { data } = await api.post<{ produto: Product }>(
+    `/admin/tenants/${tenantId}/produtos`,
+    input
+  );
+  return data.produto;
+}
+
+export async function updateProduct(
+  tenantId: string,
+  id: string,
+  input: Partial<ProductInput>
+): Promise<Product> {
+  const { data } = await api.put<{ produto: Product }>(
+    `/admin/tenants/${tenantId}/produtos/${id}`,
+    input
+  );
+  return data.produto;
+}
+
+export async function deleteProduct(tenantId: string, id: string): Promise<void> {
+  await api.delete(`/admin/tenants/${tenantId}/produtos/${id}`);
 }

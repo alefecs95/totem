@@ -16,6 +16,7 @@ import {
   type SumUpReader,
 } from '../services/api';
 import TotensModal from '../components/TotensModal';
+import ProductsModal from '../components/ProductsModal';
 import MapPicker from '../components/MapPicker';
 import { getCidades, getEstados, type UF } from '../services/ibge';
 
@@ -40,6 +41,7 @@ const emptyForm: TenantInput = {
   estado: '',
   latitude: undefined,
   longitude: undefined,
+  portal_senha: '',
 };
 
 function mensagemMpStore(motivo?: string): string {
@@ -82,6 +84,7 @@ export default function Tenants() {
   const [pairingCode, setPairingCode] = useState('');
   const [pareando, setPareando] = useState(false);
   const [totensTenant, setTotensTenant] = useState<Tenant | null>(null);
+  const [produtosTenant, setProdutosTenant] = useState<Tenant | null>(null);
 
   const carregar = () => {
     setLoading(true);
@@ -326,6 +329,7 @@ export default function Tenants() {
       estado: t.estado ?? '',
       latitude: t.latitude != null ? Number(t.latitude) : undefined,
       longitude: t.longitude != null ? Number(t.longitude) : undefined,
+      portal_senha: '',
     });
     setModalOpen(true);
   };
@@ -460,6 +464,14 @@ export default function Tenants() {
                 <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {t.ativo && (
                     <button
+                      onClick={() => setProdutosTenant(t)}
+                      style={linkBtn}
+                    >
+                      Produtos
+                    </button>
+                  )}
+                  {t.ativo && (
+                    <button
                       onClick={() => setTotensTenant(t)}
                       style={linkBtn}
                     >
@@ -495,6 +507,13 @@ export default function Tenants() {
         <TotensModal
           tenant={totensTenant}
           onClose={() => setTotensTenant(null)}
+        />
+      )}
+
+      {produtosTenant && (
+        <ProductsModal
+          tenant={produtosTenant}
+          onClose={() => setProdutosTenant(null)}
         />
       )}
 
@@ -544,6 +563,24 @@ export default function Tenants() {
                 />
               </Field>
             </div>
+
+            <Field label="Senha do portal (dono do totem)">
+              <input
+                style={input}
+                type="password"
+                value={form.portal_senha ?? ''}
+                onChange={(e) => setField('portal_senha', e.target.value)}
+                placeholder={
+                  editingId
+                    ? 'Deixe em branco para manter a senha atual'
+                    : 'Mínimo 4 caracteres — usada no portal do organizador'
+                }
+                minLength={editingId ? undefined : 4}
+              />
+              <span style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                O dono acessa o portal com o e-mail acima e esta senha.
+              </span>
+            </Field>
 
             <div style={{ display: 'flex', gap: 12 }}>
               <Field label="Gateway">
