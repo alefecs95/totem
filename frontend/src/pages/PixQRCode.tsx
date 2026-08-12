@@ -45,6 +45,14 @@ export default function PixQRCode() {
 
   const copyTimeoutRef = useRef<number>();
 
+  const voltarOrigem = () => {
+    if (returnTo === '/operador') {
+      navigate('/operador', { replace: true });
+      return;
+    }
+    navigate('/payment');
+  };
+
   const iniciarPagamento = useCallback(async () => {
     setEstado('loading');
     setSecondsLeft(DEFAULT_EXPIRES_IN);
@@ -169,7 +177,7 @@ export default function PixQRCode() {
           <button className="btn-primary" onClick={iniciarPagamento}>
             TENTAR NOVAMENTE
           </button>
-          <button className="btn-secondary" onClick={() => navigate('/payment')}>
+          <button className="btn-secondary" onClick={voltarOrigem}>
             VOLTAR
           </button>
         </div>
@@ -211,7 +219,7 @@ export default function PixQRCode() {
           Pagamento via PIX
         </h1>
         <button
-          onClick={() => navigate('/payment')}
+          onClick={voltarOrigem}
           aria-label="Cancelar"
           style={{
             justifySelf: 'end',

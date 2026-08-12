@@ -42,12 +42,24 @@ export default function CardWaiting() {
   const [mpPaymentId, setMpPaymentId] = useState('');
   const [rawStatus, setRawStatus] = useState('');
 
-  // Sem intentId não há o que aguardar — volta ao pagamento.
+  const voltarAposFalha = () => {
+    if (returnTo === '/operador') {
+      navigate('/operador', { replace: true });
+      return;
+    }
+    navigate('/payment', { state: { items, total } });
+  };
+
+  // Sem intentId não há o que aguardar — volta ao fluxo de origem.
   useEffect(() => {
     if (!intentId) {
-      navigate('/payment', { replace: true, state: { items, total } });
+      if (returnTo === '/operador') {
+        navigate('/operador', { replace: true });
+      } else {
+        navigate('/payment', { replace: true, state: { items, total } });
+      }
     }
-  }, [intentId, navigate, items, total]);
+  }, [intentId, navigate, items, total, returnTo]);
 
   // Polling: só vai para sucesso quando a maquininha aprovar de verdade.
   useEffect(() => {
@@ -136,11 +148,9 @@ export default function CardWaiting() {
         <button
           className="btn-primary"
           style={{ marginTop: 16, maxWidth: 320 }}
-          onClick={() =>
-            navigate('/payment', { state: { items, total } })
-          }
+          onClick={voltarAposFalha}
         >
-          TENTAR NOVAMENTE
+          {returnTo === '/operador' ? 'VOLTAR AO PDV' : 'TENTAR NOVAMENTE'}
         </button>
       </div>
     );
@@ -196,6 +206,13 @@ export default function CardWaiting() {
           ter botão de digitar valor.
         </div>
       )}
+      <button
+        className="btn-secondary"
+        style={{ marginTop: 24, maxWidth: 320 }}
+        onClick={voltarAposFalha}
+      >
+        {returnTo === '/operador' ? 'CANCELAR E VOLTAR AO PDV' : 'CANCELAR'}
+      </button>
     </div>
   );
 }
