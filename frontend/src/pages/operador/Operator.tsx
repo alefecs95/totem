@@ -16,14 +16,14 @@ function formatPreco(preco: number): string {
 
 /**
  * Atalhos do PDV (teclado):
- * 1–9  → adiciona produto na posição
- * D    → dinheiro
- * F    → cartão físico
- * P    → Pix
- * L    → cartão leitor
- * Enter→ dinheiro (venda rápida)
- * Esc / Del → limpar pedido
- * Backspace → remove 1 unidade do último item
+ * 0–9     → monta quantidade (ex: 20)
+ * F1–F9   → adiciona produto × quantidade
+ * clique  → adiciona produto × quantidade
+ * D/Enter → dinheiro
+ * F       → cartão físico
+ * P / L   → Pix / leitor
+ * Esc     → limpa qtd ou pedido
+ * Backspace → apaga dígito da qtd; senão −1 do último item
  */
 export default function Operator() {
   const navigate = useNavigate();
@@ -38,6 +38,8 @@ export default function Operator() {
   const [pagando, setPagando] = useState<string | null>(null);
   const [erro, setErro] = useState('');
   const [showHelp, setShowHelp] = useState(false);
+  /** Dígitos digitados para quantidade em lote (ex: "20"). Vazio = 1. */
+  const [qtyDigits, setQtyDigits] = useState('');
 
   const items = useCartStore((s) => s.items);
   const addItem = useCartStore((s) => s.addItem);
@@ -48,6 +50,10 @@ export default function Operator() {
 
   const total = getTotal();
   const totalItems = getTotalItems();
+  const pendingQty = Math.min(
+    999,
+    Math.max(1, qtyDigits === '' ? 1 : Number.parseInt(qtyDigits, 10) || 1)
+  );
 
   const [pagamentos, setPagamentos] = useState(() => {
     try {
@@ -144,6 +150,20 @@ export default function Operator() {
   pixRef.current = pagarPix;
   const cartaoRef = useRef(pagarCartaoGateway);
   cartaoRef.current = pagarCartaoGateway;
+  const qtyDigitsRef = useRef(qtyDigits);
+  qtyDigitsRef.current = qtyDigits;
+
+  const addProductQty = useCallback((product: Product, qtd?: number) => {
+    const digits = qtyDigitsRef.current;
+    const n =
+      qtd ??
+      Math.min(999, Math.max(1, digits === '' ? 1 : Number.parseInt(digits, 10) || 1));
+    useCartStore.getState().addItem(product, n);
+    setQtyDigits('');
+  }, []);
+
+  const addProductQtyRef = useRef(addProductQty);
+  addProductQtyRef.current = addProductQty;
 
   useEffect(() => {
     if (!isOperadorLoggedIn()) {
@@ -186,27 +206,54 @@ export default function Operator() {
 
       const key = e.key;
 
-      if (key >= '1' && key <= '9') {
-        const idx = Number(key) - 1;
+      // Quantidade: dígitos 0–9 (teclado principal ou numpad)
+      if (/^[0-9]$/.test(key)) {
+        e.preventDefault();
+        setQtyDigits((prev) => {
+          const next = (prev + key).replace(/^0+(?=\d)/, '');
+          return next.slice(0, 3);
+        });
+        return;
+      }
+
+      // F1–F9 → produto × quantidade pendente
+      if (/^F[1-9]$/.test(key)) {
+        const idx = Number(key.slice(1)) - 1;
         const p = produtosRef.current[idx];
         if (p) {
           e.preventDefault();
-          useCartStore.getState().addItem(p);
+          addProductQtyRef.current(p);
         }
         return;
       }
 
-      if (key === 'Escape' || key === 'Delete') {
+      if (key === 'Escape') {
+        e.preventDefault();
+        if (qtyDigitsRef.current) {
+          setQtyDigits('');
+        } else {
+          useCartStore.getState().clearCart();
+          setErro('');
+        }
+        return;
+      }
+
+      if (key === 'Delete') {
         e.preventDefault();
         useCartStore.getState().clearCart();
+        setQtyDigits('');
         setErro('');
         return;
       }
 
       if (key === 'Backspace') {
+        e.preventDefault();
+        if (qtyDigitsRef.current) {
+          setQtyDigits((prev) => prev.slice(0, -1));
+          return;
+        }
         const cart = useCartStore.getState().items;
         if (cart.length > 0) {
-          e.preventDefault();
           useCartStore.getState().removeItem(cart[cart.length - 1]!.id);
         }
         return;
@@ -215,21 +262,25 @@ export default function Operator() {
       const k = key.toLowerCase();
       if (k === 'd' || key === 'Enter') {
         e.preventDefault();
+        setQtyDigits('');
         void finalizarRef.current('dinheiro');
         return;
       }
       if (k === 'f') {
         e.preventDefault();
+        setQtyDigits('');
         void finalizarRef.current('cartao_fisico');
         return;
       }
       if (k === 'p' && pagamentosRef.current.pix) {
         e.preventDefault();
+        setQtyDigits('');
         pixRef.current();
         return;
       }
       if (k === 'l' && pagamentosRef.current.cartao) {
         e.preventDefault();
+        setQtyDigits('');
         void cartaoRef.current();
       }
     };
@@ -248,6 +299,7 @@ export default function Operator() {
 
   const busy = pagando !== null;
   const canPay = items.length > 0 && !busy;
+  const QTY_CHIPS = [2, 5, 10, 20, 50];
 
   return (
     <div style={shell}>
@@ -290,10 +342,11 @@ export default function Operator() {
           type="button"
           onClick={() => {
             clearCart();
+            setQtyDigits('');
             setErro('');
           }}
           style={hdrBtn}
-          title="Esc"
+          title="Del"
         >
           Limpar
         </button>
@@ -305,18 +358,62 @@ export default function Operator() {
       {showHelp && (
         <div style={helpBar}>
           <strong>Teclado:</strong>
-          <span>1–9 produto</span>
+          <span>20 + toque = 20 un.</span>
+          <span>F1–F9 produto</span>
+          <span>0–9 quantidade</span>
           <span>D / Enter dinheiro</span>
           <span>F cartão físico</span>
           {pagamentos.pix && <span>P Pix</span>}
           {pagamentos.cartao && <span>L leitor</span>}
-          <span>Esc limpar</span>
-          <span>⌫ −1 último</span>
+          <span>Esc limpa qtd</span>
         </div>
       )}
 
       <div className="pdv-body" style={body}>
         <main style={gridArea}>
+          <div style={qtyBar}>
+            <div
+              style={{
+                ...qtyDisplay,
+                outline: pendingQty > 1 ? '2px solid #ea580c' : 'none',
+              }}
+            >
+              <span style={{ fontSize: 12, color: '#a8a29e', fontWeight: 700 }}>
+                QTD
+              </span>
+              <span
+                style={{
+                  fontFamily: "'Bebas Neue', sans-serif",
+                  fontSize: 36,
+                  color: pendingQty > 1 ? '#ea580c' : '#fff',
+                  lineHeight: 1,
+                }}
+              >
+                ×{pendingQty}
+              </span>
+            </div>
+            {QTY_CHIPS.map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setQtyDigits(String(n))}
+                style={{
+                  ...qtyChip,
+                  background: pendingQty === n ? '#ea580c' : '#292524',
+                }}
+              >
+                ×{n}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setQtyDigits('')}
+              style={{ ...qtyChip, background: '#44403c' }}
+            >
+              ×1
+            </button>
+          </div>
+
           {loadingProdutos ? (
             <div style={{ color: '#a8a29e', padding: 40, textAlign: 'center' }}>
               Carregando...
@@ -329,12 +426,12 @@ export default function Operator() {
             <div style={productGrid}>
               {produtos.map((p, idx) => {
                 const qtd = getQtd(p.id);
-                const atalho = idx < 9 ? String(idx + 1) : null;
+                const atalho = idx < 9 ? `F${idx + 1}` : null;
                 return (
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => addItem(p)}
+                    onClick={() => addProductQty(p)}
                     style={{
                       ...productBtn,
                       borderColor: p.cor,
@@ -351,6 +448,18 @@ export default function Operator() {
                     <div style={{ ...productPrice, color: p.cor }}>
                       {formatPreco(p.preco)}
                     </div>
+                    {pendingQty > 1 && (
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 800,
+                          color: '#fbbf24',
+                          marginTop: 2,
+                        }}
+                      >
+                        +{pendingQty}
+                      </div>
+                    )}
                   </button>
                 );
               })}
@@ -364,7 +473,9 @@ export default function Operator() {
           <div style={cartList}>
             {items.length === 0 ? (
               <div style={emptyCart}>
-                Toque num produto ou use teclas <strong>1–9</strong>
+                Ex: toque <strong>×20</strong> e depois na cerveja
+                <br />
+                ou digite <strong>20</strong> e toque no produto
               </div>
             ) : (
               items.map((item) => (
@@ -384,19 +495,35 @@ export default function Operator() {
                   >
                     −
                   </button>
-                  <strong style={{ width: 28, textAlign: 'center' }}>
+                  <strong style={{ minWidth: 32, textAlign: 'center', fontSize: 16 }}>
                     {item.quantidade}
                   </strong>
                   <button
                     type="button"
-                    onClick={() => addItem(item)}
+                    onClick={() => addItem(item, 1)}
                     style={qtyBtn}
                   >
                     +
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => addItem(item, 5)}
+                    style={{ ...qtyBtn, width: 40, fontSize: 12 }}
+                    title="+5"
+                  >
+                    +5
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addItem(item, 10)}
+                    style={{ ...qtyBtn, width: 44, fontSize: 12 }}
+                    title="+10"
+                  >
+                    +10
+                  </button>
                   <div
                     style={{
-                      width: 72,
+                      width: 68,
                       textAlign: 'right',
                       fontWeight: 800,
                       color: '#ea580c',
@@ -586,6 +713,36 @@ const gridArea: React.CSSProperties = {
   minHeight: 0,
 };
 
+const qtyBar: React.CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 8,
+  marginBottom: 12,
+};
+
+const qtyDisplay: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: '#1c1917',
+  borderRadius: 10,
+  padding: '6px 14px',
+  minWidth: 72,
+};
+
+const qtyChip: React.CSSProperties = {
+  border: 'none',
+  color: '#fff',
+  fontWeight: 800,
+  fontSize: 16,
+  padding: '12px 14px',
+  borderRadius: 10,
+  cursor: 'pointer',
+  minWidth: 52,
+};
+
 const productGrid: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
@@ -616,12 +773,13 @@ const keyBadge: React.CSSProperties = {
   left: 8,
   background: '#44403c',
   color: '#fafaf9',
-  width: 24,
-  height: 24,
+  minWidth: 28,
+  height: 22,
   borderRadius: 6,
-  fontSize: 13,
+  fontSize: 11,
   fontWeight: 800,
-  lineHeight: '24px',
+  lineHeight: '22px',
+  padding: '0 5px',
 };
 
 const qtyBadge: React.CSSProperties = {
