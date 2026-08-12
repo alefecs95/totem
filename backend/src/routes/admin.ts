@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { query } from '../config/database';
 import { seedDefaultProducts } from '../config/seed';
 import { env } from '../config/env';
-import { verifyAdmin } from '../middleware/auth';
+import { verifyAdmin, type AuthRequest } from '../middleware/auth';
 import {
   createMpPos,
   createMpStore,
@@ -65,6 +65,57 @@ router.post('/login', async (req, res) => {
   } catch (err) {
     console.error('Erro no login admin:', err);
     res.status(500).json({ error: 'login_failed' });
+  }
+});
+
+const changePasswordSchema = z.object({
+  senhaAtual: z.string().min(1),
+  senhaNova: z.string().min(8),
+});
+
+// PUT /api/admin/change-password
+router.put('/change-password', verifyAdmin, async (req: AuthRequest, res) => {
+  const parsed = changePasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+    return;
+  }
+
+  const adminId = req.admin?.id;
+  if (!adminId) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+
+  const { senhaAtual, senhaNova } = parsed.data;
+
+  try {
+    const result = await query<{ senha_hash: string }>(
+      'SELECT senha_hash FROM admin_users WHERE id = $1',
+      [adminId]
+    );
+    const user = result.rows[0];
+    if (!user) {
+      res.status(404).json({ error: 'admin_not_found' });
+      return;
+    }
+
+    const ok = await bcrypt.compare(senhaAtual, user.senha_hash);
+    if (!ok) {
+      res.status(401).json({ error: 'invalid_current_password' });
+      return;
+    }
+
+    const senhaHash = bcrypt.hashSync(senhaNova, 10);
+    await query('UPDATE admin_users SET senha_hash = $1 WHERE id = $2', [
+      senhaHash,
+      adminId,
+    ]);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Erro ao trocar senha admin:', err);
+    res.status(500).json({ error: 'change_password_failed' });
   }
 });
 

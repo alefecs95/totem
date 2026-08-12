@@ -18,6 +18,10 @@ import {
   getSumUpPaymentStatus,
   getSumUpReaderStatus,
 } from '../services/sumup';
+import {
+  PaymentValidationError,
+  validatePaymentItems,
+} from '../utils/validatePaymentItems';
 
 const router = Router();
 
@@ -25,26 +29,19 @@ const router = Router();
 const TAXA_PIX_MP = 0.0099; // 0,99% Pix
 const TAXA_CARD_MP = 0.0199; // 1,99% cartão (padrão por ora)
 
+const paymentItemSchema = z.object({
+  productId: z.string().uuid(),
+  quantidade: z.number().int().positive(),
+});
+
 const pixSchema = z.object({
-  items: z.array(
-    z.object({
-      nome: z.string(),
-      quantidade: z.number().int().positive(),
-      preco: z.number().nonnegative(),
-    })
-  ),
+  items: z.array(paymentItemSchema).min(1),
   total: z.number().positive(),
   tenantId: z.string().uuid(),
 });
 
 const cardSchema = z.object({
-  items: z.array(
-    z.object({
-      nome: z.string(),
-      quantidade: z.number().int().positive(),
-      preco: z.number().nonnegative(),
-    })
-  ),
+  items: z.array(paymentItemSchema).min(1),
   total: z.number().positive(),
   tenantId: z.string().uuid(),
   deviceId: z.string().min(1).optional(),
@@ -62,7 +59,7 @@ router.post('/pix', async (req, res) => {
     return;
   }
 
-  const { items, total, tenantId } = parsed.data;
+  const { items, total: clientTotal, tenantId } = parsed.data;
 
   try {
     const tenantResult = await query(
@@ -74,6 +71,24 @@ router.post('/pix', async (req, res) => {
       res.status(404).json({ error: 'tenant_not_found' });
       return;
     }
+
+    let validated;
+    try {
+      validated = await validatePaymentItems(tenantId, items, clientTotal);
+    } catch (err) {
+      if (err instanceof PaymentValidationError) {
+        res.status(400).json({ error: err.code, message: err.message });
+        return;
+      }
+      throw err;
+    }
+
+    const { items: validatedItems, total } = validated;
+    const gatewayItems = validatedItems.map(({ nome, quantidade, preco }) => ({
+      nome,
+      quantidade,
+      preco,
+    }));
 
     const gateway = tenant.gateway === 'sumup' ? 'sumup' : 'mercadopago';
 
@@ -111,7 +126,7 @@ router.post('/pix', async (req, res) => {
       const pix = await createPixPayment({
         accessToken,
         total,
-        items,
+        items: gatewayItems,
         tenantId,
         webhookUrl,
       });
@@ -121,11 +136,12 @@ router.post('/pix', async (req, res) => {
       expiresIn = pix.expiresIn;
     }
 
-    const itens = items.map((item) => ({
+    const itens = validatedItems.map((item) => ({
+      productId: item.productId,
       nome: item.nome,
       quantidade: item.quantidade,
       preco: item.preco,
-      subtotal: round2(item.preco * item.quantidade),
+      subtotal: item.subtotal,
     }));
 
     const insert = await query<{ id: string }>(
@@ -216,7 +232,7 @@ router.post('/card', async (req, res) => {
     return;
   }
 
-  const { items, total, tenantId, deviceId: bodyDeviceId } = parsed.data;
+  const { items, total: clientTotal, tenantId, deviceId: bodyDeviceId } = parsed.data;
 
   try {
     const tenantResult = await query(
@@ -228,6 +244,24 @@ router.post('/card', async (req, res) => {
       res.status(404).json({ error: 'tenant_not_found' });
       return;
     }
+
+    let validated;
+    try {
+      validated = await validatePaymentItems(tenantId, items, clientTotal);
+    } catch (err) {
+      if (err instanceof PaymentValidationError) {
+        res.status(400).json({ error: err.code, message: err.message });
+        return;
+      }
+      throw err;
+    }
+
+    const { items: validatedItems, total } = validated;
+    const gatewayItems = validatedItems.map(({ nome, quantidade, preco }) => ({
+      nome,
+      quantidade,
+      preco,
+    }));
 
     const gateway = tenant.gateway === 'sumup' ? 'sumup' : 'mercadopago';
     const deviceId = bodyDeviceId || (tenant.mp_device_id as string | null) || undefined;
@@ -267,11 +301,12 @@ router.post('/card', async (req, res) => {
     const transactionId = uuidv4();
     const totemId = (req.headers['x-totem-id'] as string) || null;
 
-    const itens = items.map((item) => ({
+    const itens = validatedItems.map((item) => ({
+      productId: item.productId,
       nome: item.nome,
       quantidade: item.quantidade,
       preco: item.preco,
-      subtotal: round2(item.preco * item.quantidade),
+      subtotal: item.subtotal,
     }));
 
     await query(
@@ -344,7 +379,7 @@ router.post('/card', async (req, res) => {
         accessToken,
         total,
         deviceId: deviceId as string,
-        items,
+        items: gatewayItems,
         tenantId,
         transactionId,
         sandbox: env.mercadopago.sandbox,

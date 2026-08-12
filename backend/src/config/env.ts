@@ -1,5 +1,20 @@
 import 'dotenv/config';
 
+function requireJwtSecret(): string {
+  const secret = process.env.ADMIN_JWT_SECRET?.trim();
+  if (!secret) {
+    throw new Error(
+      'ADMIN_JWT_SECRET não está definido. Configure no .env antes de iniciar o servidor.'
+    );
+  }
+  if (secret.length < 32) {
+    throw new Error(
+      'ADMIN_JWT_SECRET deve ter no mínimo 32 caracteres. Gere um valor forte (ex.: openssl rand -base64 32).'
+    );
+  }
+  return secret;
+}
+
 // Domínio do PWA do totem (usado também na URL de setup do QR Code).
 const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
 // Domínio do painel admin.
@@ -26,7 +41,7 @@ export const env = {
   publicUrl: process.env.PUBLIC_URL ?? '',
   databaseUrl: process.env.DATABASE_URL ?? '',
   jwt: {
-    secret: process.env.ADMIN_JWT_SECRET ?? '',
+    secret: requireJwtSecret(),
   },
   comissaoPadrao: Number(process.env.COMISSAO_PADRAO ?? 5),
   mercadopago: {

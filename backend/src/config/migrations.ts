@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import { query } from './database';
 
 // Schema completo. Todas as tabelas usam IF NOT EXISTS para ser idempotente
@@ -102,21 +103,43 @@ CREATE INDEX IF NOT EXISTS idx_totens_tenant_id ON totens(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_produtos_tenant_id ON produtos(tenant_id);
 `;
 
-// Admin padrão (email: admin@totem.com / senha: admin123).
-// O hash é gerado em runtime com bcrypt para não versionar credenciais fixas.
 const DEFAULT_ADMIN_EMAIL = 'admin@totem.com';
-const DEFAULT_ADMIN_PASSWORD = 'admin123';
 
-export async function runMigrations(): Promise<void> {
-  await query(SCHEMA_SQL);
+function generateSecurePassword(length = 20): string {
+  const chars =
+    'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  const bytes = crypto.randomBytes(length);
+  let password = '';
+  for (let i = 0; i < length; i++) {
+    password += chars[bytes[i]! % chars.length];
+  }
+  return password;
+}
 
-  const senhaHash = bcrypt.hashSync(DEFAULT_ADMIN_PASSWORD, 10);
+async function seedInitialAdminIfNeeded(): Promise<void> {
+  const countResult = await query<{ count: string }>(
+    'SELECT COUNT(*)::text AS count FROM admin_users'
+  );
+  if (Number(countResult.rows[0]?.count ?? 0) > 0) {
+    return;
+  }
+
+  const senha = generateSecurePassword();
+  const senhaHash = bcrypt.hashSync(senha, 10);
   await query(
-    `INSERT INTO admin_users (email, senha_hash)
-     VALUES ($1, $2)
-     ON CONFLICT (email) DO NOTHING`,
+    'INSERT INTO admin_users (email, senha_hash) VALUES ($1, $2)',
     [DEFAULT_ADMIN_EMAIL, senhaHash]
   );
 
+  console.log('');
+  console.log('⚠️  SENHA INICIAL DO ADMIN — ANOTE E TROQUE IMEDIATAMENTE:');
+  console.log(`    E-mail: ${DEFAULT_ADMIN_EMAIL}`);
+  console.log(`    Senha:  ${senha}`);
+  console.log('');
+}
+
+export async function runMigrations(): Promise<void> {
+  await query(SCHEMA_SQL);
+  await seedInitialAdminIfNeeded();
   console.log('Migrations aplicadas com sucesso.');
 }
