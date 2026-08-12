@@ -56,7 +56,24 @@ export function persistTotemConfig(config: TotemConfig): void {
     }
   }
   localStorage.setItem('productFichaFlags', JSON.stringify(fichaFlags));
-  localStorage.setItem('productFichaLogos', JSON.stringify(fichaLogos));
+  try {
+    localStorage.setItem('productFichaLogos', JSON.stringify(fichaLogos));
+  } catch {
+    // Quota: tenta gravar logos uma a uma (menores)
+    try {
+      const slim: Record<string, string> = {};
+      for (const [id, logo] of Object.entries(fichaLogos)) {
+        slim[id] = logo;
+        try {
+          localStorage.setItem('productFichaLogos', JSON.stringify(slim));
+        } catch {
+          delete slim[id];
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 export interface CardPaymentResponse {

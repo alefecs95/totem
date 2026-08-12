@@ -1,13 +1,13 @@
 import type { FichaTicket } from './fichas';
+import { readProductFichaLogos } from './fichas';
 
 /** Largura = 100% do rolo 80mm. Só a altura é controlada pelo sistema. */
 export const FICHA_LARGURA_MM = 80;
 export const FICHA_ALTURA_MM = 25;
 
-/** Área da logo em mm (entre evento e data) — altura fixa evita sumir no print. */
-const LOGO_AREA_H_MM = 16;
-const LOGO_RASTER_W = 576; // ~80mm @ 180dpi (típica térmica)
-const LOGO_RASTER_H = 120; // ~16mm
+/** Resolução térmica ~203 dpi: 80mm ≈ 640px, 25mm ≈ 200px. Usamos 576×200 (comum em POS 80mm). */
+const PX_W = 576;
+const PX_H = 200;
 
 function escapeHtml(value: string): string {
   return value
@@ -15,14 +15,6 @@ function escapeHtml(value: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-function nomeFontSize(nome: string): string {
-  const len = nome.trim().length;
-  if (len <= 10) return '14px';
-  if (len <= 16) return '11px';
-  if (len <= 22) return '9px';
-  return '8px';
 }
 
 function formatDataHora(date: Date): string {
@@ -34,112 +26,137 @@ function formatDataHora(date: Date): string {
   return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
 }
 
-/**
- * Rasteriza a logo em PNG opaco (fundo branco).
- * Drivers térmicos costumam falhar com PNG transparente / flex height 100%.
- */
-async function rasterizeLogoForThermal(
-  dataUrl: string
-): Promise<string | null> {
-  try {
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
     const img = new Image();
     img.decoding = 'sync';
-    img.src = dataUrl;
-    if (typeof img.decode === 'function') {
-      await img.decode();
-    } else {
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error('logo_load_failed'));
-      });
-    }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = LOGO_RASTER_W;
-    canvas.height = LOGO_RASTER_H;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return dataUrl;
-
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, LOGO_RASTER_W, LOGO_RASTER_H);
-
-    const scale = Math.min(
-      LOGO_RASTER_W / img.naturalWidth,
-      LOGO_RASTER_H / img.naturalHeight
-    );
-    const dw = Math.max(1, Math.floor(img.naturalWidth * scale));
-    const dh = Math.max(1, Math.floor(img.naturalHeight * scale));
-    const dx = Math.floor((LOGO_RASTER_W - dw) / 2);
-    const dy = Math.floor((LOGO_RASTER_H - dh) / 2);
-    ctx.drawImage(img, dx, dy, dw, dh);
-
-    return canvas.toDataURL('image/png');
-  } catch {
-    return dataUrl.startsWith('data:image/') ? dataUrl : null;
-  }
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('img_load_failed'));
+    img.src = src;
+  });
 }
 
-async function prepareTicketsForPrint(
-  tickets: FichaTicket[]
-): Promise<FichaTicket[]> {
-  const out: FichaTicket[] = [];
-  for (const ticket of tickets) {
-    const raw = ticket.logo;
-    if (raw && raw.startsWith('data:image/')) {
-      const raster = await rasterizeLogoForThermal(raw);
-      out.push({ ...ticket, logo: raster });
-    } else {
-      out.push({ ...ticket, logo: null });
-    }
+/** Converte canvas para preto/branco — térmica monócroma falha com verde/cor. */
+function toThermalMono(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+  const data = ctx.getImageData(0, 0, w, h);
+  const px = data.data;
+  for (let i = 0; i < px.length; i += 4) {
+    const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+    const v = lum > 160 ? 255 : 0;
+    px[i] = v;
+    px[i + 1] = v;
+    px[i + 2] = v;
+    px[i + 3] = 255;
   }
-  return out;
+  ctx.putImageData(data, 0, 0);
+}
+
+function drawContainedImage(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  x: number,
+  y: number,
+  boxW: number,
+  boxH: number
+): void {
+  const scale = Math.min(boxW / img.naturalWidth, boxH / img.naturalHeight);
+  const dw = Math.max(1, Math.floor(img.naturalWidth * scale));
+  const dh = Math.max(1, Math.floor(img.naturalHeight * scale));
+  const dx = x + Math.floor((boxW - dw) / 2);
+  const dy = y + Math.floor((boxH - dh) / 2);
+  ctx.drawImage(img, dx, dy, dw, dh);
+}
+
+function resolveLogo(ticket: FichaTicket): string | null {
+  if (ticket.logo && ticket.logo.startsWith('data:image/')) return ticket.logo;
+  const logos = readProductFichaLogos();
+  if (ticket.productId && logos[ticket.productId]) return logos[ticket.productId];
+  // key = `${id}-${index}`
+  const idFromKey = ticket.key.replace(/-\d+$/, '');
+  if (idFromKey && logos[idFromKey]) return logos[idFromKey];
+  return null;
 }
 
 /**
- * Ficha térmica (logo por produto):
- * - Com logo: EVENTO → LOGO → DATA/HORA
- * - Sem logo: EVENTO → NOME PRODUTO → DATA/HORA
+ * Renderiza a ficha INTEIRA como bitmap.
+ * Drivers POS80 costumam imprimir imagem de página inteira e falhar com HTML+logo colorida.
  */
-export function buildFichasHtml(
-  tickets: FichaTicket[],
-  tenantName?: string,
-  printedAt: Date = new Date(),
-  alturaMm: number = FICHA_ALTURA_MM
-): string {
-  const festival = (tenantName || 'FESTIVAL').trim().toUpperCase();
-  const when = formatDataHora(printedAt);
-  const h = Math.max(15, Math.min(80, alturaMm));
+async function renderFichaBitmap(
+  ticket: FichaTicket,
+  festival: string,
+  when: string
+): Promise<string> {
+  const canvas = document.createElement('canvas');
+  canvas.width = PX_W;
+  canvas.height = PX_H;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) throw new Error('no_canvas');
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, PX_W, PX_H);
+  ctx.fillStyle = '#000000';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const padX = 12;
+  const headerH = 28;
+  const footerH = 28;
+  const midY = headerH;
+  const midH = PX_H - headerH - footerH;
+
+  // Evento
+  ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
+  ctx.fillText(festival.slice(0, 42), PX_W / 2, headerH / 2, PX_W - padX * 2);
+
+  const logoSrc = resolveLogo(ticket);
+  let drewLogo = false;
+  if (logoSrc) {
+    try {
+      const img = await loadImage(logoSrc);
+      drawContainedImage(ctx, img, padX, midY + 2, PX_W - padX * 2, midH - 4);
+      drewLogo = true;
+    } catch {
+      drewLogo = false;
+    }
+  }
+
+  if (!drewLogo) {
+    const nome = (ticket.nome || 'FICHA').toUpperCase();
+    // Tarja preta com nome
+    ctx.fillStyle = '#000000';
+    const barPad = 8;
+    ctx.fillRect(padX, midY + barPad, PX_W - padX * 2, midH - barPad * 2);
+    ctx.fillStyle = '#ffffff';
+    const len = nome.length;
+    const fontSize = len <= 10 ? 36 : len <= 16 ? 28 : len <= 22 ? 22 : 18;
+    ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
+    ctx.fillText(nome, PX_W / 2, midY + midH / 2, PX_W - padX * 4);
+    ctx.fillStyle = '#000000';
+  }
+
+  // Data/hora
+  ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
+  ctx.fillStyle = '#000000';
+  ctx.fillText(when, PX_W / 2, PX_H - footerH / 2, PX_W - padX * 2);
+
+  toThermalMono(ctx, PX_W, PX_H);
+  // PNG 1-bit-ish (já mono) — JPEG também ok em alguns drivers; PNG preserva contraste
+  return canvas.toDataURL('image/png');
+}
+
+/**
+ * HTML: só bitmaps de página inteira (80×25).
+ * Um job, N páginas → cortador "após cada página" com papel 80×25.
+ */
+function buildBitmapPagesHtml(pageImages: string[]): string {
   const w = FICHA_LARGURA_MM;
-  const logoH = Math.min(LOGO_AREA_H_MM, h - 6);
+  const h = FICHA_ALTURA_MM;
 
-  const pages = tickets
-    .map((ticket, index) => {
-      const isLast = index === tickets.length - 1;
-      const nome = ticket.nome.trim().toUpperCase() || 'FICHA';
-      const size = nomeFontSize(nome);
-      const logo = ticket.logo || null;
-      const hasLogo = Boolean(logo && logo.startsWith('data:image/'));
-
-      if (hasLogo) {
-        return `<section class="page${isLast ? ' last' : ''}">
-  <table class="ticket with-logo" cellpadding="0" cellspacing="0">
-    <tr><td class="event">${escapeHtml(festival)}</td></tr>
-    <tr><td class="logo-cell">
-      <img class="logo" width="${LOGO_RASTER_W}" height="${LOGO_RASTER_H}" src="${logo}" alt="${escapeHtml(nome)}" />
-    </td></tr>
-    <tr><td class="when">${escapeHtml(when)}</td></tr>
-  </table>
-</section>`;
-      }
-
+  const pages = pageImages
+    .map((src, index) => {
+      const isLast = index === pageImages.length - 1;
       return `<section class="page${isLast ? ' last' : ''}">
-  <table class="ticket no-logo" cellpadding="0" cellspacing="0">
-    <tr><td class="event">${escapeHtml(festival)}</td></tr>
-    <tr><td class="nome-cell">
-      <div class="nome" style="font-size:${size}">${escapeHtml(nome)}</div>
-    </td></tr>
-    <tr><td class="when">${escapeHtml(when)}</td></tr>
-  </table>
+  <img class="ficha" width="${PX_W}" height="${PX_H}" src="${src}" alt="Ficha ${index + 1}" />
 </section>`;
     })
     .join('\n');
@@ -154,113 +171,55 @@ export function buildFichasHtml(
     size: ${w}mm ${h}mm;
     margin: 0;
   }
-
   * { box-sizing: border-box; margin: 0; padding: 0; }
-
   html, body {
-    width: ${w}mm !important;
-    height: auto !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    background: #fff !important;
-    color: #000 !important;
+    width: ${w}mm;
+    margin: 0;
+    padding: 0;
+    background: #fff;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     color-adjust: exact !important;
   }
-
   .page {
-    width: ${w}mm !important;
-    height: ${h}mm !important;
-    margin: 0 !important;
-    padding: 0 !important;
+    width: ${w}mm;
+    height: ${h}mm;
+    margin: 0;
+    padding: 0;
     overflow: hidden;
-    display: block;
-    break-after: page;
     page-break-after: always;
-    break-inside: avoid;
+    break-after: page;
     page-break-inside: avoid;
+    break-inside: avoid;
   }
-
   .page.last {
-    break-after: auto;
     page-break-after: auto;
+    break-after: auto;
   }
-
-  table.ticket {
+  img.ficha {
+    display: block !important;
     width: ${w}mm !important;
     height: ${h}mm !important;
-    border-collapse: collapse;
-    table-layout: fixed;
-  }
-
-  table.ticket td {
-    padding: 0.6mm 1.5mm;
-    vertical-align: middle;
-    text-align: center;
-  }
-
-  .event, .when {
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 8px;
-    font-weight: 900;
-    letter-spacing: 0.4px;
-    text-transform: uppercase;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1.2;
-    height: 3.5mm;
-  }
-
-  .logo-cell {
-    height: ${logoH}mm !important;
-    background: #fff !important;
-  }
-
-  img.logo {
-    display: block !important;
-    width: ${w - 3}mm !important;
-    height: ${logoH - 1}mm !important;
-    max-width: ${w - 3}mm !important;
-    max-height: ${logoH - 1}mm !important;
-    object-fit: contain !important;
-    object-position: center !important;
-    margin: 0 auto !important;
-    background: #fff !important;
+    max-width: ${w}mm !important;
+    max-height: ${h}mm !important;
+    object-fit: fill !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-
-  .nome-cell {
-    height: ${logoH}mm !important;
-  }
-
-  .nome {
-    font-family: Impact, Haettenschweiler, 'Arial Black', Arial, sans-serif;
-    font-weight: 900;
-    letter-spacing: 0.5px;
-    text-align: center;
-    text-transform: uppercase;
-    line-height: 1.05;
-    word-break: break-word;
-    width: 100%;
-    background: #000 !important;
-    color: #fff !important;
-    padding: 2mm;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
   @media print {
-    html, body, .page, table.ticket {
+    .page {
       width: ${w}mm !important;
-    }
-    .page, table.ticket {
       height: ${h}mm !important;
+      page-break-after: always !important;
+      break-after: page !important;
     }
-    img.logo {
-      display: block !important;
+    .page.last {
+      page-break-after: auto !important;
+      break-after: auto !important;
+    }
+    img.ficha {
+      width: ${w}mm !important;
+      height: ${h}mm !important;
       visibility: visible !important;
       opacity: 1 !important;
     }
@@ -273,20 +232,54 @@ ${pages}
 </html>`;
 }
 
+/** @deprecated layout HTML antigo — mantido só se precisar debug */
+export function buildFichasHtml(
+  tickets: FichaTicket[],
+  tenantName?: string,
+  printedAt: Date = new Date()
+): string {
+  const festival = (tenantName || 'FESTIVAL').trim().toUpperCase();
+  const when = formatDataHora(printedAt);
+  // fallback textual mínimo
+  const pages = tickets
+    .map((t, i) => {
+      const isLast = i === tickets.length - 1;
+      return `<section class="page${isLast ? ' last' : ''}"><div>${escapeHtml(festival)} — ${escapeHtml(t.nome)} — ${escapeHtml(when)}</div></section>`;
+    })
+    .join('');
+  return `<!DOCTYPE html><html><body>${pages}</body></html>`;
+}
+
 export function printFichasViaIframe(
   tickets: FichaTicket[],
   tenantName?: string,
   printedAt: Date = new Date(),
-  alturaMm: number = FICHA_ALTURA_MM
+  _alturaMm: number = FICHA_ALTURA_MM
 ): void {
   if (tickets.length === 0) return;
 
-  const h = Math.max(15, Math.min(80, alturaMm));
+  const festival = (tenantName || 'FESTIVAL').trim().toUpperCase();
+  const when = formatDataHora(printedAt);
+  const h = FICHA_ALTURA_MM;
 
   void (async () => {
-    const prepared = await prepareTicketsForPrint(tickets);
-    // Um único job: N páginas de 80×25 (papel da impressora). Corte = após cada página.
-    const html = buildFichasHtml(prepared, tenantName, printedAt, h);
+    const pageImages: string[] = [];
+    for (const ticket of tickets) {
+      try {
+        pageImages.push(await renderFichaBitmap(ticket, festival, when));
+      } catch {
+        // fallback: ficha só com texto (ainda como bitmap)
+        pageImages.push(
+          await renderFichaBitmap(
+            { ...ticket, logo: null },
+            festival,
+            when
+          )
+        );
+      }
+    }
+
+    const html = buildBitmapPagesHtml(pageImages);
 
     const iframe = document.createElement('iframe');
     iframe.setAttribute('aria-hidden', 'true');
@@ -324,32 +317,28 @@ export function printFichasViaIframe(
         } catch {
           /* ignore */
         }
-      }, 1500);
+      }, 2000);
     };
 
     const trigger = async () => {
-      try {
-        const imgs = Array.from(doc.images);
-        await Promise.all(
-          imgs.map(async (img) => {
-            try {
-              if (!img.complete || img.naturalWidth === 0) {
-                if (typeof img.decode === 'function') await img.decode();
-                else {
-                  await new Promise<void>((r) => {
-                    img.onload = () => r();
-                    img.onerror = () => r();
-                  });
-                }
+      const imgs = Array.from(doc.images);
+      await Promise.all(
+        imgs.map(async (img) => {
+          try {
+            if (!img.complete || img.naturalWidth === 0) {
+              if (typeof img.decode === 'function') await img.decode();
+              else {
+                await new Promise<void>((r) => {
+                  img.onload = () => r();
+                  img.onerror = () => r();
+                });
               }
-            } catch {
-              /* ignore */
             }
-          })
-        );
-      } catch {
-        /* ignore */
-      }
+          } catch {
+            /* ignore */
+          }
+        })
+      );
 
       try {
         iframe.style.visibility = 'visible';
@@ -366,6 +355,6 @@ export function printFichasViaIframe(
 
     window.setTimeout(() => {
       void trigger();
-    }, 250);
+    }, 300);
   })();
 }

@@ -3,6 +3,7 @@ import type { CartItem } from '../store/cartStore';
 export type FichaTicket = {
   key: string;
   nome: string;
+  productId?: string;
   /** Logo individual do produto (data URL), se houver. */
   logo?: string | null;
 };
@@ -76,6 +77,7 @@ export function expandFichaTickets(
     for (let i = 0; i < qtd; i += 1) {
       tickets.push({
         key: `${item.id ?? item.nome}-${i}`,
+        productId: item.id,
         nome: item.nome.trim() || 'FICHA',
         logo,
       });
