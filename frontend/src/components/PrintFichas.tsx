@@ -7,14 +7,13 @@ interface PrintFichasProps {
     quantidade: number;
     imprime_ficha?: boolean;
   }>;
-  /** Se informado, imprime exatamente estas fichas (ex.: após venda no operador). */
   tickets?: FichaTicket[];
   tenantName?: string;
 }
 
 /**
- * Fichas térmicas 80mm × 2,5cm — uma página por unidade.
- * Visível só em @media print (classe .print-fichas).
+ * Fallback visual (print CSS da página). A impressão principal usa iframe
+ * em printFichasViaIframe com o layout completo de ingresso.
  */
 export default function PrintFichas({
   items,
@@ -23,6 +22,7 @@ export default function PrintFichas({
 }: PrintFichasProps) {
   const tickets = ticketsProp ?? expandFichaTickets(items);
   if (tickets.length === 0) return null;
+  const festival = (tenantName || 'Festival').toUpperCase();
 
   return (
     <div className="print-fichas">
@@ -34,11 +34,27 @@ export default function PrintFichas({
             pageBreakAfter: index < tickets.length - 1 ? 'always' : 'auto',
           }}
         >
-          <div className="print-ficha-inner">
-            {tenantName ? (
-              <div className="print-ficha-festival">{tenantName}</div>
-            ) : null}
-            <div className="print-ficha-nome">{ticket.nome.toUpperCase()}</div>
+          <div className="print-ficha-ticket">
+            <div className="print-ficha-edge print-ficha-edge-l" />
+            <div className="print-ficha-body">
+              <div className="print-ficha-top">
+                <span>★★★</span>
+                <span className="print-ficha-festival">{festival}</span>
+                <span>★★★</span>
+              </div>
+              <div className="print-ficha-rule" />
+              <div className="print-ficha-nome-wrap">
+                <div className="print-ficha-nome">
+                  {ticket.nome.toUpperCase()}
+                </div>
+              </div>
+              <div className="print-ficha-rule" />
+              <div className="print-ficha-bottom">
+                <span>✦ FICHA ✦</span>
+                <span>VALIDA NO BALCAO</span>
+              </div>
+            </div>
+            <div className="print-ficha-edge print-ficha-edge-r" />
           </div>
         </div>
       ))}

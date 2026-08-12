@@ -8,22 +8,48 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
+/** Ajusta o tamanho do nome para caber em 80mm. */
+function nomeFontSize(nome: string): string {
+  const len = nome.trim().length;
+  if (len <= 10) return '15px';
+  if (len <= 16) return '13px';
+  if (len <= 22) return '11px';
+  return '9.5px';
+}
+
 /** Monta HTML de fichas 80×25mm (1 página por unidade). */
 export function buildFichasHtml(
   tickets: FichaTicket[],
   tenantName?: string
 ): string {
+  const festival = (tenantName || 'FESTIVAL').trim().toUpperCase();
+
   const pages = tickets
     .map((ticket, index) => {
       const breakAfter =
         index < tickets.length - 1 ? 'page-break-after:always;' : '';
-      const festival = tenantName
-        ? `<div class="festival">${escapeHtml(tenantName)}</div>`
-        : '';
+      const nome = ticket.nome.trim().toUpperCase() || 'FICHA';
+      const size = nomeFontSize(nome);
       return `<div class="page" style="${breakAfter}">
-  <div class="inner">
-    ${festival}
-    <div class="nome">${escapeHtml(ticket.nome.toUpperCase())}</div>
+  <div class="ticket">
+    <div class="edge edge-left"></div>
+    <div class="body">
+      <div class="top">
+        <span class="stars">★★★</span>
+        <span class="festival">${escapeHtml(festival)}</span>
+        <span class="stars">★★★</span>
+      </div>
+      <div class="rule"></div>
+      <div class="nome-wrap">
+        <div class="nome" style="font-size:${size}">${escapeHtml(nome)}</div>
+      </div>
+      <div class="rule"></div>
+      <div class="bottom">
+        <span class="badge">✦ FICHA ✦</span>
+        <span class="hint">VALIDA NO BALCAO</span>
+      </div>
+    </div>
+    <div class="edge edge-right"></div>
   </div>
 </div>`;
     })
@@ -37,42 +63,119 @@ export function buildFichasHtml(
 <style>
   @page { size: 80mm 25mm; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { width: 80mm; background: #fff; color: #000; }
+  html, body {
+    width: 80mm;
+    background: #fff;
+    color: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   .page {
     width: 80mm;
     height: 25mm;
     overflow: hidden;
     page-break-inside: avoid;
   }
-  .inner {
+  .ticket {
     width: 80mm;
     height: 25mm;
-    padding: 1mm 2mm;
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    border: 0.45mm solid #000;
+  }
+  .edge {
+    width: 4.5mm;
+    flex-shrink: 0;
+    background:
+      radial-gradient(circle at 0 2.5mm, #fff 1.35mm, #000 1.4mm, #000 1.55mm, transparent 1.6mm) 0 0 / 100% 5mm repeat-y,
+      #000;
+  }
+  .edge-left {
+    background:
+      radial-gradient(circle at 100% 2.5mm, #fff 1.35mm, #000 1.4mm, #000 1.55mm, transparent 1.6mm) 0 0 / 100% 5mm repeat-y,
+      #000;
+  }
+  .edge-right {
+    background:
+      radial-gradient(circle at 0 2.5mm, #fff 1.35mm, #000 1.4mm, #000 1.55mm, transparent 1.6mm) 0 0 / 100% 5mm repeat-y,
+      #000;
+  }
+  .body {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
+    padding: 1.2mm 2mm;
+    background: #fff;
+  }
+  .top {
+    display: flex;
     align-items: center;
     justify-content: center;
-    text-align: center;
+    gap: 1.5mm;
+  }
+  .stars {
+    font-size: 6px;
+    letter-spacing: 0.3px;
+    line-height: 1;
   }
   .festival {
     font-family: Arial, Helvetica, sans-serif;
     font-size: 7px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
     text-transform: uppercase;
-    letter-spacing: 0.4px;
-    margin-bottom: 1mm;
-    max-width: 76mm;
+    max-width: 48mm;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .rule {
+    height: 0;
+    border-top: 0.35mm dashed #000;
+    margin: 0.4mm 0;
+  }
+  .nome-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    color: #fff;
+    border-radius: 0.6mm;
+    padding: 0.8mm 1.5mm;
+    min-height: 9mm;
+  }
   .nome {
-    font-family: Arial Black, Arial, Helvetica, sans-serif;
-    font-size: 16px;
+    font-family: Impact, Haettenschweiler, 'Arial Black', Arial, sans-serif;
     font-weight: 900;
     line-height: 1.05;
-    letter-spacing: 0.5px;
-    max-width: 76mm;
+    letter-spacing: 0.8px;
+    text-align: center;
+    text-transform: uppercase;
     word-break: break-word;
+    max-width: 100%;
+  }
+  .bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2mm;
+  }
+  .badge {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 7px;
+    font-weight: 900;
+    letter-spacing: 1px;
+  }
+  .hint {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 5.5px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    opacity: 0.9;
   }
 </style>
 </head>
@@ -123,11 +226,10 @@ export function printFichasViaIframe(
     }
   };
 
-  // Aguarda imagens/fonts; em HTML simples um frame basta.
   if (doc.readyState === 'complete') {
-    window.setTimeout(trigger, 100);
+    window.setTimeout(trigger, 120);
   } else {
-    iframe.onload = () => window.setTimeout(trigger, 100);
-    window.setTimeout(trigger, 400);
+    iframe.onload = () => window.setTimeout(trigger, 120);
+    window.setTimeout(trigger, 450);
   }
 }

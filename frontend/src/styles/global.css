@@ -253,38 +253,83 @@ button {
     page-break-after: auto;
   }
 
-  .print-ficha-inner {
+  .print-ficha-ticket {
     width: 80mm;
     height: 25mm;
-    box-sizing: border-box;
-    padding: 1mm 2mm;
+    display: flex;
+    border: 0.45mm solid #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-ficha-edge {
+    width: 4.5mm;
+    flex-shrink: 0;
+    background: #000;
+  }
+
+  .print-ficha-body {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
+    padding: 1.2mm 2mm;
+  }
+
+  .print-ficha-top {
+    display: flex;
     align-items: center;
     justify-content: center;
-    text-align: center;
+    gap: 1.5mm;
+    font-size: 6px;
   }
 
   .print-ficha-festival {
     font-family: Arial, Helvetica, sans-serif;
     font-size: 7px;
-    line-height: 1;
+    font-weight: 700;
+    letter-spacing: 1.2px;
     text-transform: uppercase;
-    letter-spacing: 0.4px;
-    margin-bottom: 1mm;
-    max-width: 76mm;
+    max-width: 48mm;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
+  .print-ficha-rule {
+    border-top: 0.35mm dashed #000;
+  }
+
+  .print-ficha-nome-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    color: #fff;
+    border-radius: 0.6mm;
+    padding: 0.8mm 1.5mm;
+    min-height: 9mm;
+  }
+
   .print-ficha-nome {
-    font-family: Arial Black, Arial, Helvetica, sans-serif;
-    font-size: 16px;
+    font-family: Impact, Haettenschweiler, 'Arial Black', Arial, sans-serif;
+    font-size: 13px;
     font-weight: 900;
     line-height: 1.05;
-    letter-spacing: 0.5px;
-    max-width: 76mm;
+    letter-spacing: 0.8px;
+    text-align: center;
+    text-transform: uppercase;
     word-break: break-word;
+  }
+
+  .print-ficha-bottom {
+    display: flex;
+    justify-content: space-between;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 6px;
+    font-weight: 800;
+    letter-spacing: 0.6px;
   }
 }
