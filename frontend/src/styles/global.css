@@ -198,4 +198,16 @@ button {
     color: #000;
     background: #fff;
   }
+
+  .print-receipt-page {
+    page-break-after: always;
+  }
+
+  .print-receipt-page:last-child {
+    page-break-after: auto;
+  }
+
+  .print-receipt-barman pre {
+    font-size: 12px !important;
+  }
 }

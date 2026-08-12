@@ -1,8 +1,12 @@
 import { z } from 'zod';
+import {
+  PRODUCT_CATEGORIES,
+} from './productCategories';
 
 export const productSchema = z.object({
   nome: z.string().min(1).max(100),
   preco: z.number().positive(),
+  categoria: z.enum(PRODUCT_CATEGORIES),
   emoji: z.string().max(10).optional(),
   cor: z
     .string()
@@ -18,6 +22,7 @@ export function mapProductRow(row: Record<string, unknown>) {
     tenant_id: row.tenant_id as string,
     nome: row.nome as string,
     preco: Number(row.preco),
+    categoria: row.categoria as string,
     emoji: row.emoji as string,
     cor: row.cor as string,
     ordem: row.ordem as number,

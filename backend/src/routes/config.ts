@@ -44,7 +44,7 @@ router.get('/config', async (req, res) => {
     }
 
     const produtosResult = await query(
-      `SELECT id, nome, preco, emoji, cor
+      `SELECT id, nome, preco, emoji, cor, categoria
        FROM produtos
        WHERE tenant_id = $1 AND ativo = true
        ORDER BY ordem ASC, criado_em ASC`,
@@ -57,6 +57,7 @@ router.get('/config', async (req, res) => {
       preco: Number(row.preco),
       emoji: row.emoji as string,
       cor: row.cor as string,
+      categoria: row.categoria as string,
     }));
 
     // Métodos de pagamento realmente disponíveis para este tenant.

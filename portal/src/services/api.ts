@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+import type { ProductCategory } from '../utils/productCategories';
+
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '/api',
 });
@@ -35,6 +37,7 @@ export interface Product {
   tenant_id: string;
   nome: string;
   preco: number;
+  categoria: ProductCategory;
   emoji: string;
   cor: string;
   ordem: number;
@@ -42,9 +45,14 @@ export interface Product {
   criado_em: string;
 }
 
-export type ProductInput = Pick<Product, 'nome' | 'preco' | 'emoji' | 'cor' | 'ativo'> & {
+export type ProductInput = Pick<
+  Product,
+  'nome' | 'preco' | 'categoria' | 'emoji' | 'cor' | 'ativo'
+> & {
   ordem?: number;
 };
+
+export type { ProductCategory };
 
 export interface Totem {
   id: string;

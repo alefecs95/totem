@@ -6,6 +6,7 @@ export interface Product {
   preco: number;
   emoji: string;
   cor: string;
+  categoria: string;
 }
 
 export interface CartItem extends Product {

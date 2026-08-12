@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PrintReceipt from '../components/PrintReceipt';
+import { viasComprovante } from '../constants/productCategories';
 import { useCartStore, type CartItem } from '../store/cartStore';
 
 interface SuccessLocationState {
@@ -56,6 +57,8 @@ export default function Success() {
   const resetCountdown = () => setSecondsLeft(VOLTAR_EM);
 
   const idCurto = paymentId ? paymentId.slice(0, 8).toUpperCase() : '--------';
+  const vias = viasComprovante(items);
+  const impressaoDupla = vias.length > 1;
 
   return (
     <div
@@ -183,7 +186,7 @@ export default function Success() {
           style={{ background: AZUL }}
           onClick={() => window.print()}
         >
-          🖨️ IMPRIMIR COMPROVANTE
+          🖨️ {impressaoDupla ? 'IMPRIMIR 2 VIAS' : 'IMPRIMIR COMPROVANTE'}
         </button>
         <button className="btn-primary" onClick={novoPedido}>
           NOVO PEDIDO
@@ -201,6 +204,7 @@ export default function Success() {
         paymentId={paymentId}
         tenantName={tenantName}
         date={new Date()}
+        vias={vias}
       />
     </div>
   );

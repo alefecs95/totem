@@ -139,6 +139,7 @@ router.post('/pix', async (req, res) => {
     const itens = validatedItems.map((item) => ({
       productId: item.productId,
       nome: item.nome,
+      categoria: item.categoria,
       quantidade: item.quantidade,
       preco: item.preco,
       subtotal: item.subtotal,
@@ -304,6 +305,7 @@ router.post('/card', async (req, res) => {
     const itens = validatedItems.map((item) => ({
       productId: item.productId,
       nome: item.nome,
+      categoria: item.categoria,
       quantidade: item.quantidade,
       preco: item.preco,
       subtotal: item.subtotal,

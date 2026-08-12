@@ -279,8 +279,8 @@ router.post('/produtos', verifyPortal, async (req: AuthRequest, res) => {
     }
 
     const result = await query(
-      `INSERT INTO produtos (tenant_id, nome, preco, emoji, cor, ordem, ativo)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO produtos (tenant_id, nome, preco, emoji, cor, ordem, ativo, categoria)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
         tenantId,
@@ -290,6 +290,7 @@ router.post('/produtos', verifyPortal, async (req: AuthRequest, res) => {
         p.cor ?? '#FF6B00',
         ordem,
         p.ativo ?? true,
+        p.categoria,
       ]
     );
 

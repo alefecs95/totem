@@ -3,8 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { createCardPayment } from '../services/api';
 import { useCartStore, type CartItem } from '../store/cartStore';
 
-type Metodo = 'pix' | 'card';
-
 interface PaymentLocationState {
   items?: CartItem[];
   total?: number;
@@ -28,11 +26,9 @@ export default function Payment() {
   const items = state.items ?? storeItems;
   const total = state.total ?? getTotal();
 
-  const [metodo, setMetodo] = useState<Metodo | null>(null);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
-  // Métodos habilitados conforme a configuração do organizador (vinda do /config).
   const pagamentos = (() => {
     try {
       const raw = localStorage.getItem('pagamentos');
@@ -65,15 +61,13 @@ export default function Payment() {
     }
   };
 
-  const handleConfirmar = async () => {
-    if (!metodo) return;
+  const pagarPix = () => {
     setErro('');
+    navigate('/pix', { state: { items, total } });
+  };
 
-    if (metodo === 'pix') {
-      navigate('/pix', { state: { items, total } });
-      return;
-    }
-
+  const pagarCartao = async () => {
+    setErro('');
     const tenantId = localStorage.getItem('tenantId');
     if (!tenantId) {
       setErro('Totem não configurado. Escaneie o QR Code novamente.');
@@ -125,6 +119,19 @@ export default function Payment() {
   return (
     <div style={{ minHeight: '100vh', paddingBottom: 120 }}>
       <header style={{ padding: '24px 16px 8px', textAlign: 'center' }}>
+        <button
+          onClick={() => navigate('/cart')}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--text-muted)',
+            fontSize: 15,
+            cursor: 'pointer',
+            marginBottom: 8,
+          }}
+        >
+          ← Alterar pedido
+        </button>
         <h1
           style={{
             fontFamily: "'Bebas Neue', sans-serif",
@@ -132,12 +139,12 @@ export default function Payment() {
             letterSpacing: 1,
           }}
         >
-          Como vai pagar?
+          Toque para pagar
         </h1>
         <div
           style={{
             fontFamily: "'Bebas Neue', sans-serif",
-            fontSize: 28,
+            fontSize: 36,
             color: 'var(--secondary)',
             marginTop: 4,
           }}
@@ -155,105 +162,67 @@ export default function Payment() {
         }}
       >
         {pagamentos.pix && (
-        <button
-          onClick={() => setMetodo('pix')}
-          className="card"
-          style={{
-            position: 'relative',
-            textAlign: 'center',
-            cursor: 'pointer',
-            border: `2px solid ${metodo === 'pix' ? VERDE : 'transparent'}`,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
-          {metodo === 'pix' && (
-            <span
-              style={{
-                position: 'absolute',
-                top: 12,
-                right: 16,
-                color: VERDE,
-                fontSize: 24,
-              }}
-            >
-              ✓
-            </span>
-          )}
-          <svg width="56" height="56" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M12 2.6 3.8 10.8a1.7 1.7 0 0 0 0 2.4L12 21.4l8.2-8.2a1.7 1.7 0 0 0 0-2.4L12 2.6Zm0 3.4 5.4 5.4L12 17l-5.4-5.4L12 6Z"
-              fill={VERDE}
-            />
-          </svg>
-          <span
+          <button
+            onClick={pagarPix}
+            className="card"
             style={{
-              fontFamily: "'Bebas Neue', sans-serif",
-              fontSize: 52,
-              color: VERDE,
-              lineHeight: 1,
+              textAlign: 'center',
+              cursor: 'pointer',
+              border: '2px solid transparent',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 8,
+              minHeight: 140,
             }}
           >
-            PIX
-          </span>
-          <span style={{ color: 'var(--text-muted)', fontSize: 15 }}>
-            Instantâneo · Sem taxas extras
-          </span>
-        </button>
+            <span style={{ fontSize: 48 }}>⚡</span>
+            <span
+              style={{
+                fontFamily: "'Bebas Neue', sans-serif",
+                fontSize: 52,
+                color: VERDE,
+                lineHeight: 1,
+              }}
+            >
+              PIX
+            </span>
+            <span style={{ color: 'var(--text-muted)', fontSize: 15 }}>
+              Toque aqui — QR Code na hora
+            </span>
+          </button>
         )}
 
         {pagamentos.cartao && (
-        <button
-          onClick={() => setMetodo('card')}
-          className="card"
-          style={{
-            position: 'relative',
-            textAlign: 'center',
-            cursor: 'pointer',
-            border: `2px solid ${metodo === 'card' ? AZUL : 'transparent'}`,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
-          {metodo === 'card' && (
-            <span
-              style={{
-                position: 'absolute',
-                top: 12,
-                right: 16,
-                color: AZUL,
-                fontSize: 24,
-              }}
-            >
-              ✓
-            </span>
-          )}
-          <svg width="56" height="56" viewBox="0 0 24 24" fill="none">
-            <rect x="2" y="5" width="20" height="14" rx="2.5" fill={AZUL} />
-            <rect x="2" y="8.5" width="20" height="3" fill="#0D0A1A" />
-            <rect x="5" y="15" width="6" height="2" rx="1" fill="#0D0A1A" />
-          </svg>
-          <span
+          <button
+            onClick={pagarCartao}
+            className="card"
             style={{
-              fontFamily: "'Bebas Neue', sans-serif",
-              fontSize: 52,
-              color: AZUL,
-              lineHeight: 1,
+              textAlign: 'center',
+              cursor: 'pointer',
+              border: '2px solid transparent',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 8,
+              minHeight: 140,
             }}
           >
-            CARTÃO
-          </span>
-          <span style={{ color: 'var(--text-muted)', fontSize: 15 }}>
-            Débito ou Crédito
-          </span>
-          <span style={{ color: AZUL, fontSize: 14, fontWeight: 600 }}>
-            Passe na maquininha ao lado →
-          </span>
-        </button>
+            <span style={{ fontSize: 48 }}>💳</span>
+            <span
+              style={{
+                fontFamily: "'Bebas Neue', sans-serif",
+                fontSize: 52,
+                color: AZUL,
+                lineHeight: 1,
+              }}
+            >
+              CARTÃO
+            </span>
+            <span style={{ color: 'var(--text-muted)', fontSize: 15 }}>
+              Toque aqui — passe na maquininha
+            </span>
+          </button>
         )}
 
         {!pagamentos.pix && !pagamentos.cartao && (
@@ -272,20 +241,19 @@ export default function Payment() {
         )}
       </main>
 
-      <footer
-        style={{
-          position: 'fixed',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          padding: 16,
-          background: 'linear-gradient(to top, var(--bg) 70%, transparent)',
-        }}
-      >
-        {erro && (
+      {erro && (
+        <footer
+          style={{
+            position: 'fixed',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            padding: 16,
+            background: 'var(--bg)',
+          }}
+        >
           <div
             style={{
-              marginBottom: 12,
               padding: '10px 12px',
               borderRadius: 8,
               background: 'rgba(220, 38, 38, 0.15)',
@@ -298,16 +266,8 @@ export default function Payment() {
           >
             {erro}
           </div>
-        )}
-        <button
-          className="btn-primary"
-          onClick={handleConfirmar}
-          disabled={!metodo}
-          style={{ opacity: metodo ? 1 : 0.4, cursor: metodo ? 'pointer' : 'default' }}
-        >
-          CONFIRMAR →
-        </button>
-      </footer>
+        </footer>
+      )}
     </div>
   );
 }

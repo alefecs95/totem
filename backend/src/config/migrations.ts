@@ -50,6 +50,12 @@ ALTER TABLE totens ADD COLUMN IF NOT EXISTS mp_pos_id VARCHAR(50);
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sumup_merchant_code VARCHAR(100);
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sumup_affiliate_key TEXT;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS portal_senha_hash TEXT;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS categoria VARCHAR(50) NOT NULL DEFAULT 'outro';
+
+-- Categorias para produtos já existentes (antes da coluna categoria).
+UPDATE produtos SET categoria = 'bebida_alcoolica' WHERE categoria = 'outro' AND nome ILIKE '%cerveja%';
+UPDATE produtos SET categoria = 'bebida_nao_alcoolica' WHERE categoria = 'outro' AND (nome ILIKE '%refrigerante%' OR nome ILIKE '%água%' OR nome ILIKE '%agua%');
+UPDATE produtos SET categoria = 'comida' WHERE categoria = 'outro' AND nome ILIKE '%comida%';
 
 -- TABELA: produtos (por tenant — cada organizador configura seus produtos)
 CREATE TABLE IF NOT EXISTS produtos (

@@ -222,19 +222,29 @@ export default function Cart() {
           background: 'linear-gradient(to top, var(--bg) 70%, transparent)',
         }}
       >
-        <div style={{ width: '40%' }}>
-          <button className="btn-secondary" onClick={() => navigate('/')}>
-            ← ALTERAR
-          </button>
-        </div>
-        <div style={{ width: '58%' }}>
+        <div style={{ width: '100%' }}>
           <button
             className="btn-primary"
             onClick={() => navigate('/payment', { state: { items, total } })}
           >
-            PAGAR →
+            PAGAR {formatPreco(total)} →
           </button>
         </div>
+        <button
+          onClick={() => navigate('/')}
+          style={{
+            width: '100%',
+            marginTop: 8,
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--text-muted)',
+            fontSize: 14,
+            cursor: 'pointer',
+            textDecoration: 'underline',
+          }}
+        >
+          ← Adicionar mais itens
+        </button>
       </footer>
     </div>
   );

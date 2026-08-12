@@ -22,6 +22,7 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
   const [preco, setPreco] = useState('');
   const [emoji, setEmoji] = useState('🎟️');
   const [cor, setCor] = useState('#FF6B00');
+  const [categoria, setCategoria] = useState('outro');
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -39,6 +40,7 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
     setPreco('');
     setEmoji('🎟️');
     setCor('#FF6B00');
+    setCategoria('outro');
     setEditingId(null);
   };
 
@@ -48,6 +50,7 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
     const input: ProductInput = {
       nome,
       preco: Number(preco),
+      categoria,
       emoji,
       cor,
       ativo: true,
@@ -71,6 +74,7 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
     setPreco(String(p.preco));
     setEmoji(p.emoji);
     setCor(p.cor);
+    setCategoria(p.categoria ?? 'outro');
   };
 
   const desativar = async (p: Product) => {
@@ -107,6 +111,17 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
             onChange={(e) => setPreco(e.target.value)}
             required
           />
+          <select
+            style={{ ...input, minWidth: 160 }}
+            value={categoria}
+            onChange={(e) => setCategoria(e.target.value)}
+            required
+          >
+            <option value="bebida_alcoolica">Bebida alcoólica</option>
+            <option value="bebida_nao_alcoolica">Bebida não alcoólica</option>
+            <option value="comida">Comida</option>
+            <option value="outro">Outro</option>
+          </select>
           <input
             style={{ ...input, width: 50 }}
             value={emoji}

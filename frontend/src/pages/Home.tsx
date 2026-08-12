@@ -125,8 +125,23 @@ export default function Home() {
               'linear-gradient(to top, var(--bg) 70%, transparent)',
           }}
         >
-          <button className="btn-primary" onClick={() => navigate('/cart')}>
-            VER PEDIDO ({totalItems} {totalItems === 1 ? 'item' : 'itens'}) →
+          <button className="btn-primary" onClick={() => navigate('/payment')}>
+            PAGAR → ({totalItems} {totalItems === 1 ? 'item' : 'itens'})
+          </button>
+          <button
+            onClick={() => navigate('/cart')}
+            style={{
+              marginTop: 8,
+              width: '100%',
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              fontSize: 14,
+              cursor: 'pointer',
+              textDecoration: 'underline',
+            }}
+          >
+            Ver detalhes do pedido
           </button>
         </footer>
       )}

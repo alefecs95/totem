@@ -322,6 +322,7 @@ export interface Product {
   tenant_id: string;
   nome: string;
   preco: number;
+  categoria: string;
   emoji: string;
   cor: string;
   ordem: number;
@@ -329,7 +330,7 @@ export interface Product {
   criado_em: string;
 }
 
-export type ProductInput = Pick<Product, 'nome' | 'preco' | 'emoji' | 'cor' | 'ativo'> & {
+export type ProductInput = Pick<Product, 'nome' | 'preco' | 'categoria' | 'emoji' | 'cor' | 'ativo'> & {
   ordem?: number;
 };
 

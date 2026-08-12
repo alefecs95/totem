@@ -18,6 +18,7 @@ export interface PaymentItemInput {
 export interface ValidatedPaymentItem {
   productId: string;
   nome: string;
+  categoria: string;
   quantidade: number;
   preco: number;
   subtotal: number;
@@ -45,8 +46,8 @@ export async function validatePaymentItems(
     );
   }
 
-  const result = await query<{ id: string; nome: string; preco: string }>(
-    `SELECT id, nome, preco FROM produtos
+  const result = await query<{ id: string; nome: string; preco: string; categoria: string }>(
+    `SELECT id, nome, preco, categoria FROM produtos
      WHERE tenant_id = $1 AND ativo = true AND id = ANY($2::uuid[])`,
     [tenantId, productIds]
   );
@@ -70,6 +71,7 @@ export async function validatePaymentItems(
     validated.push({
       productId: item.productId,
       nome: product.nome,
+      categoria: product.categoria,
       quantidade: item.quantidade,
       preco,
       subtotal,
