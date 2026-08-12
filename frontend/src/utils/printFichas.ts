@@ -1,21 +1,18 @@
+import { PDFDocument } from 'pdf-lib';
 import type { FichaTicket } from './fichas';
 import { readProductFichaLogos } from './fichas';
 
-/** Largura = 100% do rolo 80mm. Só a altura é controlada pelo sistema. */
+/** Largura = rolo 80mm. Altura = 1 ficha. */
 export const FICHA_LARGURA_MM = 80;
 export const FICHA_ALTURA_MM = 25;
 
-/** Resolução térmica ~203 dpi: 80mm ≈ 640px, 25mm ≈ 200px. Usamos 576×200 (comum em POS 80mm). */
-const PX_W = 576;
+/** ~203 dpi térmica: 80mm≈640px, 25mm≈200px */
+const PX_W = 640;
 const PX_H = 200;
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+/** PDF usa pontos (1 pt = 1/72"). */
+const PDF_W_PT = (FICHA_LARGURA_MM * 72) / 25.4;
+const PDF_H_PT = (FICHA_ALTURA_MM * 72) / 25.4;
 
 function formatDataHora(date: Date): string {
   const dd = String(date.getDate()).padStart(2, '0');
@@ -36,13 +33,23 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Converte canvas para preto/branco — térmica monócroma falha com verde/cor. */
+function dataUrlToBytes(dataUrl: string): Uint8Array {
+  const base64 = dataUrl.split(',')[1] || '';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/** Preto/branco para térmica monócroma. */
 function toThermalMono(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   const data = ctx.getImageData(0, 0, w, h);
   const px = data.data;
   for (let i = 0; i < px.length; i += 4) {
     const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-    const v = lum > 160 ? 255 : 0;
+    const v = lum > 170 ? 255 : 0;
     px[i] = v;
     px[i + 1] = v;
     px[i + 2] = v;
@@ -71,15 +78,13 @@ function resolveLogo(ticket: FichaTicket): string | null {
   if (ticket.logo && ticket.logo.startsWith('data:image/')) return ticket.logo;
   const logos = readProductFichaLogos();
   if (ticket.productId && logos[ticket.productId]) return logos[ticket.productId];
-  // key = `${id}-${index}`
   const idFromKey = ticket.key.replace(/-\d+$/, '');
   if (idFromKey && logos[idFromKey]) return logos[idFromKey];
   return null;
 }
 
 /**
- * Renderiza a ficha INTEIRA como bitmap.
- * Drivers POS80 costumam imprimir imagem de página inteira e falhar com HTML+logo colorida.
+ * Bitmap da ficha com margem interna e logo usando quase toda a largura útil.
  */
 async function renderFichaBitmap(
   ticket: FichaTicket,
@@ -94,26 +99,38 @@ async function renderFichaBitmap(
 
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, PX_W, PX_H);
+
+  // Margem interna (~2mm nas bordas)
+  const marginX = 16;
+  const marginY = 14;
+  const contentW = PX_W - marginX * 2;
+  const contentH = PX_H - marginY * 2;
+
+  const headerH = 32;
+  const footerH = 30;
+  const midY = marginY + headerH;
+  const midH = contentH - headerH - footerH;
+
   ctx.fillStyle = '#000000';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  const padX = 12;
-  const headerH = 28;
-  const footerH = 28;
-  const midY = headerH;
-  const midH = PX_H - headerH - footerH;
-
-  // Evento
-  ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
-  ctx.fillText(festival.slice(0, 42), PX_W / 2, headerH / 2, PX_W - padX * 2);
+  // Evento (com folga da borda)
+  ctx.font = 'bold 20px Arial, Helvetica, sans-serif';
+  ctx.fillText(
+    festival.slice(0, 40),
+    PX_W / 2,
+    marginY + headerH / 2,
+    contentW
+  );
 
   const logoSrc = resolveLogo(ticket);
   let drewLogo = false;
   if (logoSrc) {
     try {
       const img = await loadImage(logoSrc);
-      drawContainedImage(ctx, img, padX, midY + 2, PX_W - padX * 2, midH - 4);
+      // Logo quase na largura toda (só a margem lateral)
+      drawContainedImage(ctx, img, marginX, midY, contentW, midH);
       drewLogo = true;
     } catch {
       drewLogo = false;
@@ -122,117 +139,106 @@ async function renderFichaBitmap(
 
   if (!drewLogo) {
     const nome = (ticket.nome || 'FICHA').toUpperCase();
-    // Tarja preta com nome
+    const barPad = 6;
     ctx.fillStyle = '#000000';
-    const barPad = 8;
-    ctx.fillRect(padX, midY + barPad, PX_W - padX * 2, midH - barPad * 2);
+    ctx.fillRect(marginX, midY + barPad, contentW, midH - barPad * 2);
     ctx.fillStyle = '#ffffff';
     const len = nome.length;
-    const fontSize = len <= 10 ? 36 : len <= 16 ? 28 : len <= 22 ? 22 : 18;
+    const fontSize = len <= 10 ? 40 : len <= 16 ? 30 : len <= 22 ? 24 : 20;
     ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
-    ctx.fillText(nome, PX_W / 2, midY + midH / 2, PX_W - padX * 4);
+    ctx.fillText(nome, PX_W / 2, midY + midH / 2, contentW - 24);
     ctx.fillStyle = '#000000';
   }
 
   // Data/hora
-  ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
+  ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
   ctx.fillStyle = '#000000';
-  ctx.fillText(when, PX_W / 2, PX_H - footerH / 2, PX_W - padX * 2);
+  ctx.fillText(when, PX_W / 2, PX_H - marginY - footerH / 2, contentW);
 
   toThermalMono(ctx, PX_W, PX_H);
-  // PNG 1-bit-ish (já mono) — JPEG também ok em alguns drivers; PNG preserva contraste
   return canvas.toDataURL('image/png');
 }
 
 /**
- * HTML: só bitmaps de página inteira (80×25).
- * Um job, N páginas → cortador "após cada página" com papel 80×25.
+ * PDF com N páginas de 80×25 mm — o spooler Windows vê páginas reais
+ * (HTML page-break é ignorado por vários drivers POS e vira 1 página só).
  */
-function buildBitmapPagesHtml(pageImages: string[]): string {
-  const w = FICHA_LARGURA_MM;
-  const h = FICHA_ALTURA_MM;
+async function buildFichasPdf(pagePngs: string[]): Promise<Blob> {
+  const pdf = await PDFDocument.create();
 
-  const pages = pageImages
-    .map((src, index) => {
-      const isLast = index === pageImages.length - 1;
-      return `<section class="page${isLast ? ' last' : ''}">
-  <img class="ficha" width="${PX_W}" height="${PX_H}" src="${src}" alt="Ficha ${index + 1}" />
-</section>`;
-    })
-    .join('\n');
+  for (const pngDataUrl of pagePngs) {
+    const page = pdf.addPage([PDF_W_PT, PDF_H_PT]);
+    const png = await pdf.embedPng(dataUrlToBytes(pngDataUrl));
+    page.drawImage(png, {
+      x: 0,
+      y: 0,
+      width: PDF_W_PT,
+      height: PDF_H_PT,
+    });
+  }
 
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Fichas</title>
-<style>
-  @page {
-    size: ${w}mm ${h}mm;
-    margin: 0;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body {
-    width: ${w}mm;
-    margin: 0;
-    padding: 0;
-    background: #fff;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-    color-adjust: exact !important;
-  }
-  .page {
-    width: ${w}mm;
-    height: ${h}mm;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    page-break-after: always;
-    break-after: page;
-    page-break-inside: avoid;
-    break-inside: avoid;
-  }
-  .page.last {
-    page-break-after: auto;
-    break-after: auto;
-  }
-  img.ficha {
-    display: block !important;
-    width: ${w}mm !important;
-    height: ${h}mm !important;
-    max-width: ${w}mm !important;
-    max-height: ${h}mm !important;
-    object-fit: fill !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  @media print {
-    .page {
-      width: ${w}mm !important;
-      height: ${h}mm !important;
-      page-break-after: always !important;
-      break-after: page !important;
-    }
-    .page.last {
-      page-break-after: auto !important;
-      break-after: auto !important;
-    }
-    img.ficha {
-      width: ${w}mm !important;
-      height: ${h}mm !important;
-      visibility: visible !important;
-      opacity: 1 !important;
-    }
-  }
-</style>
-</head>
-<body>
-${pages}
-</body>
-</html>`;
+  const bytes = await pdf.save();
+  return new Blob([bytes], { type: 'application/pdf' });
 }
 
-/** @deprecated layout HTML antigo — mantido só se precisar debug */
+function printPdfBlob(blob: Blob): void {
+  const url = URL.createObjectURL(blob);
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.cssText = [
+    'position:fixed',
+    'left:-10000px',
+    'top:0',
+    'width:80mm',
+    'height:25mm',
+    'border:0',
+    'visibility:hidden',
+  ].join(';');
+  document.body.appendChild(iframe);
+
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    window.setTimeout(() => {
+      try {
+        iframe.remove();
+      } catch {
+        /* ignore */
+      }
+      URL.revokeObjectURL(url);
+    }, 2000);
+  };
+
+  iframe.onload = () => {
+    const win = iframe.contentWindow;
+    if (!win) {
+      cleanup();
+      return;
+    }
+    try {
+      iframe.style.visibility = 'visible';
+      iframe.style.left = '0';
+      win.focus();
+      win.addEventListener('afterprint', cleanup, { once: true });
+      // PDF embutido: alguns Chromium precisam de um tick
+      window.setTimeout(() => {
+        try {
+          win.print();
+        } catch {
+          cleanup();
+        }
+      }, 250);
+    } catch {
+      cleanup();
+    }
+    window.setTimeout(cleanup, 180_000);
+  };
+
+  iframe.src = url;
+}
+
+/** Mantido para compat — o fluxo real usa PDF. */
 export function buildFichasHtml(
   tickets: FichaTicket[],
   tenantName?: string,
@@ -240,16 +246,15 @@ export function buildFichasHtml(
 ): string {
   const festival = (tenantName || 'FESTIVAL').trim().toUpperCase();
   const when = formatDataHora(printedAt);
-  // fallback textual mínimo
-  const pages = tickets
-    .map((t, i) => {
-      const isLast = i === tickets.length - 1;
-      return `<section class="page${isLast ? ' last' : ''}"><div>${escapeHtml(festival)} — ${escapeHtml(t.nome)} — ${escapeHtml(when)}</div></section>`;
-    })
-    .join('');
-  return `<!DOCTYPE html><html><body>${pages}</body></html>`;
+  return `<!DOCTYPE html><html><body><pre>${festival}\n${tickets
+    .map((t) => t.nome)
+    .join('\n')}\n${when}</pre></body></html>`;
 }
 
+/**
+ * Um job de impressão: PDF com 1 página 80×25 por ficha.
+ * Com papel 80×25 e “Cutting: After one page”, corta a cada ficha.
+ */
 export function printFichasViaIframe(
   tickets: FichaTicket[],
   tenantName?: string,
@@ -260,101 +265,20 @@ export function printFichasViaIframe(
 
   const festival = (tenantName || 'FESTIVAL').trim().toUpperCase();
   const when = formatDataHora(printedAt);
-  const h = FICHA_ALTURA_MM;
 
   void (async () => {
-    const pageImages: string[] = [];
+    const pagePngs: string[] = [];
     for (const ticket of tickets) {
       try {
-        pageImages.push(await renderFichaBitmap(ticket, festival, when));
+        pagePngs.push(await renderFichaBitmap(ticket, festival, when));
       } catch {
-        // fallback: ficha só com texto (ainda como bitmap)
-        pageImages.push(
-          await renderFichaBitmap(
-            { ...ticket, logo: null },
-            festival,
-            when
-          )
+        pagePngs.push(
+          await renderFichaBitmap({ ...ticket, logo: null }, festival, when)
         );
       }
     }
 
-    const html = buildBitmapPagesHtml(pageImages);
-
-    const iframe = document.createElement('iframe');
-    iframe.setAttribute('aria-hidden', 'true');
-    iframe.style.cssText = [
-      'position:fixed',
-      'left:-10000px',
-      'top:0',
-      `width:${FICHA_LARGURA_MM}mm`,
-      `height:${h}mm`,
-      'border:0',
-      'visibility:hidden',
-      'pointer-events:none',
-      'z-index:-1',
-    ].join(';');
-    document.body.appendChild(iframe);
-
-    const win = iframe.contentWindow;
-    const doc = iframe.contentDocument || win?.document;
-    if (!win || !doc) {
-      iframe.remove();
-      return;
-    }
-
-    doc.open();
-    doc.write(html);
-    doc.close();
-
-    let finished = false;
-    const cleanup = () => {
-      if (finished) return;
-      finished = true;
-      window.setTimeout(() => {
-        try {
-          iframe.remove();
-        } catch {
-          /* ignore */
-        }
-      }, 2000);
-    };
-
-    const trigger = async () => {
-      const imgs = Array.from(doc.images);
-      await Promise.all(
-        imgs.map(async (img) => {
-          try {
-            if (!img.complete || img.naturalWidth === 0) {
-              if (typeof img.decode === 'function') await img.decode();
-              else {
-                await new Promise<void>((r) => {
-                  img.onload = () => r();
-                  img.onerror = () => r();
-                });
-              }
-            }
-          } catch {
-            /* ignore */
-          }
-        })
-      );
-
-      try {
-        iframe.style.visibility = 'visible';
-        iframe.style.left = '0';
-        iframe.style.top = '0';
-        win.focus();
-        win.addEventListener('afterprint', cleanup, { once: true });
-        win.print();
-      } catch {
-        cleanup();
-      }
-      window.setTimeout(cleanup, 180_000);
-    };
-
-    window.setTimeout(() => {
-      void trigger();
-    }, 300);
+    const pdfBlob = await buildFichasPdf(pagePngs);
+    printPdfBlob(pdfBlob);
   })();
 }
