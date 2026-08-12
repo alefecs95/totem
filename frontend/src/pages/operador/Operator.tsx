@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createCardPayment, getConfig } from '../../services/api';
 import {
@@ -14,6 +14,17 @@ function formatPreco(preco: number): string {
   return `R$ ${preco.toFixed(2).replace('.', ',')}`;
 }
 
+/**
+ * Atalhos do PDV (teclado):
+ * 1–9  → adiciona produto na posição
+ * D    → dinheiro
+ * F    → cartão físico
+ * P    → Pix
+ * L    → cartão leitor
+ * Enter→ dinheiro (venda rápida)
+ * Esc / Del → limpar pedido
+ * Backspace → remove 1 unidade do último item
+ */
 export default function Operator() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -26,6 +37,7 @@ export default function Operator() {
   const [pendingSync, setPendingSync] = useState(0);
   const [pagando, setPagando] = useState<string | null>(null);
   const [erro, setErro] = useState('');
+  const [showHelp, setShowHelp] = useState(false);
 
   const items = useCartStore((s) => s.items);
   const addItem = useCartStore((s) => s.addItem);
@@ -36,9 +48,8 @@ export default function Operator() {
 
   const total = getTotal();
   const totalItems = getTotalItems();
-  const tenantId = localStorage.getItem('tenantId') ?? '';
 
-  const pagamentos = (() => {
+  const [pagamentos, setPagamentos] = useState(() => {
     try {
       const raw = localStorage.getItem('pagamentos');
       return raw
@@ -47,7 +58,92 @@ export default function Operator() {
     } catch {
       return { pix: true, cartao: true };
     }
-  })();
+  });
+
+  const flash = useCallback((msg: string) => {
+    setToast(msg);
+    setErro('');
+  }, []);
+
+  const finalizarManual = useCallback(
+    async (metodo: 'dinheiro' | 'cartao_fisico') => {
+      const state = useCartStore.getState();
+      if (state.items.length === 0 || pagando) return;
+      const tot = state.getTotal();
+      setPagando(metodo);
+      setErro('');
+      try {
+        const { queued } = await submitManualSale(state.items, tot, metodo);
+        state.clearCart();
+        flash(
+          queued
+            ? 'Offline — sincroniza em breve'
+            : metodo === 'dinheiro'
+              ? '✓ Dinheiro OK'
+              : '✓ Cartão físico OK'
+        );
+      } catch {
+        setErro('Não foi possível registrar a venda.');
+      } finally {
+        setPagando(null);
+      }
+    },
+    [flash, pagando]
+  );
+
+  const pagarPix = useCallback(() => {
+    const state = useCartStore.getState();
+    if (state.items.length === 0 || pagando) return;
+    navigate('/pix', {
+      state: {
+        items: [...state.items],
+        total: state.getTotal(),
+        returnTo: '/operador',
+      },
+    });
+  }, [navigate, pagando]);
+
+  const pagarCartaoGateway = useCallback(async () => {
+    const state = useCartStore.getState();
+    const tid = localStorage.getItem('tenantId') ?? '';
+    if (state.items.length === 0 || !tid || pagando) return;
+    setPagando('gateway');
+    setErro('');
+    try {
+      const payment = await createCardPayment(
+        state.items,
+        state.getTotal(),
+        tid
+      );
+      navigate('/card', {
+        state: {
+          items: [...state.items],
+          total: state.getTotal(),
+          intentId: payment.intentId,
+          transactionId: payment.transactionId,
+          returnTo: '/operador',
+        },
+      });
+    } catch (err: unknown) {
+      const data = (
+        err as { response?: { data?: { detalhe?: string } } }
+      )?.response?.data;
+      setErro(data?.detalhe ?? 'Falha no leitor. Tente de novo.');
+    } finally {
+      setPagando(null);
+    }
+  }, [navigate, pagando]);
+
+  const produtosRef = useRef(produtos);
+  produtosRef.current = produtos;
+  const pagamentosRef = useRef(pagamentos);
+  pagamentosRef.current = pagamentos;
+  const finalizarRef = useRef(finalizarManual);
+  finalizarRef.current = finalizarManual;
+  const pixRef = useRef(pagarPix);
+  pixRef.current = pagarPix;
+  const cartaoRef = useRef(pagarCartaoGateway);
+  cartaoRef.current = pagarCartaoGateway;
 
   useEffect(() => {
     if (!isOperadorLoggedIn()) {
@@ -62,6 +158,7 @@ export default function Operator() {
         setProdutos(cfg.produtos);
         if (cfg.pagamentos) {
           localStorage.setItem('pagamentos', JSON.stringify(cfg.pagamentos));
+          setPagamentos(cfg.pagamentos);
         }
       })
       .finally(() => setLoadingProdutos(false));
@@ -76,67 +173,70 @@ export default function Operator() {
 
   useEffect(() => {
     if (!toast) return;
-    const id = window.setTimeout(() => setToast(''), 2000);
+    const id = window.setTimeout(() => setToast(''), 1600);
     return () => window.clearTimeout(id);
   }, [toast]);
 
-  const flash = (msg: string) => {
-    setToast(msg);
-    setErro('');
-  };
+  // Atalhos de teclado — PDV
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-  const finalizarManual = async (metodo: 'dinheiro' | 'cartao_fisico') => {
-    if (items.length === 0) return;
-    setPagando(metodo);
-    setErro('');
-    try {
-      const { queued } = await submitManualSale(items, total, metodo);
-      clearCart();
-      flash(
-        queued
-          ? 'Venda salva offline — sincroniza em breve'
-          : metodo === 'dinheiro'
-            ? 'Dinheiro registrado!'
-            : 'Cartão físico registrado!'
-      );
-    } catch {
-      setErro('Não foi possível registrar a venda.');
-    } finally {
-      setPagando(null);
-    }
-  };
+      const key = e.key;
 
-  const pagarPix = () => {
-    if (items.length === 0) return;
-    navigate('/pix', {
-      state: { items: [...items], total, returnTo: '/operador' },
-    });
-  };
+      if (key >= '1' && key <= '9') {
+        const idx = Number(key) - 1;
+        const p = produtosRef.current[idx];
+        if (p) {
+          e.preventDefault();
+          useCartStore.getState().addItem(p);
+        }
+        return;
+      }
 
-  const pagarCartaoGateway = async () => {
-    if (items.length === 0 || !tenantId) return;
-    setPagando('gateway');
-    setErro('');
-    try {
-      const payment = await createCardPayment(items, total, tenantId);
-      navigate('/card', {
-        state: {
-          items: [...items],
-          total,
-          intentId: payment.intentId,
-          transactionId: payment.transactionId,
-          returnTo: '/operador',
-        },
-      });
-    } catch (err: unknown) {
-      const data = (
-        err as { response?: { data?: { detalhe?: string; error?: string } } }
-      )?.response?.data;
-      setErro(data?.detalhe ?? 'Falha ao enviar para maquininha. Tente de novo.');
-    } finally {
-      setPagando(null);
-    }
-  };
+      if (key === 'Escape' || key === 'Delete') {
+        e.preventDefault();
+        useCartStore.getState().clearCart();
+        setErro('');
+        return;
+      }
+
+      if (key === 'Backspace') {
+        const cart = useCartStore.getState().items;
+        if (cart.length > 0) {
+          e.preventDefault();
+          useCartStore.getState().removeItem(cart[cart.length - 1]!.id);
+        }
+        return;
+      }
+
+      const k = key.toLowerCase();
+      if (k === 'd' || key === 'Enter') {
+        e.preventDefault();
+        void finalizarRef.current('dinheiro');
+        return;
+      }
+      if (k === 'f') {
+        e.preventDefault();
+        void finalizarRef.current('cartao_fisico');
+        return;
+      }
+      if (k === 'p' && pagamentosRef.current.pix) {
+        e.preventDefault();
+        pixRef.current();
+        return;
+      }
+      if (k === 'l' && pagamentosRef.current.cartao) {
+        e.preventDefault();
+        void cartaoRef.current();
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const getQtd = (id: string) =>
     items.find((i) => i.id === id)?.quantidade ?? 0;
@@ -146,297 +246,243 @@ export default function Operator() {
     navigate('/operador/login');
   };
 
+  const busy = pagando !== null;
+  const canPay = items.length > 0 && !busy;
+
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        background: '#1c1917',
-      }}
-    >
-      <header
-        style={{
-          background: '#ea580c',
-          color: '#fff',
-          padding: '10px 16px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          flexWrap: 'wrap',
-        }}
-      >
-        <strong style={{ fontSize: 18 }}>MODO OPERADOR</strong>
-        <span style={{ flex: 1, opacity: 0.9, fontSize: 14 }}>{nomeFestival}</span>
+    <div style={shell}>
+      <style>{`
+        @media (max-width: 800px) {
+          .pdv-body {
+            grid-template-columns: 1fr !important;
+            grid-template-rows: 1fr auto;
+          }
+          .pdv-sidebar {
+            border-left: none !important;
+            border-top: 2px solid #ea580c;
+            max-height: 48vh;
+          }
+        }
+      `}</style>
+      <header style={header}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={pdvBadge}>PDV</span>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 15, lineHeight: 1.1 }}>
+              VENDA RÁPIDA
+            </div>
+            <div style={{ fontSize: 12, opacity: 0.9 }}>{nomeFestival}</div>
+          </div>
+        </div>
+
+        <div style={{ flex: 1 }} />
+
         {pendingSync > 0 && (
-          <span
-            style={{
-              background: '#fef3c7',
-              color: '#92400e',
-              padding: '4px 10px',
-              borderRadius: 999,
-              fontSize: 12,
-              fontWeight: 700,
-            }}
-          >
-            {pendingSync} pendente{pendingSync > 1 ? 's' : ''} sync
+          <span style={syncBadge}>
+            {pendingSync} sync
           </span>
         )}
+
+        <button type="button" onClick={() => setShowHelp((v) => !v)} style={hdrBtn}>
+          Atalhos
+        </button>
         <button
-          onClick={logout}
-          style={{
-            background: 'rgba(0,0,0,0.2)',
-            border: 'none',
-            color: '#fff',
-            padding: '6px 12px',
-            borderRadius: 6,
-            cursor: 'pointer',
-            fontWeight: 600,
+          type="button"
+          onClick={() => {
+            clearCart();
+            setErro('');
           }}
+          style={hdrBtn}
+          title="Esc"
         >
+          Limpar
+        </button>
+        <button type="button" onClick={logout} style={hdrBtn}>
           Sair
         </button>
       </header>
 
-      <main style={{ flex: 1, padding: 12, paddingBottom: 220, overflowY: 'auto' }}>
-        {loadingProdutos ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#a8a29e' }}>
-            Carregando produtos...
-          </div>
-        ) : (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-              gap: 10,
-            }}
-          >
-            {produtos.map((p) => {
-              const qtd = getQtd(p.id);
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => addItem(p)}
-                  style={{
-                    background: '#292524',
-                    border: `2px solid ${p.cor}`,
-                    borderRadius: 12,
-                    padding: 12,
-                    cursor: 'pointer',
-                    color: '#fff',
-                    textAlign: 'center',
-                    position: 'relative',
-                    minHeight: 120,
-                  }}
-                >
-                  {qtd > 0 && (
-                    <span
-                      style={{
-                        position: 'absolute',
-                        top: 6,
-                        right: 6,
-                        background: p.cor,
-                        borderRadius: 999,
-                        minWidth: 24,
-                        height: 24,
-                        lineHeight: '24px',
-                        fontWeight: 700,
-                        fontSize: 13,
-                      }}
-                    >
-                      {qtd}
-                    </span>
-                  )}
-                  <div style={{ fontSize: 36 }}>{p.emoji}</div>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4 }}>
-                    {p.nome}
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: "'Bebas Neue', sans-serif",
-                      fontSize: 22,
-                      color: p.cor,
-                    }}
-                  >
-                    {formatPreco(p.preco)}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </main>
-
-      <footer
-        style={{
-          position: 'fixed',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: '#0c0a09',
-          borderTop: '2px solid #ea580c',
-          padding: 12,
-        }}
-      >
-        {items.length > 0 && (
-          <div
-            style={{
-              display: 'flex',
-              gap: 8,
-              overflowX: 'auto',
-              marginBottom: 10,
-              paddingBottom: 4,
-            }}
-          >
-            {items.map((item) => (
-              <div
-                key={item.id}
-                style={{
-                  flexShrink: 0,
-                  background: '#292524',
-                  borderRadius: 8,
-                  padding: '8px 10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 14,
-                  color: '#fff',
-                }}
-              >
-                <span>{item.emoji}</span>
-                <span>{item.nome}</span>
-                <button
-                  type="button"
-                  onClick={() => removeItem(item.id)}
-                  style={qtyBtn}
-                >
-                  −
-                </button>
-                <strong>{item.quantidade}</strong>
-                <button
-                  type="button"
-                  onClick={() => addItem(item)}
-                  style={qtyBtn}
-                >
-                  +
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 10,
-          }}
-        >
-          <span style={{ color: '#a8a29e', fontSize: 14 }}>
-            {totalItems} {totalItems === 1 ? 'item' : 'itens'}
-          </span>
-          <span
-            style={{
-              fontFamily: "'Bebas Neue', sans-serif",
-              fontSize: 32,
-              color: '#ea580c',
-            }}
-          >
-            {formatPreco(total)}
-          </span>
-        </div>
-
-        {erro && (
-          <div
-            style={{
-              color: '#fca5a5',
-              fontSize: 13,
-              marginBottom: 8,
-              textAlign: 'center',
-            }}
-          >
-            {erro}
-          </div>
-        )}
-
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, 1fr)',
-            gap: 8,
-          }}
-        >
-          <PayBtn
-            label="DINHEIRO"
-            color="#16a34a"
-            disabled={items.length === 0 || pagando !== null}
-            loading={pagando === 'dinheiro'}
-            onClick={() => finalizarManual('dinheiro')}
-          />
-          <PayBtn
-            label="CARTÃO FÍSICO"
-            color="#2563eb"
-            disabled={items.length === 0 || pagando !== null}
-            loading={pagando === 'cartao_fisico'}
-            onClick={() => finalizarManual('cartao_fisico')}
-          />
-          {pagamentos.pix && (
-            <PayBtn
-              label="PIX"
-              color="#00C853"
-              disabled={items.length === 0 || pagando !== null}
-              onClick={pagarPix}
-            />
-          )}
-          {pagamentos.cartao && (
-            <PayBtn
-              label="CARTÃO LEITOR"
-              color="#448AFF"
-              disabled={items.length === 0 || pagando !== null}
-              loading={pagando === 'gateway'}
-              onClick={pagarCartaoGateway}
-            />
-          )}
-        </div>
-      </footer>
-
-      {toast && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 70,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: '#166534',
-            color: '#fff',
-            padding: '12px 24px',
-            borderRadius: 8,
-            fontWeight: 700,
-            zIndex: 200,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-          }}
-        >
-          {toast}
+      {showHelp && (
+        <div style={helpBar}>
+          <strong>Teclado:</strong>
+          <span>1–9 produto</span>
+          <span>D / Enter dinheiro</span>
+          <span>F cartão físico</span>
+          {pagamentos.pix && <span>P Pix</span>}
+          {pagamentos.cartao && <span>L leitor</span>}
+          <span>Esc limpar</span>
+          <span>⌫ −1 último</span>
         </div>
       )}
+
+      <div className="pdv-body" style={body}>
+        <main style={gridArea}>
+          {loadingProdutos ? (
+            <div style={{ color: '#a8a29e', padding: 40, textAlign: 'center' }}>
+              Carregando...
+            </div>
+          ) : produtos.length === 0 ? (
+            <div style={{ color: '#a8a29e', padding: 40, textAlign: 'center' }}>
+              Nenhum produto ativo. Cadastre no portal/admin.
+            </div>
+          ) : (
+            <div style={productGrid}>
+              {produtos.map((p, idx) => {
+                const qtd = getQtd(p.id);
+                const atalho = idx < 9 ? String(idx + 1) : null;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => addItem(p)}
+                    style={{
+                      ...productBtn,
+                      borderColor: p.cor,
+                      background:
+                        qtd > 0 ? `${p.cor}22` : '#1c1917',
+                    }}
+                  >
+                    {atalho && <span style={keyBadge}>{atalho}</span>}
+                    {qtd > 0 && (
+                      <span style={{ ...qtyBadge, background: p.cor }}>{qtd}</span>
+                    )}
+                    <div style={{ fontSize: 42, lineHeight: 1 }}>{p.emoji}</div>
+                    <div style={productName}>{p.nome}</div>
+                    <div style={{ ...productPrice, color: p.cor }}>
+                      {formatPreco(p.preco)}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </main>
+
+        <aside className="pdv-sidebar" style={sidebar}>
+          <div style={sideTitle}>Pedido atual</div>
+
+          <div style={cartList}>
+            {items.length === 0 ? (
+              <div style={emptyCart}>
+                Toque num produto ou use teclas <strong>1–9</strong>
+              </div>
+            ) : (
+              items.map((item) => (
+                <div key={item.id} style={cartRow}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>
+                      {item.emoji} {item.nome}
+                    </div>
+                    <div style={{ color: '#a8a29e', fontSize: 12 }}>
+                      {formatPreco(item.preco)} · un.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeItem(item.id)}
+                    style={qtyBtn}
+                  >
+                    −
+                  </button>
+                  <strong style={{ width: 28, textAlign: 'center' }}>
+                    {item.quantidade}
+                  </strong>
+                  <button
+                    type="button"
+                    onClick={() => addItem(item)}
+                    style={qtyBtn}
+                  >
+                    +
+                  </button>
+                  <div
+                    style={{
+                      width: 72,
+                      textAlign: 'right',
+                      fontWeight: 800,
+                      color: '#ea580c',
+                      fontSize: 14,
+                    }}
+                  >
+                    {formatPreco(item.preco * item.quantidade)}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div style={totalBlock}>
+            <div>
+              <div style={{ color: '#a8a29e', fontSize: 13 }}>
+                {totalItems} {totalItems === 1 ? 'item' : 'itens'}
+              </div>
+              <div style={totalValue}>{formatPreco(total)}</div>
+            </div>
+          </div>
+
+          {erro && <div style={erroBox}>{erro}</div>}
+
+          <div style={payGrid}>
+            <PayBtn
+              label="DINHEIRO"
+              hint="D / Enter"
+              color="#16a34a"
+              disabled={!canPay}
+              loading={pagando === 'dinheiro'}
+              onClick={() => finalizarManual('dinheiro')}
+              primary
+            />
+            <PayBtn
+              label="CARTÃO FÍSICO"
+              hint="F"
+              color="#2563eb"
+              disabled={!canPay}
+              loading={pagando === 'cartao_fisico'}
+              onClick={() => finalizarManual('cartao_fisico')}
+            />
+            {pagamentos.pix && (
+              <PayBtn
+                label="PIX"
+                hint="P"
+                color="#059669"
+                disabled={!canPay}
+                onClick={pagarPix}
+              />
+            )}
+            {pagamentos.cartao && (
+              <PayBtn
+                label="LEITOR"
+                hint="L"
+                color="#1d4ed8"
+                disabled={!canPay}
+                loading={pagando === 'gateway'}
+                onClick={pagarCartaoGateway}
+              />
+            )}
+          </div>
+        </aside>
+      </div>
+
+      {toast && <div style={toastStyle}>{toast}</div>}
     </div>
   );
 }
 
 function PayBtn({
   label,
+  hint,
   color,
   disabled,
   loading,
   onClick,
+  primary,
 }: {
   label: string;
+  hint: string;
   color: string;
   disabled?: boolean;
   loading?: boolean;
   onClick: () => void;
+  primary?: boolean;
 }) {
   return (
     <button
@@ -444,30 +490,265 @@ function PayBtn({
       onClick={onClick}
       disabled={disabled || loading}
       style={{
-        padding: '14px 8px',
-        borderRadius: 8,
+        padding: primary ? '18px 12px' : '14px 10px',
+        borderRadius: 10,
         border: 'none',
         background: color,
         color: '#fff',
         fontWeight: 800,
-        fontSize: 14,
+        fontSize: primary ? 17 : 14,
         cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.4 : 1,
+        opacity: disabled ? 0.35 : 1,
+        gridColumn: primary ? '1 / -1' : undefined,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 2,
       }}
     >
-      {loading ? '...' : label}
+      <span>{loading ? '...' : label}</span>
+      <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.85 }}>{hint}</span>
     </button>
   );
 }
 
-const qtyBtn: React.CSSProperties = {
-  width: 28,
-  height: 28,
+const shell: React.CSSProperties = {
+  minHeight: '100vh',
+  height: '100vh',
+  display: 'flex',
+  flexDirection: 'column',
+  background: '#0c0a09',
+  color: '#fff',
+  overflow: 'hidden',
+};
+
+const header: React.CSSProperties = {
+  background: 'linear-gradient(90deg, #c2410c, #ea580c)',
+  padding: '10px 14px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  flexShrink: 0,
+};
+
+const pdvBadge: React.CSSProperties = {
+  background: '#fff',
+  color: '#c2410c',
+  fontWeight: 900,
+  fontSize: 13,
+  padding: '6px 10px',
   borderRadius: 6,
+  letterSpacing: 1,
+};
+
+const hdrBtn: React.CSSProperties = {
+  background: 'rgba(0,0,0,0.25)',
+  border: 'none',
+  color: '#fff',
+  padding: '8px 12px',
+  borderRadius: 6,
+  cursor: 'pointer',
+  fontWeight: 700,
+  fontSize: 13,
+};
+
+const syncBadge: React.CSSProperties = {
+  background: '#fef3c7',
+  color: '#92400e',
+  padding: '4px 10px',
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const helpBar: React.CSSProperties = {
+  background: '#1c1917',
+  borderBottom: '1px solid #44403c',
+  padding: '8px 14px',
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: '8px 16px',
+  fontSize: 12,
+  color: '#d6d3d1',
+  flexShrink: 0,
+};
+
+const body: React.CSSProperties = {
+  flex: 1,
+  display: 'grid',
+  gridTemplateColumns: '1fr minmax(300px, 380px)',
+  minHeight: 0,
+};
+
+const gridArea: React.CSSProperties = {
+  padding: 12,
+  overflowY: 'auto',
+  minHeight: 0,
+};
+
+const productGrid: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+  gap: 10,
+  alignContent: 'start',
+};
+
+const productBtn: React.CSSProperties = {
+  position: 'relative',
+  border: '3px solid',
+  borderRadius: 14,
+  padding: '16px 10px 12px',
+  cursor: 'pointer',
+  color: '#fff',
+  textAlign: 'center',
+  minHeight: 140,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 6,
+  WebkitTapHighlightColor: 'transparent',
+};
+
+const keyBadge: React.CSSProperties = {
+  position: 'absolute',
+  top: 8,
+  left: 8,
+  background: '#44403c',
+  color: '#fafaf9',
+  width: 24,
+  height: 24,
+  borderRadius: 6,
+  fontSize: 13,
+  fontWeight: 800,
+  lineHeight: '24px',
+};
+
+const qtyBadge: React.CSSProperties = {
+  position: 'absolute',
+  top: 8,
+  right: 8,
+  borderRadius: 999,
+  minWidth: 28,
+  height: 28,
+  lineHeight: '28px',
+  fontWeight: 800,
+  fontSize: 14,
+  color: '#fff',
+  padding: '0 6px',
+};
+
+const productName: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 700,
+  lineHeight: 1.2,
+};
+
+const productPrice: React.CSSProperties = {
+  fontFamily: "'Bebas Neue', sans-serif",
+  fontSize: 26,
+  lineHeight: 1,
+};
+
+const sidebar: React.CSSProperties = {
+  background: '#1c1917',
+  borderLeft: '2px solid #ea580c',
+  display: 'flex',
+  flexDirection: 'column',
+  minHeight: 0,
+  padding: 12,
+};
+
+const sideTitle: React.CSSProperties = {
+  fontWeight: 800,
+  fontSize: 13,
+  letterSpacing: 1,
+  color: '#a8a29e',
+  textTransform: 'uppercase',
+  marginBottom: 8,
+};
+
+const cartList: React.CSSProperties = {
+  flex: 1,
+  overflowY: 'auto',
+  minHeight: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+};
+
+const emptyCart: React.CSSProperties = {
+  color: '#78716c',
+  fontSize: 14,
+  textAlign: 'center',
+  padding: '32px 12px',
+  lineHeight: 1.5,
+};
+
+const cartRow: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  background: '#292524',
+  borderRadius: 10,
+  padding: '10px 8px',
+};
+
+const totalBlock: React.CSSProperties = {
+  borderTop: '1px solid #44403c',
+  paddingTop: 12,
+  marginTop: 10,
+  marginBottom: 10,
+};
+
+const totalValue: React.CSSProperties = {
+  fontFamily: "'Bebas Neue', sans-serif",
+  fontSize: 44,
+  color: '#ea580c',
+  lineHeight: 1,
+};
+
+const erroBox: React.CSSProperties = {
+  color: '#fecaca',
+  background: '#7f1d1d',
+  fontSize: 13,
+  padding: '8px 10px',
+  borderRadius: 8,
+  marginBottom: 8,
+  textAlign: 'center',
+};
+
+const payGrid: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 1fr',
+  gap: 8,
+};
+
+const toastStyle: React.CSSProperties = {
+  position: 'fixed',
+  top: 64,
+  left: '50%',
+  transform: 'translateX(-50%)',
+  background: '#166534',
+  color: '#fff',
+  padding: '14px 28px',
+  borderRadius: 10,
+  fontWeight: 800,
+  fontSize: 18,
+  zIndex: 200,
+  boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+};
+
+const qtyBtn: React.CSSProperties = {
+  width: 36,
+  height: 36,
+  borderRadius: 8,
   border: '1px solid #57534e',
   background: '#44403c',
   color: '#fff',
   cursor: 'pointer',
-  fontSize: 16,
+  fontSize: 20,
   lineHeight: 1,
+  fontWeight: 700,
+  flexShrink: 0,
 };
