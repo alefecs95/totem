@@ -6,8 +6,29 @@ import { query } from '../config/database';
 import { env } from '../config/env';
 import { verifyPortal, type AuthRequest } from '../middleware/auth';
 import { productSchema, mapProductRow } from '../utils/products';
+import {
+  PaymentValidationError,
+  validatePaymentItems,
+} from '../utils/validatePaymentItems';
 
 const router = Router();
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+const manualSaleSchema = z.object({
+  clientTransactionId: z.string().uuid(),
+  items: z.array(
+    z.object({
+      productId: z.string().uuid(),
+      quantidade: z.number().int().positive(),
+    })
+  ).min(1),
+  total: z.number().positive(),
+  metodo: z.enum(['dinheiro', 'cartao_fisico']),
+  totemId: z.string().uuid().optional().nullable(),
+});
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -357,6 +378,100 @@ router.delete('/produtos/:id', verifyPortal, async (req: AuthRequest, res) => {
   } catch (err) {
     console.error('Erro ao desativar produto portal:', err);
     res.status(500).json({ error: 'delete_product_failed' });
+  }
+});
+
+// POST /api/portal/vendas/manual — venda em dinheiro/cartão físico (modo operador)
+router.post('/vendas/manual', verifyPortal, async (req: AuthRequest, res) => {
+  const parsed = manualSaleSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+    return;
+  }
+
+  const tenantId = req.portal!.tenantId;
+  const { clientTransactionId, items, total: clientTotal, metodo, totemId } =
+    parsed.data;
+
+  try {
+    const dup = await query<{ id: string }>(
+      `SELECT id FROM transactions
+       WHERE payment_id = $1 AND tenant_id = $2`,
+      [clientTransactionId, tenantId]
+    );
+    if (dup.rows[0]) {
+      res.json({
+        transactionId: dup.rows[0].id,
+        ok: true,
+        duplicate: true,
+      });
+      return;
+    }
+
+    let validated;
+    try {
+      validated = await validatePaymentItems(tenantId, items, clientTotal);
+    } catch (err) {
+      if (err instanceof PaymentValidationError) {
+        res.status(400).json({ error: err.code, message: err.message });
+        return;
+      }
+      throw err;
+    }
+
+    const { items: validatedItems, total } = validated;
+
+    const tenantResult = await query<{ comissao_pct: string }>(
+      'SELECT comissao_pct FROM tenants WHERE id = $1 AND ativo = true',
+      [tenantId]
+    );
+    if (!tenantResult.rows[0]) {
+      res.status(404).json({ error: 'tenant_not_found' });
+      return;
+    }
+
+    const comissaoPct = Number(tenantResult.rows[0].comissao_pct);
+    const comissaoValor = round2(total * (comissaoPct / 100));
+    const valorLiquido = round2(total - comissaoValor);
+
+    const itensJson = validatedItems.map((item) => ({
+      productId: item.productId,
+      nome: item.nome,
+      categoria: item.categoria,
+      quantidade: item.quantidade,
+      preco: item.preco,
+      subtotal: item.subtotal,
+    }));
+
+    const insert = await query<{ id: string }>(
+      `INSERT INTO transactions
+        (tenant_id, totem_id, payment_id, gateway, metodo, status,
+         valor_bruto, taxa_gateway_pct, taxa_gateway_valor,
+         comissao_pct, comissao_valor, valor_liquido, itens)
+       VALUES ($1, $2, $3, 'manual', $4, 'approved',
+         $5, 0, 0, $6, $7, $8, $9)
+       RETURNING id`,
+      [
+        tenantId,
+        totemId ?? null,
+        clientTransactionId,
+        metodo,
+        total,
+        comissaoPct,
+        comissaoValor,
+        valorLiquido,
+        JSON.stringify(itensJson),
+      ]
+    );
+
+    res.status(201).json({
+      transactionId: insert.rows[0].id,
+      ok: true,
+      duplicate: false,
+    });
+  } catch (err) {
+    console.error('Erro ao registrar venda manual:', err);
+    res.status(500).json({ error: 'manual_sale_failed' });
   }
 });
 

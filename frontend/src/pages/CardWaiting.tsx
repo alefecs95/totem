@@ -10,6 +10,7 @@ interface CardLocationState {
   total?: number;
   intentId?: string;
   transactionId?: string;
+  returnTo?: string;
 }
 
 const POLL_INTERVAL_MS = 3000;
@@ -31,6 +32,8 @@ export default function CardWaiting() {
   const total = state.total ?? getTotal();
   const intentId = state.intentId ?? '';
   const transactionId = state.transactionId ?? '';
+  const returnTo = state.returnTo;
+  const clearCart = useCartStore((s) => s.clearCart);
 
   const [estado, setEstado] = useState<Estado>('aguardando');
   const [secondsLeft, setSecondsLeft] = useState(TIMEOUT_SEC);
@@ -87,6 +90,14 @@ export default function CardWaiting() {
 
   useEffect(() => {
     if (estado === 'aprovado') {
+      if (returnTo === '/operador') {
+        clearCart();
+        navigate('/operador', {
+          replace: true,
+          state: { toast: 'Cartão aprovado!' },
+        });
+        return;
+      }
       navigate('/success', {
         state: {
           items,
@@ -98,7 +109,17 @@ export default function CardWaiting() {
         },
       });
     }
-  }, [estado, navigate, items, total, intentId, transactionId, mpPaymentId]);
+  }, [
+    estado,
+    navigate,
+    items,
+    total,
+    intentId,
+    transactionId,
+    mpPaymentId,
+    returnTo,
+    clearCart,
+  ]);
 
   if (!intentId) return null;
 

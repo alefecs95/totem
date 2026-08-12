@@ -8,6 +8,7 @@ type Estado = 'loading' | 'aguardando' | 'aprovado' | 'expirado' | 'erro';
 interface PixLocationState {
   items?: CartItem[];
   total?: number;
+  returnTo?: string;
 }
 
 const POLL_INTERVAL_MS = 3000;
@@ -33,6 +34,7 @@ export default function PixQRCode() {
 
   const items = state.items ?? storeItems;
   const total = state.total ?? getTotal();
+  const returnTo = state.returnTo;
 
   const [estado, setEstado] = useState<Estado>('loading');
   const [pixCode, setPixCode] = useState('');
@@ -107,11 +109,19 @@ export default function PixQRCode() {
   // Redireciona ao aprovar
   useEffect(() => {
     if (estado === 'aprovado') {
+      if (returnTo === '/operador') {
+        useCartStore.getState().clearCart();
+        navigate('/operador', {
+          replace: true,
+          state: { toast: 'Pix aprovado!' },
+        });
+        return;
+      }
       navigate('/success', {
         state: { items, total, metodo: 'pix', payment: { paymentId } },
       });
     }
-  }, [estado, navigate, items, total, paymentId]);
+  }, [estado, navigate, items, total, paymentId, returnTo]);
 
   useEffect(() => {
     return () => window.clearTimeout(copyTimeoutRef.current);

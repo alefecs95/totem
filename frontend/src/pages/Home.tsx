@@ -87,6 +87,23 @@ export default function Home() {
         <p style={{ color: 'var(--text-muted)', marginTop: 6, fontSize: 15 }}>
           Selecione seus produtos
         </p>
+        <button
+          type="button"
+          onClick={() => navigate('/operador/login')}
+          style={{
+            marginTop: 8,
+            background: 'transparent',
+            border: '1px solid rgba(234, 88, 12, 0.5)',
+            color: '#ea580c',
+            padding: '6px 14px',
+            borderRadius: 6,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          Modo Operador
+        </button>
       </header>
 
       <main style={{ padding: 16 }}>
