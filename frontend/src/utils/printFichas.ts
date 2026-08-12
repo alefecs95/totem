@@ -1,16 +1,13 @@
 ﻿import type { FichaTicket } from './fichas';
 import { readProductFichaLogos } from './fichas';
 
-/** Largura = 100% do rolo 80mm. SÃ³ a altura Ã© controlada pelo sistema. */
+/** Largura = 100% do rolo 80mm. Altura = 2,5 cm. */
 export const FICHA_LARGURA_MM = 80;
-export const FICHA_ALTURA_MM = 30;
+export const FICHA_ALTURA_MM = 25;
 
-/**
- * ResoluÃ§Ã£o proporcional (576Ã—200 para 80Ã—25mm â†’ 8 px/mm).
- * 80Ã—30mm â†’ 576Ã—240.
- */
+/** Resolucao proporcional: 8 px/mm → 576×200 para 80×25mm. */
 const PX_W = 576;
-const PX_H = 240;
+const PX_H = 200;
 
 function escapeHtml(value: string): string {
   return value
@@ -111,11 +108,11 @@ async function renderFichaBitmap(
       ticket.seqDia != null
         ? `#${String(ticket.seqDia).padStart(3, '0')}`
         : '';
-    ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
+    ctx.font = 'bold 14px Arial, Helvetica, sans-serif';
     ctx.fillText(
       seq ? `BARMAN  ${seq}` : 'BARMAN',
       PX_W / 2,
-      16,
+      14,
       PX_W - 24
     );
 
@@ -123,40 +120,40 @@ async function renderFichaBitmap(
     ctx.lineWidth = 2;
     ctx.setLineDash([8, 6]);
     ctx.beginPath();
-    ctx.moveTo(16, 30);
-    ctx.lineTo(PX_W - 16, 30);
+    ctx.moveTo(16, 26);
+    ctx.lineTo(PX_W - 16, 26);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    ctx.font = 'bold 24px Arial, Helvetica, sans-serif';
-    ctx.fillText(nome.slice(0, 26), PX_W / 2, 52, PX_W - 24);
+    ctx.font = 'bold 20px Arial, Helvetica, sans-serif';
+    ctx.fillText(nome.slice(0, 26), PX_W / 2, 44, PX_W - 24);
 
     const codigo = (ticket.codigo || 'B----').toUpperCase();
     const x = 28;
-    const y = 68;
+    const y = 56;
     const w = PX_W - 56;
-    const h = 132;
+    const h = 110;
     ctx.fillStyle = '#000000';
     ctx.fillRect(x, y, w, h);
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(x + 6, y + 6, w - 12, h - 12);
+    ctx.fillRect(x + 5, y + 5, w - 10, h - 10);
     ctx.fillStyle = '#000000';
-    ctx.fillRect(x + 14, y + 14, w - 28, h - 28);
+    ctx.fillRect(x + 12, y + 12, w - 24, h - 24);
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
-    ctx.fillText('CODIGO', PX_W / 2, y + 32);
-    ctx.font = 'bold 48px Arial, Helvetica, sans-serif';
-    ctx.fillText(codigo, PX_W / 2, y + h / 2 + 10, w - 48);
+    ctx.font = 'bold 11px Arial, Helvetica, sans-serif';
+    ctx.fillText('CODIGO', PX_W / 2, y + 26);
+    ctx.font = 'bold 40px Arial, Helvetica, sans-serif';
+    ctx.fillText(codigo, PX_W / 2, y + h / 2 + 8, w - 40);
     ctx.fillStyle = '#000000';
 
-    ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
-    ctx.fillText(when, PX_W / 2, PX_H - 14, PX_W - 24);
+    ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
+    ctx.fillText(when, PX_W / 2, PX_H - 12, PX_W - 24);
   } else if (via === 'cliente') {
-    ctx.font = 'bold 14px Arial, Helvetica, sans-serif';
+    ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
     ctx.fillText(
       `CLIENTE - ${(festival || '').slice(0, 28).toUpperCase()}`,
       PX_W / 2,
-      16,
+      14,
       PX_W - 24
     );
 
@@ -164,41 +161,41 @@ async function renderFichaBitmap(
     ctx.lineWidth = 2;
     ctx.setLineDash([8, 6]);
     ctx.beginPath();
-    ctx.moveTo(16, 30);
-    ctx.lineTo(PX_W - 16, 30);
+    ctx.moveTo(16, 26);
+    ctx.lineTo(PX_W - 16, 26);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    ctx.font = 'bold 22px Arial, Helvetica, sans-serif';
-    ctx.fillText(nome.slice(0, 26), PX_W / 2, 52, PX_W - 24);
+    ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
+    ctx.fillText(nome.slice(0, 26), PX_W / 2, 44, PX_W - 24);
 
     const codigo = (ticket.codigo || 'B----').toUpperCase();
     const x = 28;
-    const y = 68;
+    const y = 56;
     const w = PX_W - 56;
-    const h = 132;
+    const h = 110;
     ctx.fillStyle = '#000000';
     ctx.fillRect(x, y, w, h);
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(x + 6, y + 6, w - 12, h - 12);
+    ctx.fillRect(x + 5, y + 5, w - 10, h - 10);
     ctx.fillStyle = '#000000';
-    ctx.fillRect(x + 14, y + 14, w - 28, h - 28);
+    ctx.fillRect(x + 12, y + 12, w - 24, h - 24);
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
-    ctx.fillText('CODIGO', PX_W / 2, y + 32);
-    ctx.font = 'bold 48px Arial, Helvetica, sans-serif';
-    ctx.fillText(codigo, PX_W / 2, y + h / 2 + 10, w - 48);
+    ctx.font = 'bold 11px Arial, Helvetica, sans-serif';
+    ctx.fillText('CODIGO', PX_W / 2, y + 26);
+    ctx.font = 'bold 40px Arial, Helvetica, sans-serif';
+    ctx.fillText(codigo, PX_W / 2, y + h / 2 + 8, w - 40);
     ctx.fillStyle = '#000000';
 
-    ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
-    ctx.fillText(when, PX_W / 2, PX_H - 14, PX_W - 24);
+    ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
+    ctx.fillText(when, PX_W / 2, PX_H - 12, PX_W - 24);
   } else {
-    const headerH = 28;
-    const footerH = 28;
+    const headerH = 24;
+    const footerH = 24;
     const midY = headerH;
     const midH = PX_H - headerH - footerH;
 
-    ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
+    ctx.font = 'bold 15px Arial, Helvetica, sans-serif';
     ctx.fillText(festival.slice(0, 42), PX_W / 2, headerH / 2, PX_W - padX * 2);
 
     const logoSrc = resolveLogo(ticket);
@@ -215,17 +212,17 @@ async function renderFichaBitmap(
 
     if (!drewLogo) {
       ctx.fillStyle = '#000000';
-      const barPad = 8;
+      const barPad = 6;
       ctx.fillRect(padX, midY + barPad, PX_W - padX * 2, midH - barPad * 2);
       ctx.fillStyle = '#ffffff';
       const len = nome.length;
-      const fontSize = len <= 10 ? 36 : len <= 16 ? 28 : len <= 22 ? 22 : 18;
+      const fontSize = len <= 10 ? 30 : len <= 16 ? 24 : len <= 22 ? 18 : 16;
       ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
       ctx.fillText(nome, PX_W / 2, midY + midH / 2, PX_W - padX * 4);
       ctx.fillStyle = '#000000';
     }
 
-    ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
+    ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
     ctx.fillStyle = '#000000';
     ctx.fillText(when, PX_W / 2, PX_H - footerH / 2, PX_W - padX * 2);
   }
@@ -235,7 +232,7 @@ async function renderFichaBitmap(
 }
 
 /**
- * HTML de UMA ficha = UMA pÃ¡gina 80Ã—35 (modo corte com kiosk silencioso).
+ * HTML de UMA ficha = UMA pagina 80×25mm (2,5 cm).
  */
 function buildSingleFichaHtml(pngDataUrl: string): string {
   const w = FICHA_LARGURA_MM;

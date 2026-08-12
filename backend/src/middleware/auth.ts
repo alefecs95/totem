@@ -12,7 +12,7 @@ export interface PortalPayload {
   tenantId: string;
   email: string;
   nome: string;
-  role: 'portal';
+  role: 'portal' | 'operador';
 }
 
 type JwtPayload = AdminPayload | PortalPayload | (Record<string, unknown> & { role?: string });
@@ -41,7 +41,7 @@ export function verifyAdmin(
 
   try {
     const payload = jwt.verify(token, env.jwt.secret) as JwtPayload;
-    if (payload.role === 'portal') {
+    if (payload.role === 'portal' || payload.role === 'operador') {
       res.status(401).json({ error: 'invalid_token' });
       return;
     }
@@ -67,7 +67,10 @@ export function verifyPortal(
 
   try {
     const payload = jwt.verify(token, env.jwt.secret) as JwtPayload;
-    if (payload.role !== 'portal' || !('tenantId' in payload)) {
+    if (
+      (payload.role !== 'portal' && payload.role !== 'operador') ||
+      !('tenantId' in payload)
+    ) {
       res.status(401).json({ error: 'invalid_token' });
       return;
     }
@@ -76,7 +79,7 @@ export function verifyPortal(
       tenantId: portal.tenantId,
       email: portal.email,
       nome: portal.nome,
-      role: 'portal',
+      role: payload.role === 'operador' ? 'operador' : 'portal',
     };
     next();
   } catch {

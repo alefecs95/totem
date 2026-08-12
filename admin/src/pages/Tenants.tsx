@@ -7,6 +7,7 @@ import {
   getTenantTerminals,
   getTenants,
   pairTenantSumUpReader,
+  resetTenantSenha,
   setTerminalPdv,
   syncTenantMp,
   updateTenant,
@@ -49,6 +50,7 @@ const emptyForm: TenantInput = {
   latitude: undefined,
   longitude: undefined,
   portal_senha: '',
+  operador_senha: '',
 };
 
 function mensagemMpStore(motivo?: string): string {
@@ -92,6 +94,7 @@ export default function Tenants() {
   const [pareando, setPareando] = useState(false);
   const [totensTenant, setTotensTenant] = useState<Tenant | null>(null);
   const [produtosTenant, setProdutosTenant] = useState<Tenant | null>(null);
+  const [resetandoSenha, setResetandoSenha] = useState<string | null>(null);
 
   const carregar = () => {
     setLoading(true);
@@ -357,8 +360,42 @@ export default function Tenants() {
       latitude: t.latitude != null ? Number(t.latitude) : undefined,
       longitude: t.longitude != null ? Number(t.longitude) : undefined,
       portal_senha: '',
+      operador_senha: '',
     });
     setModalOpen(true);
+  };
+
+  const resetarSenha = async (
+    t: Tenant,
+    tipo: 'portal' | 'operador'
+  ) => {
+    const label =
+      tipo === 'portal' ? 'adm do evento (portal)' : 'operador web';
+    const custom = window.prompt(
+      `Nova senha do ${label} para "${t.nome}".\n\nDigite a senha (mín. 4) ou deixe em branco para GERAR automaticamente:`
+    );
+    if (custom === null) return;
+    const senha = custom.trim();
+    if (senha && senha.length < 4) {
+      window.alert('Senha muito curta (mínimo 4 caracteres).');
+      return;
+    }
+    setResetandoSenha(`${t.id}-${tipo}`);
+    try {
+      const result = await resetTenantSenha(
+        t.id,
+        tipo,
+        senha || undefined
+      );
+      carregar();
+      window.alert(
+        `Senha do ${label} redefinida.\n\nSenha: ${result.senha}\n\nAnote e envie ao responsável. Ela não será mostrada de novo.`
+      );
+    } catch {
+      window.alert('Falha ao resetar senha. Tente novamente.');
+    } finally {
+      setResetandoSenha(null);
+    }
   };
 
   const salvar = async (e: FormEvent) => {
@@ -369,6 +406,9 @@ export default function Tenants() {
       const payload: TenantInput = { ...form };
       if (!payload.portal_senha?.trim()) {
         delete payload.portal_senha;
+      }
+      if (!payload.operador_senha?.trim()) {
+        delete payload.operador_senha;
       }
       if (!editingId && !payload.portal_senha) {
         setAviso('Defina a senha do portal (mínimo 4 caracteres) para o organizador.');
@@ -538,6 +578,32 @@ export default function Tenants() {
                     {t.ativo && (
                       <button
                         type="button"
+                        onClick={() => void resetarSenha(t, 'portal')}
+                        className="btn-link"
+                        disabled={resetandoSenha === `${t.id}-portal`}
+                        title="Resetar senha do portal (adm do evento)"
+                      >
+                        {resetandoSenha === `${t.id}-portal`
+                          ? '...'
+                          : 'Senha portal'}
+                      </button>
+                    )}
+                    {t.ativo && (
+                      <button
+                        type="button"
+                        onClick={() => void resetarSenha(t, 'operador')}
+                        className="btn-link"
+                        disabled={resetandoSenha === `${t.id}-operador`}
+                        title="Resetar senha do modo operador"
+                      >
+                        {resetandoSenha === `${t.id}-operador`
+                          ? '...'
+                          : 'Senha operador'}
+                      </button>
+                    )}
+                    {t.ativo && (
+                      <button
+                        type="button"
                         onClick={() => desativar(t)}
                         className="btn-danger-text"
                       >
@@ -642,7 +708,7 @@ export default function Tenants() {
               </Field>
             </div>
 
-            <Field label="Senha do portal (dono do totem)">
+            <Field label="Senha do portal (adm do evento)">
               <input
                 style={input}
                 type="password"
@@ -650,15 +716,35 @@ export default function Tenants() {
                 onChange={(e) => setField('portal_senha', e.target.value)}
                 placeholder={
                   editingId
-                    ? 'Digite uma NOVA senha para redefinir (mín. 4)'
-                    : 'Mínimo 4 caracteres — usada no portal / modo operador'
+                    ? 'Nova senha do portal (opcional ao salvar)'
+                    : 'Mínimo 4 caracteres — login do portal'
                 }
                 minLength={4}
                 autoComplete="new-password"
               />
               <span style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                Isso NÃO é o login do admin. O Modo Operador usa este e-mail + esta
-                senha. Ao editar, preencha aqui para redefinir e clique em Salvar.
+                Acesso ao painel do organizador (totem-portal). Para resetar sem
+                editar tudo, use o botão <strong>Senha portal</strong> na lista.
+              </span>
+            </Field>
+
+            <Field label="Senha do operador (modo operador web)">
+              <input
+                style={input}
+                type="password"
+                value={form.operador_senha ?? ''}
+                onChange={(e) => setField('operador_senha', e.target.value)}
+                placeholder={
+                  editingId
+                    ? 'Nova senha do operador (opcional ao salvar)'
+                    : 'Opcional — se vazio, usa a mesma do portal'
+                }
+                minLength={4}
+                autoComplete="new-password"
+              />
+              <span style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                Login em /operador no PWA. Pode ser diferente da senha do portal.
+                Use <strong>Senha operador</strong> na lista para resetar.
               </span>
             </Field>
 

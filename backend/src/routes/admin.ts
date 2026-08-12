@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
@@ -175,6 +176,10 @@ const tenantSchema = z.object({
   latitude: z.number().optional().nullable(),
   longitude: z.number().optional().nullable(),
   portal_senha: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : v),
+    z.string().min(4).optional()
+  ),
+  operador_senha: z.preprocess(
     (v) => (v === '' || v === null || v === undefined ? undefined : v),
     z.string().min(4).optional()
   ),
@@ -645,10 +650,14 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
   }
 
   const t = parsed.data;
-  const { portal_senha, codigo_evento, ...tenantFields } = t;
+  const { portal_senha, operador_senha, codigo_evento, ...tenantFields } = t;
   const portalSenhaHash = portal_senha
     ? bcrypt.hashSync(portal_senha, 10)
     : null;
+  // Se nao informar senha de operador, reutiliza a do portal no cadastro.
+  const operadorSenhaHash = operador_senha
+    ? bcrypt.hashSync(operador_senha, 10)
+    : portalSenhaHash;
   const codigo =
     (codigo_evento && normalizeEventCode(codigo_evento)) ||
     generateEventCode(tenantFields.nome);
@@ -663,9 +672,9 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
          sumup_surcharge_enabled, sumup_debit_surcharge_percent,
          sumup_credit_surcharge_percent,
          endereco, numero, bairro, cidade, estado, latitude, longitude,
-         portal_senha_hash, codigo_evento)
+         portal_senha_hash, operador_senha_hash, codigo_evento)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-         $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+         $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
        RETURNING *`,
       [
         tenantFields.nome,
@@ -694,6 +703,7 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
         tenantFields.latitude ?? null,
         tenantFields.longitude ?? null,
         portalSenhaHash,
+        operadorSenhaHash,
         codigo,
       ]
     );
@@ -728,7 +738,7 @@ router.put('/tenants/:id', verifyAdmin, async (req, res) => {
   }
 
   const fields = parsed.data;
-  const { portal_senha, codigo_evento, ...rest } = fields;
+  const { portal_senha, operador_senha, codigo_evento, ...rest } = fields;
   const tenantFields: Record<string, unknown> = { ...rest };
   if (codigo_evento !== undefined) {
     const normalized = normalizeEventCode(codigo_evento);
@@ -740,6 +750,10 @@ router.put('/tenants/:id', verifyAdmin, async (req, res) => {
   if (portal_senha) {
     keys.push('portal_senha_hash');
     values.push(bcrypt.hashSync(portal_senha, 10));
+  }
+  if (operador_senha) {
+    keys.push('operador_senha_hash');
+    values.push(bcrypt.hashSync(operador_senha, 10));
   }
 
   if (keys.length === 0) {
@@ -772,6 +786,64 @@ router.put('/tenants/:id', verifyAdmin, async (req, res) => {
   } catch (err) {
     console.error('Erro ao atualizar tenant:', err);
     res.status(500).json({ error: 'update_tenant_failed' });
+  }
+});
+
+function generateTenantPassword(length = 10): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const bytes = randomBytes(length);
+  let out = '';
+  for (let i = 0; i < length; i += 1) {
+    out += alphabet[bytes[i]! % alphabet.length];
+  }
+  return out;
+}
+
+const resetSenhaSchema = z.object({
+  tipo: z.enum(['portal', 'operador']),
+  senha: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : v),
+    z.string().min(4).optional()
+  ),
+});
+
+// POST /api/admin/tenants/:id/reset-senha
+// Redefine senha do portal (adm do evento) ou do operador web.
+router.post('/tenants/:id/reset-senha', verifyAdmin, async (req, res) => {
+  const parsed = resetSenhaSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+    return;
+  }
+
+  const generated = !parsed.data.senha;
+  const senha = parsed.data.senha || generateTenantPassword(10);
+  const column =
+    parsed.data.tipo === 'operador' ? 'operador_senha_hash' : 'portal_senha_hash';
+  const hash = bcrypt.hashSync(senha, 10);
+
+  try {
+    const result = await query(
+      `UPDATE tenants
+       SET ${column} = $1, atualizado_em = NOW()
+       WHERE id = $2
+       RETURNING id`,
+      [hash, req.params.id]
+    );
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'tenant_not_found' });
+      return;
+    }
+    res.json({
+      ok: true,
+      tipo: parsed.data.tipo,
+      gerada: generated,
+      // Sempre devolve a senha para o super admin copiar/enviar.
+      senha,
+    });
+  } catch (err) {
+    console.error('Erro ao resetar senha do tenant:', err);
+    res.status(500).json({ error: 'reset_senha_failed' });
   }
 });
 

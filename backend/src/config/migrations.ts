@@ -58,6 +58,10 @@ ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sumup_surcharge_valor NUMERIC(
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sumup_charged_amount NUMERIC(10,2);
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sumup_card_type VARCHAR(10);
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS portal_senha_hash TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS operador_senha_hash TEXT;
+UPDATE tenants
+  SET operador_senha_hash = portal_senha_hash
+  WHERE operador_senha_hash IS NULL AND portal_senha_hash IS NOT NULL;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS ficha_logo_data TEXT;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS categoria VARCHAR(50) NOT NULL DEFAULT 'outro';
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS imprime_ficha BOOLEAN NOT NULL DEFAULT false;

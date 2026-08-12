@@ -225,7 +225,7 @@ export default function Products() {
               })
             }
           />
-          Imprime ficha (1 unidade = 1 pagina na termica 80mm)
+          Imprime ficha (1 unidade = 1 pagina na termica 80×25mm)
         </label>
 
         {form.imprime_ficha && (

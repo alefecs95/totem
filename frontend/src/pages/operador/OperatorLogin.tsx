@@ -27,7 +27,7 @@ export default function OperatorLogin() {
         );
       } else if (status === 401 || code === 'invalid_credentials') {
         setErro(
-          'E-mail ou senha inválidos. Use a senha do portal do organizador (não a do admin).'
+          'E-mail ou senha inválidos. Use a senha do operador definida no admin (não a do super admin).'
         );
       } else {
         setErro('Não foi possível entrar. Verifique a conexão e tente novamente.');
@@ -65,7 +65,7 @@ export default function OperatorLogin() {
           Modo Operador
         </h1>
         <p style={{ margin: 0, color: '#78716c', fontSize: 14 }}>
-          Login do organizador para venda rápida na fila.
+          Use o e-mail do evento e a senha do operador (definida no super admin).
         </p>
 
         <label style={labelStyle}>

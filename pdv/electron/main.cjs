@@ -72,7 +72,7 @@ ipcMain.handle('is-fullscreen', () => {
 
 /**
  * Imprime cada PNG (data URL) em silencio — 1 pagina = 1 corte no POS
- * com "Cutting: After one page" e papel 80x30.
+ * com "Cutting: After one page" e papel 80x25 (2,5 cm).
  */
 ipcMain.handle('print-fichas-silent', async (_event, payload) => {
   const pages = Array.isArray(payload?.pages) ? payload.pages : [];
@@ -95,15 +95,15 @@ function printOneBitmap(dataUrl, deviceName) {
     const win = new BrowserWindow({
       show: false,
       width: 320,
-      height: 160,
+      height: 140,
       webPreferences: { sandbox: true },
     });
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <style>
-  @page { size: 80mm 30mm; margin: 0; }
-  html, body { margin: 0; padding: 0; width: 80mm; height: 30mm; }
-  img { display: block; width: 80mm; height: 30mm; object-fit: fill; }
+  @page { size: 80mm 25mm; margin: 0; }
+  html, body { margin: 0; padding: 0; width: 80mm; height: 25mm; }
+  img { display: block; width: 80mm; height: 25mm; object-fit: fill; }
 </style></head><body>
 <img src="${dataUrl}" />
 </body></html>`;
@@ -127,7 +127,7 @@ function printOneBitmap(dataUrl, deviceName) {
             margins: { marginType: 'none' },
             pageSize: {
               width: 80 * 1000,
-              height: 30 * 1000,
+              height: 25 * 1000,
             },
           },
           () => done()

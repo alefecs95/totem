@@ -1,9 +1,9 @@
-/** Bitmap da ficha 80x30 mm para impressao silenciosa no Electron. */
+/** Bitmap da ficha 80x25 mm (2,5 cm) para impressao silenciosa no Electron. */
 
 export const FICHA_LARGURA_MM = 80;
-export const FICHA_ALTURA_MM = 30;
+export const FICHA_ALTURA_MM = 25;
 const PX_W = 576;
-const PX_H = 240; // 8 px/mm x 30mm
+const PX_H = 200; // 8 px/mm x 25mm
 
 export type FichaVia = 'unica' | 'barman' | 'cliente';
 
@@ -115,10 +115,10 @@ function drawNomeBar(
 ): void {
   const text = (nome || 'FICHA').toUpperCase();
   ctx.fillStyle = '#000';
-  ctx.fillRect(12, y + 8, PX_W - 24, h - 16);
+  ctx.fillRect(12, y + 6, PX_W - 24, h - 12);
   ctx.fillStyle = '#fff';
   const len = text.length;
-  const fontSize = len <= 10 ? 36 : len <= 16 ? 28 : 22;
+  const fontSize = len <= 10 ? 30 : len <= 16 ? 24 : 18;
   ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
   ctx.fillText(text, PX_W / 2, y + h / 2, PX_W - 48);
   ctx.fillStyle = '#000';
@@ -133,23 +133,19 @@ function drawCodigoBox(
 ): void {
   const x = 28;
   const w = PX_W - 56;
-  // moldura externa
   ctx.fillStyle = '#000';
   ctx.fillRect(x, y, w, h);
-  // faixa branca interna (contraste)
   ctx.fillStyle = '#fff';
-  ctx.fillRect(x + 6, y + 6, w - 12, h - 12);
-  // bloco preto do codigo
+  ctx.fillRect(x + 5, y + 5, w - 10, h - 10);
   ctx.fillStyle = '#000';
-  ctx.fillRect(x + 14, y + 14, w - 28, h - 28);
+  ctx.fillRect(x + 12, y + 12, w - 24, h - 24);
 
   ctx.fillStyle = '#fff';
-  ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
-  ctx.fillText('CODIGO', PX_W / 2, y + 32);
-  ctx.font = 'bold 48px Arial, Helvetica, sans-serif';
-  // letterSpacing manual aproximado
+  ctx.font = 'bold 11px Arial, Helvetica, sans-serif';
+  ctx.fillText('CODIGO', PX_W / 2, y + 26);
+  ctx.font = 'bold 40px Arial, Helvetica, sans-serif';
   const code = (codigo || 'B----').toUpperCase();
-  ctx.fillText(code, PX_W / 2, y + h / 2 + 10, w - 48);
+  ctx.fillText(code, PX_W / 2, y + h / 2 + 8, w - 40);
   ctx.fillStyle = '#000';
 }
 
@@ -194,46 +190,46 @@ export async function renderFichaBitmap(
       ticket.seqDia != null
         ? `#${String(ticket.seqDia).padStart(3, '0')}`
         : '';
-    ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
+    ctx.font = 'bold 14px Arial, Helvetica, sans-serif';
     ctx.fillText(
       seq ? `BARMAN  ${seq}` : 'BARMAN',
       PX_W / 2,
-      16,
+      14,
       PX_W - 24
     );
-    drawDashedLine(ctx, 30);
+    drawDashedLine(ctx, 26);
 
-    ctx.font = 'bold 24px Arial, Helvetica, sans-serif';
-    ctx.fillText(nome.slice(0, 26), PX_W / 2, 52, PX_W - 24);
+    ctx.font = 'bold 20px Arial, Helvetica, sans-serif';
+    ctx.fillText(nome.slice(0, 26), PX_W / 2, 44, PX_W - 24);
 
-    drawCodigoBox(ctx, codigo, 68, 132);
+    drawCodigoBox(ctx, codigo, 56, 110);
 
-    ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
-    ctx.fillText(when, PX_W / 2, PX_H - 14, PX_W - 24);
+    ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
+    ctx.fillText(when, PX_W / 2, PX_H - 12, PX_W - 24);
   } else if (via === 'cliente') {
-    ctx.font = 'bold 14px Arial, Helvetica, sans-serif';
+    ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
     ctx.fillText(
       `CLIENTE - ${(festival || '').slice(0, 28).toUpperCase()}`,
       PX_W / 2,
-      16,
+      14,
       PX_W - 24
     );
-    drawDashedLine(ctx, 30);
+    drawDashedLine(ctx, 26);
 
-    ctx.font = 'bold 22px Arial, Helvetica, sans-serif';
-    ctx.fillText(nome.slice(0, 26), PX_W / 2, 52, PX_W - 24);
+    ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
+    ctx.fillText(nome.slice(0, 26), PX_W / 2, 44, PX_W - 24);
 
-    drawCodigoBox(ctx, codigo, 68, 132);
+    drawCodigoBox(ctx, codigo, 56, 110);
 
-    ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
-    ctx.fillText(when, PX_W / 2, PX_H - 14, PX_W - 24);
+    ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
+    ctx.fillText(when, PX_W / 2, PX_H - 12, PX_W - 24);
   } else {
-    const headerH = 28;
-    const footerH = 28;
+    const headerH = 24;
+    const footerH = 24;
     const midY = headerH;
     const midH = PX_H - headerH - footerH;
 
-    ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
+    ctx.font = 'bold 15px Arial, Helvetica, sans-serif';
     ctx.fillText(festival.slice(0, 42).toUpperCase(), PX_W / 2, headerH / 2, PX_W - 24);
 
     let drewLogo = false;
@@ -251,7 +247,7 @@ export async function renderFichaBitmap(
       drawNomeBar(ctx, nome, midY, midH);
     }
 
-    ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
+    ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
     ctx.fillStyle = '#000';
     ctx.fillText(when, PX_W / 2, PX_H - footerH / 2, PX_W - 24);
   }
@@ -279,7 +275,6 @@ export function expandFichas(items: PrintItem[]): FichaTicket[] {
       if (dual) {
         const codigo = generateFichaCodigo(4);
         const seqDia = nextDaySeq();
-        // Barman primeiro, depois cliente (mesmo codigo)
         out.push({
           key: `${base}-bar`,
           nome: item.nome,

@@ -39,7 +39,7 @@ export async function portalLogin(
 ): Promise<PortalTenant> {
   const { data } = await api.post<{ token: string; tenant: PortalTenant }>(
     '/portal/login',
-    { email, senha }
+    { email, senha, mode: 'operador' }
   );
   sessionStorage.setItem('portalToken', data.token);
   sessionStorage.setItem('portalTenant', JSON.stringify(data.tenant));

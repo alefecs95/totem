@@ -62,10 +62,11 @@ export function mapProductRow(row: Record<string, unknown>) {
 }
 
 export function stripTenantSecrets(row: Record<string, unknown>) {
-  const { portal_senha_hash, ...rest } = row;
+  const { portal_senha_hash, operador_senha_hash, ...rest } = row;
   return {
     ...rest,
     portal_ativo: Boolean(portal_senha_hash),
+    operador_ativo: Boolean(operador_senha_hash),
     ficha_logo_set: Boolean(rest.ficha_logo_data),
   };
 }

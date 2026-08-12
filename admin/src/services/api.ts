@@ -64,6 +64,7 @@ export interface Tenant {
   ativo: boolean;
   criado_em: string;
   portal_ativo?: boolean;
+  operador_ativo?: boolean;
 }
 
 export type TenantInput = Partial<
@@ -97,6 +98,7 @@ export type TenantInput = Partial<
   latitude?: number;
   longitude?: number;
   portal_senha?: string;
+  operador_senha?: string;
   codigo_evento?: string | null;
   sumup_surcharge_enabled?: boolean;
   sumup_debit_surcharge_percent?: number;
@@ -289,6 +291,23 @@ export async function updateTenant(
 
 export async function deleteTenant(id: string): Promise<void> {
   await api.delete(`/admin/tenants/${id}`);
+}
+
+export async function resetTenantSenha(
+  id: string,
+  tipo: 'portal' | 'operador',
+  senha?: string
+): Promise<{ ok: boolean; tipo: string; gerada: boolean; senha: string }> {
+  const { data } = await api.post<{
+    ok: boolean;
+    tipo: string;
+    gerada: boolean;
+    senha: string;
+  }>(`/admin/tenants/${id}/reset-senha`, {
+    tipo,
+    ...(senha ? { senha } : {}),
+  });
+  return data;
 }
 
 export interface Totem {

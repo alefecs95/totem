@@ -33,6 +33,8 @@ const manualSaleSchema = z.object({
 const loginSchema = z.object({
   email: z.string().trim().email(),
   senha: z.string().min(1),
+  /** portal = adm do evento; operador = modo operador web */
+  mode: z.enum(['portal', 'operador']).optional().default('portal'),
 });
 
 // POST /api/portal/login
@@ -46,7 +48,7 @@ router.post('/login', async (req, res) => {
     return;
   }
 
-  const { email, senha } = parsed.data;
+  const { email, senha, mode } = parsed.data;
 
   try {
     const result = await query<{
@@ -54,21 +56,32 @@ router.post('/login', async (req, res) => {
       nome: string;
       email: string;
       portal_senha_hash: string | null;
+      operador_senha_hash: string | null;
       ativo: boolean;
     }>(
-      `SELECT id, nome, email, portal_senha_hash, ativo
+      `SELECT id, nome, email, portal_senha_hash, operador_senha_hash, ativo
        FROM tenants
        WHERE LOWER(email) = LOWER($1)`,
       [email]
     );
 
     const tenant = result.rows[0];
-    if (!tenant?.ativo || !tenant.portal_senha_hash) {
+    if (!tenant?.ativo) {
       res.status(401).json({ error: 'invalid_credentials' });
       return;
     }
 
-    const ok = await bcrypt.compare(senha, tenant.portal_senha_hash);
+    const hash =
+      mode === 'operador'
+        ? tenant.operador_senha_hash || tenant.portal_senha_hash
+        : tenant.portal_senha_hash;
+
+    if (!hash) {
+      res.status(401).json({ error: 'invalid_credentials' });
+      return;
+    }
+
+    const ok = await bcrypt.compare(senha, hash);
     if (!ok) {
       res.status(401).json({ error: 'invalid_credentials' });
       return;
@@ -79,7 +92,7 @@ router.post('/login', async (req, res) => {
         tenantId: tenant.id,
         email: tenant.email,
         nome: tenant.nome,
-        role: 'portal',
+        role: mode === 'operador' ? 'operador' : 'portal',
       },
       env.jwt.secret,
       { expiresIn: '12h' }
