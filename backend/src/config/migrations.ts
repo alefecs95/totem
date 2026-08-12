@@ -62,6 +62,9 @@ ALTER TABLE tenants ADD COLUMN IF NOT EXISTS ficha_logo_data TEXT;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS categoria VARCHAR(50) NOT NULL DEFAULT 'outro';
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS imprime_ficha BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS ficha_logo_data TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS codigo_evento VARCHAR(32);
+CREATE UNIQUE INDEX IF NOT EXISTS tenants_codigo_evento_uidx
+  ON tenants (codigo_evento) WHERE codigo_evento IS NOT NULL;
 
 -- Categorias para produtos já existentes (antes da coluna categoria).
 UPDATE produtos SET categoria = 'bebida_alcoolica' WHERE categoria = 'outro' AND nome ILIKE '%cerveja%';
@@ -158,5 +161,27 @@ async function seedInitialAdminIfNeeded(): Promise<void> {
 export async function runMigrations(): Promise<void> {
   await query(SCHEMA_SQL);
   await seedInitialAdminIfNeeded();
+
+  // Backfill códigos PDV para tenants antigos sem código
+  const missing = await query<{ id: string; nome: string }>(
+    `SELECT id, nome FROM tenants WHERE codigo_evento IS NULL OR codigo_evento = ''`
+  );
+  for (const row of missing.rows) {
+    const { generateEventCode } = await import('../utils/eventCode');
+    let attempts = 0;
+    while (attempts < 5) {
+      const codigo = generateEventCode(row.nome);
+      try {
+        await query(`UPDATE tenants SET codigo_evento = $1 WHERE id = $2`, [
+          codigo,
+          row.id,
+        ]);
+        break;
+      } catch {
+        attempts += 1;
+      }
+    }
+  }
+
   console.log('Migrations aplicadas com sucesso.');
 }

@@ -27,6 +27,7 @@ const emptyForm: TenantInput = {
   email: '',
   gateway: 'mercadopago',
   comissao_pct: 5,
+  codigo_evento: '',
   mp_access_token: '',
   mp_webhook_secret: '',
   mp_device_id: '',
@@ -316,6 +317,7 @@ export default function Tenants() {
     carregarCidades(ufDoEstado(t.estado));
     setForm({
       nome: t.nome,
+      codigo_evento: t.codigo_evento ?? '',
       responsavel: t.responsavel,
       telefone: t.telefone ?? '',
       email: t.email ?? '',
@@ -471,6 +473,7 @@ export default function Tenants() {
           <thead>
             <tr>
               <th style={th}>Nome</th>
+              <th style={th}>Código PDV</th>
               <th style={th}>Responsável</th>
               <th style={th}>Gateway</th>
               <th style={th}>Comissão</th>
@@ -482,6 +485,11 @@ export default function Tenants() {
             {tenants.map((t) => (
               <tr key={t.id}>
                 <td style={td}>{t.nome}</td>
+                <td style={td}>
+                  <code style={{ fontWeight: 700 }}>
+                    {t.codigo_evento || '—'}
+                  </code>
+                </td>
                 <td style={td}>{t.responsavel}</td>
                 <td style={td}>{t.gateway}</td>
                 <td style={td}>{Number(t.comissao_pct)}%</td>
@@ -564,6 +572,25 @@ export default function Tenants() {
                 onChange={(e) => setField('nome', e.target.value)}
                 required
               />
+            </Field>
+
+            <Field label="Código do evento (PDV Electron)">
+              <input
+                style={input}
+                value={form.codigo_evento ?? ''}
+                onChange={(e) =>
+                  setField(
+                    'codigo_evento',
+                    e.target.value.toUpperCase().replace(/\s+/g, '')
+                  )
+                }
+                placeholder="Ex.: FESTA3K9 (gerado se vazio)"
+                maxLength={32}
+              />
+              <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
+                O app PDV usa só este código para carregar o evento e vender/imprimir
+                fichas.
+              </p>
             </Field>
 
             <Field label="Responsável">

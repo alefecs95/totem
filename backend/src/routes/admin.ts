@@ -22,6 +22,7 @@ import {
   SumUpError,
   type TenantSumUpFields,
 } from '../services/sumup';
+import { generateEventCode, normalizeEventCode } from '../utils/eventCode';
 import { productSchema, mapProductRow, stripTenantSecrets } from '../utils/products';
 
 const router = Router();
@@ -176,6 +177,15 @@ const tenantSchema = z.object({
   portal_senha: z.preprocess(
     (v) => (v === '' || v === null || v === undefined ? undefined : v),
     z.string().min(4).optional()
+  ),
+  codigo_evento: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : v),
+    z
+      .string()
+      .min(3)
+      .max(32)
+      .regex(/^[A-Za-z0-9_-]+$/, 'Código só com letras, números, _ ou -')
+      .optional()
   ),
 });
 
@@ -635,10 +645,13 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
   }
 
   const t = parsed.data;
-  const { portal_senha, ...tenantFields } = t;
+  const { portal_senha, codigo_evento, ...tenantFields } = t;
   const portalSenhaHash = portal_senha
     ? bcrypt.hashSync(portal_senha, 10)
     : null;
+  const codigo =
+    (codigo_evento && normalizeEventCode(codigo_evento)) ||
+    generateEventCode(tenantFields.nome);
 
   try {
     const result = await query<TenantRow>(
@@ -650,9 +663,9 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
          sumup_surcharge_enabled, sumup_debit_surcharge_percent,
          sumup_credit_surcharge_percent,
          endereco, numero, bairro, cidade, estado, latitude, longitude,
-         portal_senha_hash)
+         portal_senha_hash, codigo_evento)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-         $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+         $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
        RETURNING *`,
       [
         tenantFields.nome,
@@ -681,6 +694,7 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
         tenantFields.latitude ?? null,
         tenantFields.longitude ?? null,
         portalSenhaHash,
+        codigo,
       ]
     );
 
@@ -714,11 +728,14 @@ router.put('/tenants/:id', verifyAdmin, async (req, res) => {
   }
 
   const fields = parsed.data;
-  const { portal_senha, ...tenantFields } = fields;
+  const { portal_senha, codigo_evento, ...rest } = fields;
+  const tenantFields: Record<string, unknown> = { ...rest };
+  if (codigo_evento !== undefined) {
+    const normalized = normalizeEventCode(codigo_evento);
+    if (normalized) tenantFields.codigo_evento = normalized;
+  }
   const keys = Object.keys(tenantFields);
-  const values: unknown[] = keys.map(
-    (key) => (tenantFields as Record<string, unknown>)[key]
-  );
+  const values: unknown[] = keys.map((key) => tenantFields[key]);
 
   if (portal_senha) {
     keys.push('portal_senha_hash');

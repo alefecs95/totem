@@ -7,6 +7,7 @@ import paymentRoutes from './routes/payment';
 import webhookRoutes from './routes/webhook';
 import adminRoutes from './routes/admin';
 import portalRoutes from './routes/portal';
+import pdvRoutes from './routes/pdv';
 
 // TODO: implementar (middleware de identificação tenant/totem via headers x-tenant-id / x-totem-id, tratamento de erros)
 const app = express();
@@ -14,7 +15,19 @@ const app = express();
 // CORS: PWA e admin ficam em domínios distintos em produção (EasyPanel).
 app.use(
   cors({
-    origin: env.corsOrigins,
+    origin: (origin, callback) => {
+      // Electron / apps sem Origin
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      if (env.corsOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      // PDV empacotado / origens extras
+      callback(null, true);
+    },
     credentials: true,
   })
 );
@@ -26,6 +39,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api', configRoutes);
+app.use('/api/pdv', pdvRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/admin', adminRoutes);

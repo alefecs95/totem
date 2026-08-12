@@ -50,6 +50,7 @@ export interface Tenant {
   sumup_pay_to_email: string | null;
   ficha_logo_data?: string | null;
   ficha_logo_set?: boolean;
+  codigo_evento?: string | null;
   sumup_surcharge_enabled?: boolean;
   sumup_debit_surcharge_percent?: string | number;
   sumup_credit_surcharge_percent?: string | number;
@@ -96,6 +97,7 @@ export type TenantInput = Partial<
   latitude?: number;
   longitude?: number;
   portal_senha?: string;
+  codigo_evento?: string | null;
   sumup_surcharge_enabled?: boolean;
   sumup_debit_surcharge_percent?: number;
   sumup_credit_surcharge_percent?: number;
