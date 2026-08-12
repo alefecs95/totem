@@ -3,11 +3,14 @@ import { readProductFichaLogos } from './fichas';
 
 /** Largura = 100% do rolo 80mm. Só a altura é controlada pelo sistema. */
 export const FICHA_LARGURA_MM = 80;
-export const FICHA_ALTURA_MM = 25;
+export const FICHA_ALTURA_MM = 35;
 
-/** Resolução térmica ~203 dpi: 80mm ≈ 640px, 25mm ≈ 200px. Usamos 576×200 (comum em POS 80mm). */
+/**
+ * Resolução proporcional à anterior (576×200 para 80×25mm → 8 px/mm).
+ * 80×35mm → 576×280.
+ */
 const PX_W = 576;
-const PX_H = 200;
+const PX_H = 280;
 
 function escapeHtml(value: string): string {
   return value
@@ -51,7 +54,8 @@ function toThermalMono(ctx: CanvasRenderingContext2D, w: number, h: number): voi
   ctx.putImageData(data, 0, 0);
 }
 
-function drawContainedImage(
+/** Preenche 100% do box (cover) — sem faixas brancas; pode cortar bordas da arte. */
+function drawCoverImage(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
   x: number,
@@ -59,12 +63,17 @@ function drawContainedImage(
   boxW: number,
   boxH: number
 ): void {
-  const scale = Math.min(boxW / img.naturalWidth, boxH / img.naturalHeight);
+  const scale = Math.max(boxW / img.naturalWidth, boxH / img.naturalHeight);
   const dw = Math.max(1, Math.floor(img.naturalWidth * scale));
   const dh = Math.max(1, Math.floor(img.naturalHeight * scale));
   const dx = x + Math.floor((boxW - dw) / 2);
   const dy = y + Math.floor((boxH - dh) / 2);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, boxW, boxH);
+  ctx.clip();
   ctx.drawImage(img, dx, dy, dw, dh);
+  ctx.restore();
 }
 
 function resolveLogo(ticket: FichaTicket): string | null {
@@ -104,7 +113,7 @@ async function renderFichaBitmap(
   const midY = headerH;
   const midH = PX_H - headerH - footerH;
 
-  // Evento
+  // Evento (faixa superior)
   ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
   ctx.fillText(festival.slice(0, 42), PX_W / 2, headerH / 2, PX_W - padX * 2);
 
@@ -113,7 +122,8 @@ async function renderFichaBitmap(
   if (logoSrc) {
     try {
       const img = await loadImage(logoSrc);
-      drawContainedImage(ctx, img, padX, midY + 2, PX_W - padX * 2, midH - 4);
+      // Miolo inteiro (0 → PX_W, midY → midH): sem pad/margin, 100% da área disponível
+      drawCoverImage(ctx, img, 0, midY, PX_W, midH);
       drewLogo = true;
     } catch {
       drewLogo = false;
@@ -134,7 +144,7 @@ async function renderFichaBitmap(
     ctx.fillStyle = '#000000';
   }
 
-  // Data/hora
+  // Data/hora (faixa inferior)
   ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
   ctx.fillStyle = '#000000';
   ctx.fillText(when, PX_W / 2, PX_H - footerH / 2, PX_W - padX * 2);
@@ -145,8 +155,8 @@ async function renderFichaBitmap(
 }
 
 /**
- * HTML: só bitmaps de página inteira (80×25).
- * Um job, N páginas → cortador "após cada página" com papel 80×25.
+ * HTML: só bitmaps de página inteira (80×35).
+ * Um job, N páginas → cortador "após cada página" com papel 80×35.
  */
 function buildBitmapPagesHtml(pageImages: string[]): string {
   const w = FICHA_LARGURA_MM;
