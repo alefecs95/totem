@@ -284,8 +284,28 @@ export function printFichasViaIframe(
 
   void (async () => {
     const prepared = await prepareTicketsForPrint(tickets);
-    const html = buildFichasHtml(prepared, tenantName, printedAt, h);
 
+    // Uma ficha = um job de impressão = um corte (POS "Cutting: After one page").
+    // Com papel 80×210 o Chrome empilha várias fichas na mesma página e só corta no fim.
+    for (let i = 0; i < prepared.length; i += 1) {
+      await printSingleFichaHtml(
+        buildFichasHtml([prepared[i]], tenantName, printedAt, h),
+        h
+      );
+      // Pequena pausa para o cortador / spooler da térmica
+      if (i < prepared.length - 1) {
+        await sleep(400);
+      }
+    }
+  })();
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function printSingleFichaHtml(html: string, heightMm: number): Promise<void> {
+  return new Promise((resolve) => {
     const iframe = document.createElement('iframe');
     iframe.setAttribute('aria-hidden', 'true');
     // NÃO usar opacity:0 — alguns drivers térmicos omitem imagens invisíveis.
@@ -294,7 +314,7 @@ export function printFichasViaIframe(
       'left:-10000px',
       'top:0',
       `width:${FICHA_LARGURA_MM}mm`,
-      `height:${h}mm`,
+      `height:${heightMm}mm`,
       'border:0',
       'visibility:hidden',
       'pointer-events:none',
@@ -306,6 +326,7 @@ export function printFichasViaIframe(
     const doc = iframe.contentDocument || win?.document;
     if (!win || !doc) {
       iframe.remove();
+      resolve();
       return;
     }
 
@@ -313,63 +334,72 @@ export function printFichasViaIframe(
     doc.write(html);
     doc.close();
 
-    const cleanup = () => {
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
       window.setTimeout(() => {
         try {
           iframe.remove();
         } catch {
           /* ignore */
         }
-      }, 1500);
+        resolve();
+      }, 300);
     };
 
-    let printed = false;
-    const trigger = () => {
-      if (printed) return;
-      printed = true;
+    const trigger = async () => {
       try {
-        // Torna visível só no momento do print (ajuda alguns drivers).
+        const imgs = Array.from(doc.images);
+        await Promise.all(
+          imgs.map(async (img) => {
+            try {
+              if (!img.complete || img.naturalWidth === 0) {
+                if (typeof img.decode === 'function') await img.decode();
+                else {
+                  await new Promise<void>((r) => {
+                    img.onload = () => r();
+                    img.onerror = () => r();
+                  });
+                }
+              }
+            } catch {
+              /* ignore */
+            }
+          })
+        );
+      } catch {
+        /* ignore */
+      }
+
+      try {
         iframe.style.visibility = 'visible';
         iframe.style.left = '0';
         iframe.style.top = '0';
         win.focus();
-        if (typeof win.addEventListener === 'function') {
-          win.addEventListener('afterprint', cleanup, { once: true });
+        win.addEventListener('afterprint', finish, { once: true });
+        // matchMedia: alguns Chromium disparam isso no lugar de afterprint
+        const mql = win.matchMedia('print');
+        const onMql = (e: MediaQueryListEvent) => {
+          if (!e.matches) {
+            mql.removeEventListener('change', onMql);
+            finish();
+          }
+        };
+        if (typeof mql.addEventListener === 'function') {
+          mql.addEventListener('change', onMql);
         }
         win.print();
       } catch {
-        cleanup();
-      } finally {
-        // Fallback se afterprint não disparar
-        window.setTimeout(cleanup, 60_000);
+        finish();
       }
+
+      // Segurança: se o diálogo nunca fechar / afterprint falhar
+      window.setTimeout(finish, 180_000);
     };
 
-    const imgs = Array.from(doc.images);
-    if (imgs.length === 0) {
-      window.setTimeout(trigger, 200);
-      return;
-    }
-
-    await Promise.all(
-      imgs.map(async (img) => {
-        try {
-          if (!img.complete || img.naturalWidth === 0) {
-            if (typeof img.decode === 'function') await img.decode();
-            else {
-              await new Promise<void>((resolve) => {
-                img.onload = () => resolve();
-                img.onerror = () => resolve();
-              });
-            }
-          }
-        } catch {
-          /* segue mesmo assim */
-        }
-      })
-    );
-
-    // Tempo extra para o motor de print registrar o bitmap
-    window.setTimeout(trigger, 300);
-  })();
+    window.setTimeout(() => {
+      void trigger();
+    }, 200);
+  });
 }
