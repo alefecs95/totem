@@ -74,36 +74,50 @@ export default function Home() {
           textAlign: 'center',
         }}
       >
-        <h1
+        <div
           style={{
-            fontFamily: "'Bebas Neue', sans-serif",
-            fontSize: 48,
-            lineHeight: 1,
-            letterSpacing: 1,
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 12,
+            textAlign: 'left',
           }}
         >
-          {nomeFestival}
-        </h1>
-        <p style={{ color: 'var(--text-muted)', marginTop: 6, fontSize: 15 }}>
-          Selecione seus produtos
-        </p>
-        <button
-          type="button"
-          onClick={() => navigate('/operador/login')}
-          style={{
-            marginTop: 8,
-            background: 'transparent',
-            border: '1px solid rgba(234, 88, 12, 0.5)',
-            color: '#ea580c',
-            padding: '6px 14px',
-            borderRadius: 6,
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          Modo Operador
-        </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1
+              style={{
+                fontFamily: "'Bebas Neue', sans-serif",
+                fontSize: 40,
+                lineHeight: 1,
+                letterSpacing: 1,
+                margin: 0,
+              }}
+            >
+              {nomeFestival || 'Totem'}
+            </h1>
+            <p style={{ color: 'var(--text-muted)', marginTop: 6, fontSize: 15 }}>
+              Selecione seus produtos
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/operador/login')}
+            style={{
+              flexShrink: 0,
+              background: '#ea580c',
+              border: 'none',
+              color: '#fff',
+              padding: '12px 16px',
+              borderRadius: 10,
+              fontSize: 14,
+              fontWeight: 800,
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(234, 88, 12, 0.35)',
+            }}
+          >
+            LOGIN
+          </button>
+        </div>
       </header>
 
       <main style={{ padding: 16 }}>
