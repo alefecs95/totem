@@ -80,16 +80,11 @@ function resolveLogo(ticket: FichaTicket): string | null {
   if (ticket.logo && ticket.logo.startsWith('data:image/')) return ticket.logo;
   const logos = readProductFichaLogos();
   if (ticket.productId && logos[ticket.productId]) return logos[ticket.productId];
-  // key = `${id}-${index}`
   const idFromKey = ticket.key.replace(/-\d+$/, '');
   if (idFromKey && logos[idFromKey]) return logos[idFromKey];
   return null;
 }
 
-/**
- * Renderiza a ficha INTEIRA como bitmap.
- * Drivers POS80 costumam imprimir imagem de página inteira e falhar com HTML+logo colorida.
- */
 async function renderFichaBitmap(
   ticket: FichaTicket,
   festival: string,
@@ -113,7 +108,6 @@ async function renderFichaBitmap(
   const midY = headerH;
   const midH = PX_H - headerH - footerH;
 
-  // Evento (faixa superior)
   ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
   ctx.fillText(festival.slice(0, 42), PX_W / 2, headerH / 2, PX_W - padX * 2);
 
@@ -122,7 +116,6 @@ async function renderFichaBitmap(
   if (logoSrc) {
     try {
       const img = await loadImage(logoSrc);
-      // Miolo inteiro (0 → PX_W, midY → midH): sem pad/margin, 100% da área disponível
       drawCoverImage(ctx, img, 0, midY, PX_W, midH);
       drewLogo = true;
     } catch {
@@ -132,7 +125,6 @@ async function renderFichaBitmap(
 
   if (!drewLogo) {
     const nome = (ticket.nome || 'FICHA').toUpperCase();
-    // Tarja preta com nome
     ctx.fillStyle = '#000000';
     const barPad = 8;
     ctx.fillRect(padX, midY + barPad, PX_W - padX * 2, midH - barPad * 2);
@@ -144,38 +136,28 @@ async function renderFichaBitmap(
     ctx.fillStyle = '#000000';
   }
 
-  // Data/hora (faixa inferior)
   ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
   ctx.fillStyle = '#000000';
   ctx.fillText(when, PX_W / 2, PX_H - footerH / 2, PX_W - padX * 2);
 
   toThermalMono(ctx, PX_W, PX_H);
-  // PNG 1-bit-ish (já mono) — JPEG também ok em alguns drivers; PNG preserva contraste
   return canvas.toDataURL('image/png');
 }
 
 /**
- * HTML: só bitmaps de página inteira (80×35).
- * Um job, N páginas → cortador "após cada página" com papel 80×35.
+ * HTML de UMA ficha = UMA página 80×35.
+ * O cortador POS ("After one page") só age por job/página real do spooler;
+ * vários <section> no mesmo HTML o Chrome/driver costuma fundir em 1 página.
  */
-function buildBitmapPagesHtml(pageImages: string[]): string {
+function buildSingleFichaHtml(pngDataUrl: string): string {
   const w = FICHA_LARGURA_MM;
   const h = FICHA_ALTURA_MM;
-
-  const pages = pageImages
-    .map((src, index) => {
-      const isLast = index === pageImages.length - 1;
-      return `<section class="page${isLast ? ' last' : ''}">
-  <img class="ficha" width="${PX_W}" height="${PX_H}" src="${src}" alt="Ficha ${index + 1}" />
-</section>`;
-    })
-    .join('\n');
 
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8" />
-<title>Fichas</title>
+<title>Ficha</title>
 <style>
   @page {
     size: ${w}mm ${h}mm;
@@ -183,28 +165,15 @@ function buildBitmapPagesHtml(pageImages: string[]): string {
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
-    width: ${w}mm;
-    margin: 0;
-    padding: 0;
+    width: ${w}mm !important;
+    height: ${h}mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
     background: #fff;
+    overflow: hidden;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     color-adjust: exact !important;
-  }
-  .page {
-    width: ${w}mm;
-    height: ${h}mm;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    page-break-after: always;
-    break-after: page;
-    page-break-inside: avoid;
-    break-inside: avoid;
-  }
-  .page.last {
-    page-break-after: auto;
-    break-after: auto;
   }
   img.ficha {
     display: block !important;
@@ -213,96 +182,40 @@ function buildBitmapPagesHtml(pageImages: string[]): string {
     max-width: ${w}mm !important;
     max-height: ${h}mm !important;
     object-fit: fill !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
   }
   @media print {
-    .page {
+    html, body, img.ficha {
       width: ${w}mm !important;
       height: ${h}mm !important;
-      page-break-after: always !important;
-      break-after: page !important;
-    }
-    .page.last {
-      page-break-after: auto !important;
-      break-after: auto !important;
-    }
-    img.ficha {
-      width: ${w}mm !important;
-      height: ${h}mm !important;
-      visibility: visible !important;
-      opacity: 1 !important;
     }
   }
 </style>
 </head>
 <body>
-${pages}
+  <img class="ficha" width="${PX_W}" height="${PX_H}" src="${pngDataUrl}" alt="Ficha" />
 </body>
 </html>`;
 }
 
-/** @deprecated layout HTML antigo — mantido só se precisar debug */
-export function buildFichasHtml(
-  tickets: FichaTicket[],
-  tenantName?: string,
-  printedAt: Date = new Date()
-): string {
-  const festival = (tenantName || 'FESTIVAL').trim().toUpperCase();
-  const when = formatDataHora(printedAt);
-  // fallback textual mínimo
-  const pages = tickets
-    .map((t, i) => {
-      const isLast = i === tickets.length - 1;
-      return `<section class="page${isLast ? ' last' : ''}"><div>${escapeHtml(festival)} — ${escapeHtml(t.nome)} — ${escapeHtml(when)}</div></section>`;
-    })
-    .join('');
-  return `<!DOCTYPE html><html><body>${pages}</body></html>`;
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-export function printFichasViaIframe(
-  tickets: FichaTicket[],
-  tenantName?: string,
-  printedAt: Date = new Date(),
-  _alturaMm: number = FICHA_ALTURA_MM
-): void {
-  if (tickets.length === 0) return;
-
-  const festival = (tenantName || 'FESTIVAL').trim().toUpperCase();
-  const when = formatDataHora(printedAt);
-  const h = FICHA_ALTURA_MM;
-
-  void (async () => {
-    const pageImages: string[] = [];
-    for (const ticket of tickets) {
-      try {
-        pageImages.push(await renderFichaBitmap(ticket, festival, when));
-      } catch {
-        // fallback: ficha só com texto (ainda como bitmap)
-        pageImages.push(
-          await renderFichaBitmap(
-            { ...ticket, logo: null },
-            festival,
-            when
-          )
-        );
-      }
-    }
-
-    const html = buildBitmapPagesHtml(pageImages);
-
+/** Imprime um HTML de 1 página e espera o diálogo fechar (afterprint). */
+function printOnePageHtml(html: string): Promise<void> {
+  return new Promise((resolve) => {
     const iframe = document.createElement('iframe');
     iframe.setAttribute('aria-hidden', 'true');
     iframe.style.cssText = [
       'position:fixed',
-      'left:-10000px',
+      'left:0',
       'top:0',
       `width:${FICHA_LARGURA_MM}mm`,
-      `height:${h}mm`,
+      `height:${FICHA_ALTURA_MM}mm`,
       'border:0',
-      'visibility:hidden',
+      'opacity:0.01',
       'pointer-events:none',
-      'z-index:-1',
+      'z-index:9999',
     ].join(';');
     document.body.appendChild(iframe);
 
@@ -310,6 +223,7 @@ export function printFichasViaIframe(
     const doc = iframe.contentDocument || win?.document;
     if (!win || !doc) {
       iframe.remove();
+      resolve();
       return;
     }
 
@@ -317,20 +231,21 @@ export function printFichasViaIframe(
     doc.write(html);
     doc.close();
 
-    let finished = false;
-    const cleanup = () => {
-      if (finished) return;
-      finished = true;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
       window.setTimeout(() => {
         try {
           iframe.remove();
         } catch {
           /* ignore */
         }
-      }, 2000);
+        resolve();
+      }, 350);
     };
 
-    const trigger = async () => {
+    const run = async () => {
       const imgs = Array.from(doc.images);
       await Promise.all(
         imgs.map(async (img) => {
@@ -351,20 +266,70 @@ export function printFichasViaIframe(
       );
 
       try {
-        iframe.style.visibility = 'visible';
-        iframe.style.left = '0';
-        iframe.style.top = '0';
         win.focus();
-        win.addEventListener('afterprint', cleanup, { once: true });
+        win.addEventListener('afterprint', finish, { once: true });
         win.print();
       } catch {
-        cleanup();
+        finish();
       }
-      window.setTimeout(cleanup, 180_000);
+      // Segurança
+      window.setTimeout(finish, 180_000);
     };
 
     window.setTimeout(() => {
-      void trigger();
-    }, 300);
+      void run();
+    }, 200);
+  });
+}
+
+/** @deprecated */
+export function buildFichasHtml(
+  tickets: FichaTicket[],
+  tenantName?: string,
+  printedAt: Date = new Date()
+): string {
+  const festival = (tenantName || 'FESTIVAL').trim().toUpperCase();
+  const when = formatDataHora(printedAt);
+  const pages = tickets
+    .map((t, i) => {
+      const isLast = i === tickets.length - 1;
+      return `<section class="page${isLast ? ' last' : ''}"><div>${escapeHtml(festival)} — ${escapeHtml(t.nome)} — ${escapeHtml(when)}</div></section>`;
+    })
+    .join('');
+  return `<!DOCTYPE html><html><body>${pages}</body></html>`;
+}
+
+/**
+ * Impressão com corte: 1 ficha = 1 job = 1 página 80×35.
+ * Com “Cutting: After one page” no POS80, corta a cada ficha.
+ * (Várias fichas no mesmo HTML o Chrome funde numa página só — sem corte.)
+ */
+export function printFichasViaIframe(
+  tickets: FichaTicket[],
+  tenantName?: string,
+  printedAt: Date = new Date(),
+  _alturaMm: number = FICHA_ALTURA_MM
+): void {
+  if (tickets.length === 0) return;
+
+  const festival = (tenantName || 'FESTIVAL').trim().toUpperCase();
+  const when = formatDataHora(printedAt);
+
+  void (async () => {
+    const pageImages: string[] = [];
+    for (const ticket of tickets) {
+      try {
+        pageImages.push(await renderFichaBitmap(ticket, festival, when));
+      } catch {
+        pageImages.push(
+          await renderFichaBitmap({ ...ticket, logo: null }, festival, when)
+        );
+      }
+    }
+
+    for (let i = 0; i < pageImages.length; i += 1) {
+      await printOnePageHtml(buildSingleFichaHtml(pageImages[i]));
+      if (i < pageImages.length - 1) await sleep(500);
+    }
   })();
 }
