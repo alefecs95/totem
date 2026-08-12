@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import PrintFichas from '../components/PrintFichas';
 import PrintReceipt from '../components/PrintReceipt';
 import { viasComprovante } from '../constants/productCategories';
 import { useCartStore, type CartItem } from '../store/cartStore';
-import { countFichaTickets } from '../utils/fichas';
+import { countFichaTickets, expandFichaTickets } from '../utils/fichas';
+import { printFichasViaIframe } from '../utils/printFichas';
 import { printWithMode } from '../utils/printMode';
 
 interface SuccessLocationState {
@@ -16,7 +16,7 @@ interface SuccessLocationState {
 
 const VERDE = '#00C853';
 const AZUL = '#448AFF';
-const VOLTAR_EM = 30;
+const VOLTAR_EM = 45;
 
 function formatPreco(preco: number): string {
   return `R$ ${preco.toFixed(2).replace('.', ',')}`;
@@ -42,6 +42,12 @@ export default function Success() {
   const vias = viasComprovante(items);
   const impressaoDupla = vias.length > 1;
 
+  const imprimirFichas = () => {
+    const tickets = expandFichaTickets(items);
+    printFichasViaIframe(tickets, tenantName);
+    setSecondsLeft(VOLTAR_EM);
+  };
+
   const novoPedido = () => {
     clearCart();
     navigate('/');
@@ -60,14 +66,6 @@ export default function Success() {
       navigate('/');
     }
   }, [secondsLeft, clearCart, navigate]);
-
-  // Auto-imprime fichas uma vez ao confirmar o pagamento.
-  useEffect(() => {
-    if (totalFichas <= 0) return;
-    const id = window.setTimeout(() => printWithMode('fichas'), 400);
-    return () => window.clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- só na montagem
-  }, []);
 
   const resetCountdown = () => setSecondsLeft(VOLTAR_EM);
 
@@ -118,7 +116,7 @@ export default function Success() {
       </h1>
       <p style={{ fontSize: 18, color: 'var(--text-muted)', textAlign: 'center' }}>
         {totalFichas > 0
-          ? `${totalFichas} ficha${totalFichas === 1 ? '' : 's'} pronta${totalFichas === 1 ? '' : 's'} para impressão`
+          ? `Toque em IMPRIMIR para sair ${totalFichas} ficha${totalFichas === 1 ? '' : 's'}`
           : 'Retire suas fichas no balcão'}
       </p>
 
@@ -199,8 +197,8 @@ export default function Success() {
         {totalFichas > 0 && (
           <button
             className="btn-primary"
-            style={{ background: '#f59e0b' }}
-            onClick={() => printWithMode('fichas')}
+            style={{ background: '#f59e0b', fontSize: 26, minHeight: 64 }}
+            onClick={imprimirFichas}
           >
             🖨️ IMPRIMIR {totalFichas} FICHA{totalFichas === 1 ? '' : 'S'}
           </button>
@@ -221,7 +219,6 @@ export default function Success() {
         Voltando automaticamente em {secondsLeft}s...
       </p>
 
-      <PrintFichas items={items} tenantName={tenantName} />
       <PrintReceipt
         items={items}
         total={total}

@@ -10,7 +10,7 @@ import {
   type CardType,
 } from '../../utils/cardSurcharge';
 import { expandFichaTickets, type FichaTicket } from '../../utils/fichas';
-import { printWithMode } from '../../utils/printMode';
+import { printFichasViaIframe } from '../../utils/printFichas';
 import {
   isOperadorLoggedIn,
   operadorLogout,
@@ -112,16 +112,25 @@ export default function Operator() {
         id?: string;
         nome: string;
         quantidade: number;
-        imprime_ficha?: boolean;
+        imprime_ficha?: boolean | string | number | null;
       }>
     ) => {
       const tickets = expandFichaTickets(saleItems);
       if (tickets.length === 0) return;
       setPrintTickets(tickets);
-      window.setTimeout(() => printWithMode('fichas'), 80);
+      // Não auto-print após await: o navegador bloqueia sem gesto do usuário.
+      // Mostra botão grande para o operador tocar e imprimir.
     },
     []
   );
+
+  const dispararImpressaoFichas = useCallback(() => {
+    if (printTickets.length === 0) return;
+    printFichasViaIframe(
+      printTickets,
+      nomeFestival || localStorage.getItem('tenantName') || 'Festival'
+    );
+  }, [printTickets, nomeFestival]);
 
   const items = useCartStore((s) => s.items);
   const addItem = useCartStore((s) => s.addItem);
@@ -227,18 +236,26 @@ export default function Operator() {
         imprimirFichasDaVenda(saleItems);
         if (metodo === 'dinheiro' && recebido != null) {
           const troco = Math.round((recebido - tot) * 100) / 100;
+          const fichasMsg =
+            expandFichaTickets(saleItems).length > 0
+              ? ' · toque em Imprimir fichas'
+              : '';
           flash(
             queued
-              ? `Offline · Troco ${formatPreco(troco)}`
+              ? `Offline · Troco ${formatPreco(troco)}${fichasMsg}`
               : troco > 0
-                ? `✓ Troco ${formatPreco(troco)}`
-                : '✓ Dinheiro OK (sem troco)'
+                ? `✓ Troco ${formatPreco(troco)}${fichasMsg}`
+                : `✓ Dinheiro OK${fichasMsg}`
           );
         } else {
+          const fichasMsg =
+            expandFichaTickets(saleItems).length > 0
+              ? ' · toque em Imprimir fichas'
+              : '';
           flash(
             queued
-              ? 'Offline — sincroniza em breve'
-              : '✓ Cartão físico OK'
+              ? `Offline — sincroniza em breve${fichasMsg}`
+              : `✓ Cartão físico OK${fichasMsg}`
           );
         }
       } catch {
@@ -846,24 +863,26 @@ export default function Operator() {
       {printTickets.length > 0 && (
         <button
           type="button"
-          onClick={() => printWithMode('fichas')}
+          onClick={dispararImpressaoFichas}
           style={{
             position: 'fixed',
+            left: 16,
             right: 16,
             bottom: 16,
             zIndex: 40,
-            padding: '12px 16px',
-            borderRadius: 10,
+            padding: '18px 16px',
+            borderRadius: 12,
             border: 'none',
             background: '#f59e0b',
             color: '#111',
-            fontWeight: 800,
+            fontWeight: 900,
+            fontSize: 20,
             cursor: 'pointer',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
           }}
         >
-          🖨️ Reimprimir {printTickets.length} ficha
-          {printTickets.length === 1 ? '' : 's'}
+          🖨️ IMPRIMIR {printTickets.length} FICHA
+          {printTickets.length === 1 ? '' : 'S'}
         </button>
       )}
 

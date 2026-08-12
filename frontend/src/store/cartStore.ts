@@ -31,16 +31,27 @@ export const useCartStore = create<CartState>((set, get) => ({
     set((state) => {
       const qtd = Math.max(1, Math.floor(quantidade));
       const existing = state.items.find((item) => item.id === product.id);
+      const imprime_ficha = Boolean(product.imprime_ficha);
       if (existing) {
         return {
           items: state.items.map((item) =>
             item.id === product.id
-              ? { ...item, quantidade: item.quantidade + qtd }
+              ? {
+                  ...item,
+                  ...product,
+                  imprime_ficha,
+                  quantidade: item.quantidade + qtd,
+                }
               : item
           ),
         };
       }
-      return { items: [...state.items, { ...product, quantidade: qtd }] };
+      return {
+        items: [
+          ...state.items,
+          { ...product, imprime_ficha, quantidade: qtd },
+        ],
+      };
     }),
 
   removeItem: (id) =>

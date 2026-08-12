@@ -45,6 +45,12 @@ export function persistTotemConfig(config: TotemConfig): void {
   } else {
     localStorage.removeItem('sumupSurcharge');
   }
+  // Mapa id→imprime_ficha para enriquecer o carrinho na impressão.
+  const fichaFlags: Record<string, boolean> = {};
+  for (const p of config.produtos ?? []) {
+    if (p.id) fichaFlags[p.id] = Boolean(p.imprime_ficha);
+  }
+  localStorage.setItem('productFichaFlags', JSON.stringify(fichaFlags));
 }
 
 export interface CardPaymentResponse {
