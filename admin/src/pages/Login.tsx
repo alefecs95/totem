@@ -25,88 +25,53 @@ export default function Login() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: '#0f172a',
-      }}
-    >
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          background: '#fff',
-          padding: 32,
-          borderRadius: 16,
-          width: 360,
-          boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}
-      >
-        <h1 style={{ margin: 0, fontSize: 22, color: '#0f172a' }}>
-          Totem Festival
-        </h1>
-        <p style={{ margin: 0, color: '#64748b', fontSize: 14 }}>
-          Painel administrativo
-        </p>
+    <div className="login-shell">
+      <section className="login-hero">
+        <div className="login-hero-inner">
+          <div className="admin-brand-mark">TF</div>
+          <h1>Controle total do festival</h1>
+          <p>
+            Organize eventos, maquininhas, produtos e repasses em um painel feito
+            para o ritmo do balcão.
+          </p>
+        </div>
+      </section>
 
-        <label style={{ fontSize: 13, color: '#334155', fontWeight: 600 }}>
-          E-mail
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={inputStyle}
-          />
-        </label>
+      <section className="login-panel">
+        <form className="login-card" onSubmit={handleSubmit}>
+          <h2>Entrar</h2>
+          <p className="sub">Acesso do super administrador</p>
 
-        <label style={{ fontSize: 13, color: '#334155', fontWeight: 600 }}>
-          Senha
-          <input
-            type="password"
-            value={senha}
-            onChange={(e) => setSenha(e.target.value)}
-            required
-            style={inputStyle}
-          />
-        </label>
+          <label className="field">
+            <span>E-mail</span>
+            <input
+              className="input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoFocus
+            />
+          </label>
 
-        {erro && (
-          <div style={{ color: '#dc2626', fontSize: 13 }}>{erro}</div>
-        )}
+          <label className="field">
+            <span>Senha</span>
+            <input
+              className="input"
+              type="password"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              required
+            />
+          </label>
 
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            padding: '12px',
-            borderRadius: 8,
-            border: 'none',
-            background: '#0f172a',
-            color: '#fff',
-            fontWeight: 700,
-            cursor: loading ? 'default' : 'pointer',
-            opacity: loading ? 0.6 : 1,
-          }}
-        >
-          {loading ? 'Entrando...' : 'Entrar'}
-        </button>
-      </form>
+          {erro && <div className="login-error">{erro}</div>}
+
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? 'Entrando...' : 'Entrar no painel'}
+          </button>
+        </form>
+      </section>
     </div>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  marginTop: 6,
-  padding: '10px 12px',
-  borderRadius: 8,
-  border: '1px solid #cbd5e1',
-  fontSize: 14,
-  fontWeight: 400,
-};

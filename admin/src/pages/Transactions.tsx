@@ -58,21 +58,18 @@ export default function Transactions() {
 
   return (
     <div>
-      <h1 style={{ marginTop: 0, color: '#0f172a' }}>Transações</h1>
+      <div className="admin-page-head">
+        <div>
+          <h1>Transações</h1>
+          <p>Filtre por organizador e período para conferir repasses.</p>
+        </div>
+      </div>
 
-      <div
-        style={{
-          display: 'flex',
-          gap: 12,
-          flexWrap: 'wrap',
-          marginBottom: 16,
-          alignItems: 'flex-end',
-        }}
-      >
-        <label style={filtroLabel}>
-          Organizador
+      <div className="filters">
+        <label className="field">
+          <span>Organizador</span>
           <select
-            style={filtroInput}
+            className="input"
             value={tenantId}
             onChange={(e) => {
               setPage(1);
@@ -87,11 +84,11 @@ export default function Transactions() {
             ))}
           </select>
         </label>
-        <label style={filtroLabel}>
-          De
+        <label className="field" style={{ maxWidth: 180 }}>
+          <span>De</span>
           <input
+            className="input"
             type="date"
-            style={filtroInput}
             value={dataInicio}
             onChange={(e) => {
               setPage(1);
@@ -99,11 +96,11 @@ export default function Transactions() {
             }}
           />
         </label>
-        <label style={filtroLabel}>
-          Até
+        <label className="field" style={{ maxWidth: 180 }}>
+          <span>Até</span>
           <input
+            className="input"
             type="date"
-            style={filtroInput}
             value={dataFim}
             onChange={(e) => {
               setPage(1);
@@ -114,86 +111,96 @@ export default function Transactions() {
       </div>
 
       {loading ? (
-        <p>Carregando...</p>
+        <p className="muted">Carregando...</p>
       ) : (
-        <table style={tableStyle}>
-          <thead>
-            <tr>
-              <th style={th}>Data</th>
-              <th style={th}>Organizador</th>
-              <th style={th}>Método</th>
-              <th style={{ ...th, textAlign: 'right' }}>Bruto</th>
-              <th style={{ ...th, textAlign: 'right' }}>Comissão</th>
-              <th style={{ ...th, textAlign: 'right' }}>Líquido</th>
-              <th style={th}>Status</th>
-              <th style={th}>Repasse</th>
-              <th style={th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {transactions.map((t) => (
-              <tr key={t.id}>
-                <td style={td}>{formatDateTime(t.criado_em)}</td>
-                <td style={td}>{t.tenant_nome ?? '—'}</td>
-                <td style={td}>{t.metodo}</td>
-                <td style={{ ...td, textAlign: 'right' }}>
-                  {formatBRL(t.valor_bruto)}
-                </td>
-                <td style={{ ...td, textAlign: 'right' }}>
-                  {formatBRL(t.comissao_valor)}
-                </td>
-                <td style={{ ...td, textAlign: 'right' }}>
-                  {formatBRL(t.valor_liquido)}
-                </td>
-                <td style={td}>{t.status}</td>
-                <td style={td}>
-                  <span
-                    style={{
-                      color:
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Organizador</th>
+                <th>Método</th>
+                <th style={{ textAlign: 'right' }}>Bruto</th>
+                <th style={{ textAlign: 'right' }}>Comissão</th>
+                <th style={{ textAlign: 'right' }}>Líquido</th>
+                <th>Status</th>
+                <th>Repasse</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {transactions.map((t) => (
+                <tr key={t.id}>
+                  <td>{formatDateTime(t.criado_em)}</td>
+                  <td>{t.tenant_nome ?? '—'}</td>
+                  <td>{t.metodo}</td>
+                  <td style={{ textAlign: 'right' }}>{formatBRL(t.valor_bruto)}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    {formatBRL(t.comissao_valor)}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    {formatBRL(t.valor_liquido)}
+                  </td>
+                  <td>
+                    <span
+                      className={
+                        t.status === 'approved' ? 'badge badge-ok' : 'badge badge-soft'
+                      }
+                    >
+                      {t.status}
+                    </span>
+                  </td>
+                  <td>
+                    <span
+                      className={
                         t.repasse_status === 'repassado'
-                          ? '#16a34a'
-                          : '#d97706',
-                    }}
-                  >
-                    {t.repasse_status}
-                  </span>
-                </td>
-                <td style={{ ...td, textAlign: 'right' }}>
-                  {t.repasse_status !== 'repassado' &&
-                    t.status === 'approved' && (
-                      <button onClick={() => repassar(t)} style={linkBtn}>
-                        Marcar como Repassado
+                          ? 'badge badge-ok'
+                          : 'badge badge-soft'
+                      }
+                    >
+                      {t.repasse_status}
+                    </span>
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    {t.repasse_status !== 'repassado' && t.status === 'approved' && (
+                      <button
+                        type="button"
+                        className="btn-link"
+                        onClick={() => void repassar(t)}
+                      >
+                        Marcar repassado
                       </button>
                     )}
-                </td>
-              </tr>
-            ))}
-            {transactions.length === 0 && (
+                  </td>
+                </tr>
+              ))}
+              {transactions.length === 0 && (
+                <tr>
+                  <td colSpan={9}>
+                    <div className="empty-state">Nenhuma transação encontrada.</div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            <tfoot>
               <tr>
-                <td style={td} colSpan={9}>
-                  Nenhuma transação encontrada.
+                <td colSpan={3} style={{ fontWeight: 700, padding: '14px 16px' }}>
+                  Totais da página
                 </td>
+                <td style={{ textAlign: 'right', fontWeight: 700, padding: '14px 16px' }}>
+                  {formatBRL(totalBruto)}
+                </td>
+                <td style={{ textAlign: 'right', fontWeight: 700, padding: '14px 16px' }}>
+                  {formatBRL(totalComissao)}
+                </td>
+                <td style={{ textAlign: 'right', fontWeight: 700, padding: '14px 16px' }}>
+                  {formatBRL(totalLiquido)}
+                </td>
+                <td colSpan={3} />
               </tr>
-            )}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td style={tfoot} colSpan={3}>
-                Totais da página
-              </td>
-              <td style={{ ...tfoot, textAlign: 'right' }}>
-                {formatBRL(totalBruto)}
-              </td>
-              <td style={{ ...tfoot, textAlign: 'right' }}>
-                {formatBRL(totalComissao)}
-              </td>
-              <td style={{ ...tfoot, textAlign: 'right' }}>
-                {formatBRL(totalLiquido)}
-              </td>
-              <td style={tfoot} colSpan={3}></td>
-            </tr>
-          </tfoot>
-        </table>
+            </tfoot>
+          </table>
+        </div>
       )}
 
       <div
@@ -206,92 +213,25 @@ export default function Transactions() {
         }}
       >
         <button
-          style={pagerBtn}
+          type="button"
+          className="btn btn-secondary"
           disabled={page <= 1}
           onClick={() => setPage((p) => Math.max(1, p - 1))}
         >
-          ← Anterior
+          Anterior
         </button>
-        <span style={{ fontSize: 14, color: '#64748b' }}>
+        <span className="muted">
           Página {page} de {totalPaginas}
         </span>
         <button
-          style={pagerBtn}
+          type="button"
+          className="btn btn-secondary"
           disabled={page >= totalPaginas}
           onClick={() => setPage((p) => p + 1)}
         >
-          Próxima →
+          Próxima
         </button>
       </div>
     </div>
   );
 }
-
-const filtroLabel: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  fontSize: 13,
-  color: '#334155',
-  fontWeight: 600,
-};
-
-const filtroInput: React.CSSProperties = {
-  padding: '8px 12px',
-  borderRadius: 8,
-  border: '1px solid #cbd5e1',
-  fontSize: 14,
-  minWidth: 180,
-};
-
-const tableStyle: React.CSSProperties = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  background: '#fff',
-  borderRadius: 12,
-  overflow: 'hidden',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-};
-
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '12px 16px',
-  fontSize: 12,
-  color: '#64748b',
-  textTransform: 'uppercase',
-  borderBottom: '1px solid #e2e8f0',
-};
-
-const td: React.CSSProperties = {
-  padding: '10px 16px',
-  fontSize: 14,
-  color: '#0f172a',
-  borderBottom: '1px solid #f1f5f9',
-};
-
-const tfoot: React.CSSProperties = {
-  padding: '12px 16px',
-  fontSize: 14,
-  fontWeight: 700,
-  color: '#0f172a',
-  background: '#f8fafc',
-};
-
-const linkBtn: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  color: '#0ea5e9',
-  cursor: 'pointer',
-  fontWeight: 600,
-  whiteSpace: 'nowrap',
-};
-
-const pagerBtn: React.CSSProperties = {
-  padding: '8px 16px',
-  borderRadius: 8,
-  border: '1px solid #cbd5e1',
-  background: '#fff',
-  cursor: 'pointer',
-  fontWeight: 600,
-  color: '#334155',
-};

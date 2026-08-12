@@ -466,91 +466,99 @@ export default function Tenants() {
 
   return (
     <div>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}
-      >
-        <h1 style={{ margin: 0, color: '#0f172a' }}>Organizadores</h1>
-        <button onClick={abrirNovo} style={primaryBtn}>
-          + Novo Tenant
+      <div className="admin-page-head">
+        <div>
+          <h1>Organizadores</h1>
+          <p>Festivais, códigos PDV, maquininhas e comissões.</p>
+        </div>
+        <button type="button" onClick={abrirNovo} className="btn btn-primary">
+          + Novo organizador
         </button>
       </div>
 
       {loading ? (
-        <p>Carregando...</p>
+        <p className="muted">Carregando...</p>
       ) : (
-        <table style={tableStyle}>
-          <thead>
-            <tr>
-              <th style={th}>Nome</th>
-              <th style={th}>Código PDV</th>
-              <th style={th}>Responsável</th>
-              <th style={th}>Gateway</th>
-              <th style={th}>Comissão</th>
-              <th style={th}>Status</th>
-              <th style={th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {tenants.map((t) => (
-              <tr key={t.id}>
-                <td style={td}>{t.nome}</td>
-                <td style={td}>
-                  <code style={{ fontWeight: 700 }}>
-                    {t.codigo_evento || '—'}
-                  </code>
-                </td>
-                <td style={td}>{t.responsavel}</td>
-                <td style={td}>{t.gateway}</td>
-                <td style={td}>{Number(t.comissao_pct)}%</td>
-                <td style={td}>
-                  <span style={{ color: t.ativo ? '#16a34a' : '#dc2626' }}>
-                    {t.ativo ? 'Ativo' : 'Inativo'}
-                  </span>
-                </td>
-                <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  {t.ativo && (
-                    <button
-                      onClick={() => setProdutosTenant(t)}
-                      style={linkBtn}
-                    >
-                      Produtos
-                    </button>
-                  )}
-                  {t.ativo && (
-                    <button
-                      onClick={() => setTotensTenant(t)}
-                      style={linkBtn}
-                    >
-                      Totens
-                    </button>
-                  )}
-                  <button onClick={() => abrirEdicao(t)} style={linkBtn}>
-                    Editar
-                  </button>
-                  {t.ativo && (
-                    <button
-                      onClick={() => desativar(t)}
-                      style={{ ...linkBtn, color: '#dc2626' }}
-                    >
-                      Desativar
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {tenants.length === 0 && (
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
               <tr>
-                <td style={td} colSpan={6}>
-                  Nenhum organizador cadastrado.
-                </td>
+                <th>Nome</th>
+                <th>Código PDV</th>
+                <th>Responsável</th>
+                <th>Gateway</th>
+                <th>Comissão</th>
+                <th>Status</th>
+                <th />
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {tenants.map((t) => (
+                <tr key={t.id}>
+                  <td style={{ fontWeight: 700 }}>{t.nome}</td>
+                  <td>
+                    <span className="code-pill">{t.codigo_evento || '—'}</span>
+                  </td>
+                  <td>{t.responsavel}</td>
+                  <td>
+                    <span className="badge badge-soft">{t.gateway}</span>
+                  </td>
+                  <td>{Number(t.comissao_pct)}%</td>
+                  <td>
+                    <span className={t.ativo ? 'badge badge-ok' : 'badge badge-off'}>
+                      {t.ativo ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {t.ativo && (
+                      <button
+                        type="button"
+                        onClick={() => setProdutosTenant(t)}
+                        className="btn-link"
+                      >
+                        Produtos
+                      </button>
+                    )}
+                    {t.ativo && (
+                      <button
+                        type="button"
+                        onClick={() => setTotensTenant(t)}
+                        className="btn-link"
+                      >
+                        Totens
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => abrirEdicao(t)}
+                      className="btn-link"
+                    >
+                      Editar
+                    </button>
+                    {t.ativo && (
+                      <button
+                        type="button"
+                        onClick={() => desativar(t)}
+                        className="btn-danger-text"
+                      >
+                        Desativar
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {tenants.length === 0 && (
+                <tr>
+                  <td colSpan={7}>
+                    <div className="empty-state">
+                      Nenhum organizador cadastrado.
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {totensTenant && (
@@ -568,13 +576,14 @@ export default function Tenants() {
       )}
 
       {modalOpen && (
-        <div style={overlay} onClick={() => setModalOpen(false)}>
+        <div className="admin-overlay" onClick={() => setModalOpen(false)}>
           <form
             onClick={(e) => e.stopPropagation()}
             onSubmit={salvar}
-            style={modal}
+            className="admin-modal"
+            style={{ width: 'min(640px, 100%)', maxHeight: '90vh', overflow: 'auto' }}
           >
-            <h2 style={{ marginTop: 0 }}>
+            <h2>
               {editingId ? 'Editar organizador' : 'Novo organizador'}
             </h2>
 
@@ -1526,20 +1535,18 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label style={{ display: 'block', flex: 1, marginBottom: 12 }}>
-      <span style={{ fontSize: 13, color: '#334155', fontWeight: 600 }}>
-        {label}
-      </span>
+    <label className="field" style={{ marginBottom: 12 }}>
+      <span>{label}</span>
       {children}
     </label>
   );
 }
 
 const primaryBtn: React.CSSProperties = {
-  padding: '10px 18px',
-  borderRadius: 8,
-  border: 'none',
-  background: '#0f172a',
+  padding: '11px 16px',
+  borderRadius: 10,
+  border: '1px solid #c2410c',
+  background: '#ea580c',
   color: '#fff',
   fontWeight: 700,
   cursor: 'pointer',
@@ -1547,75 +1554,20 @@ const primaryBtn: React.CSSProperties = {
 
 const secondaryBtn: React.CSSProperties = {
   padding: '10px 18px',
-  borderRadius: 8,
-  border: '1px solid #cbd5e1',
+  borderRadius: 10,
+  border: '1px solid #d6d3d1',
   background: '#fff',
-  color: '#334155',
+  color: '#1c1917',
   fontWeight: 600,
   cursor: 'pointer',
-};
-
-const linkBtn: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  color: '#0ea5e9',
-  cursor: 'pointer',
-  fontWeight: 600,
-  marginLeft: 12,
-};
-
-const tableStyle: React.CSSProperties = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  background: '#fff',
-  borderRadius: 12,
-  overflow: 'hidden',
-  marginTop: 16,
-  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-};
-
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '12px 16px',
-  fontSize: 12,
-  color: '#64748b',
-  textTransform: 'uppercase',
-  borderBottom: '1px solid #e2e8f0',
-};
-
-const td: React.CSSProperties = {
-  padding: '12px 16px',
-  fontSize: 14,
-  color: '#0f172a',
-  borderBottom: '1px solid #f1f5f9',
 };
 
 const input: React.CSSProperties = {
   width: '100%',
-  marginTop: 6,
-  padding: '10px 12px',
-  borderRadius: 8,
-  border: '1px solid #cbd5e1',
+  marginTop: 0,
+  padding: '11px 12px',
+  borderRadius: 10,
+  border: '1px solid #d6d3d1',
   fontSize: 14,
-};
-
-const overlay: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(15,23,42,0.5)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: 16,
-  zIndex: 100,
-};
-
-const modal: React.CSSProperties = {
   background: '#fff',
-  borderRadius: 16,
-  padding: 24,
-  width: 520,
-  maxWidth: '100%',
-  maxHeight: '90vh',
-  overflowY: 'auto',
 };

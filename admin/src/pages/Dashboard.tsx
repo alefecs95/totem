@@ -1,12 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getDashboard, type DashboardData } from '../services/api';
 import { formatBRL } from '../utils/format';
-
-interface CardDef {
-  label: string;
-  value: string;
-  accent: string;
-}
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -20,50 +15,48 @@ export default function Dashboard() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <p>Carregando...</p>;
-  if (erro) return <p style={{ color: '#dc2626' }}>{erro}</p>;
+  if (loading) return <p className="muted">Carregando dashboard...</p>;
+  if (erro) return <p style={{ color: 'var(--danger)', fontWeight: 600 }}>{erro}</p>;
   if (!data) return null;
 
-  const cards: CardDef[] = [
-    { label: 'Total de vendas', value: formatBRL(data.totalVendas), accent: '#0ea5e9' },
-    { label: 'Total de comissões', value: formatBRL(data.totalComissoes), accent: '#f97316' },
-    { label: 'Líquido dos organizadores', value: formatBRL(data.totalLiquido), accent: '#22c55e' },
-    { label: 'Vendas hoje', value: String(data.vendasHoje), accent: '#8b5cf6' },
-    { label: 'Pendentes de repasse', value: String(data.vendasPendentesRepasse), accent: '#ef4444' },
+  const cards = [
+    { label: 'Total de vendas', value: formatBRL(data.totalVendas), accent: '#ea580c' },
+    { label: 'Comissões', value: formatBRL(data.totalComissoes), accent: '#c2410c' },
+    { label: 'Líquido organizadores', value: formatBRL(data.totalLiquido), accent: '#15803d' },
+    { label: 'Vendas hoje', value: String(data.vendasHoje), accent: '#0369a1' },
+    {
+      label: 'Pendentes de repasse',
+      value: String(data.vendasPendentesRepasse),
+      accent: '#b91c1c',
+    },
   ];
 
   return (
     <div>
-      <h1 style={{ marginTop: 0, color: '#0f172a' }}>Dashboard</h1>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-          gap: 16,
-        }}
-      >
+      <div className="admin-page-head">
+        <div>
+          <h1>Dashboard</h1>
+          <p>Visão rápida do volume e das comissões da plataforma.</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Link to="/tenants" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
+            Organizadores
+          </Link>
+          <Link to="/transactions" className="btn btn-primary" style={{ textDecoration: 'none' }}>
+            Ver transações
+          </Link>
+        </div>
+      </div>
+
+      <div className="admin-stat-grid">
         {cards.map((card) => (
           <div
             key={card.label}
-            style={{
-              background: '#fff',
-              borderRadius: 12,
-              padding: 20,
-              borderLeft: `4px solid ${card.accent}`,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-            }}
+            className="admin-stat"
+            style={{ ['--stat-accent' as string]: card.accent }}
           >
-            <div style={{ fontSize: 13, color: '#64748b' }}>{card.label}</div>
-            <div
-              style={{
-                fontSize: 26,
-                fontWeight: 700,
-                color: '#0f172a',
-                marginTop: 8,
-              }}
-            >
-              {card.value}
-            </div>
+            <div className="admin-stat-label">{card.label}</div>
+            <div className="admin-stat-value">{card.value}</div>
           </div>
         ))}
       </div>

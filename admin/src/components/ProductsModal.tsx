@@ -126,8 +126,8 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
   };
 
   return (
-    <div style={overlay} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={modal}>
+    <div className="admin-overlay" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="admin-modal" style={{ width: 'min(720px, 100%)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0 }}>Produtos — {tenant.nome}</h2>
           <button onClick={onClose} style={closeBtn}>
