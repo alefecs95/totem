@@ -18,7 +18,7 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
 // Rotas montadas sob /api para casar com o proxy do Vite (dev) e o Caddy (prod).
 app.get('/api/health', (_req, res) => {

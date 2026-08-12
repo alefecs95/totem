@@ -151,6 +151,21 @@ const tenantSchema = z.object({
   sumup_surcharge_enabled: z.boolean().optional(),
   sumup_debit_surcharge_percent: z.number().nonnegative().optional(),
   sumup_credit_surcharge_percent: z.number().nonnegative().optional(),
+  ficha_logo_data: z.preprocess(
+    (v) => (v === '' || v === undefined ? null : v),
+    z
+      .string()
+      .max(1_800_000)
+      .refine(
+        (v) =>
+          v.startsWith('data:image/png;base64,') ||
+          v.startsWith('data:image/jpeg;base64,') ||
+          v.startsWith('data:image/webp;base64,'),
+        'Logo deve ser PNG/JPEG/WebP em data URL'
+      )
+      .nullable()
+      .optional()
+  ),
   endereco: z.string().optional().nullable(),
   numero: z.string().optional().nullable(),
   bairro: z.string().optional().nullable(),

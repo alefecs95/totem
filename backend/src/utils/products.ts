@@ -39,5 +39,6 @@ export function stripTenantSecrets(row: Record<string, unknown>) {
   return {
     ...rest,
     portal_ativo: Boolean(portal_senha_hash),
+    ficha_logo_set: Boolean(rest.ficha_logo_data),
   };
 }

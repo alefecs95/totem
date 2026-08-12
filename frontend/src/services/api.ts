@@ -30,6 +30,7 @@ export interface TotemConfig {
     debitPercent: number;
     creditPercent: number;
   } | null;
+  fichaLogo?: string | null;
 }
 
 export function persistTotemConfig(config: TotemConfig): void {
@@ -45,7 +46,11 @@ export function persistTotemConfig(config: TotemConfig): void {
   } else {
     localStorage.removeItem('sumupSurcharge');
   }
-  // Mapa id→imprime_ficha para enriquecer o carrinho na impressão.
+  if (config.fichaLogo) {
+    localStorage.setItem('fichaLogo', config.fichaLogo);
+  } else {
+    localStorage.removeItem('fichaLogo');
+  }
   const fichaFlags: Record<string, boolean> = {};
   for (const p of config.produtos ?? []) {
     if (p.id) fichaFlags[p.id] = Boolean(p.imprime_ficha);

@@ -39,6 +39,7 @@ const emptyForm: TenantInput = {
   sumup_surcharge_enabled: false,
   sumup_debit_surcharge_percent: 0,
   sumup_credit_surcharge_percent: 0,
+  ficha_logo_data: null,
   endereco: '',
   numero: '',
   bairro: '',
@@ -332,6 +333,7 @@ export default function Tenants() {
       sumup_surcharge_enabled: Boolean(t.sumup_surcharge_enabled),
       sumup_debit_surcharge_percent: Number(t.sumup_debit_surcharge_percent ?? 0),
       sumup_credit_surcharge_percent: Number(t.sumup_credit_surcharge_percent ?? 0),
+      ficha_logo_data: t.ficha_logo_data ?? null,
       endereco: t.endereco ?? '',
       numero: t.numero ?? '',
       bairro: t.bairro ?? '',
@@ -389,8 +391,30 @@ export default function Tenants() {
 
   const setField = (
     key: keyof TenantInput,
-    value: string | number | boolean | undefined
+    value: string | number | boolean | null | undefined
   ) => setForm((prev) => ({ ...prev, [key]: value }));
+
+  const onFichaLogoSelected = (file: File | null) => {
+    if (!file) return;
+    if (!file.type.includes('png') && !file.type.includes('jpeg') && !file.type.includes('webp')) {
+      window.alert('Use uma imagem PNG (preferencial), JPEG ou WebP.');
+      return;
+    }
+    if (file.size > 700_000) {
+      window.alert('Logo muito grande. Use PNG até ~700 KB (ideal 80×25 mm / ~300×95 px).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      if (!result.startsWith('data:image/')) {
+        window.alert('Não foi possível ler a imagem.');
+        return;
+      }
+      setField('ficha_logo_data', result);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const usarLocalizacaoAtual = () => {
     setEnderecoOk('');
@@ -562,6 +586,68 @@ export default function Tenants() {
                 onChange={(e) => setField('nome', e.target.value)}
                 required
               />
+            </Field>
+
+            <Field label="Logo da ficha (PNG) — 80mm × 25mm">
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                  padding: 12,
+                  borderRadius: 10,
+                  border: '1px solid #e2e8f0',
+                  background: '#f8fafc',
+                }}
+              >
+                <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>
+                  A ficha imprime em <b>paisagem</b>: 80&nbsp;mm na horizontal ×
+                  25&nbsp;mm na vertical. A logo preenche essa área na térmica.
+                  Preferência: PNG ~300×95&nbsp;px, fundo transparente ou branco.
+                </p>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(e) =>
+                    onFichaLogoSelected(e.target.files?.[0] ?? null)
+                  }
+                />
+                {form.ficha_logo_data ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <img
+                      src={form.ficha_logo_data}
+                      alt="Prévia da logo"
+                      style={{
+                        width: 240,
+                        height: 75,
+                        objectFit: 'contain',
+                        background: '#fff',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 4,
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setField('ficha_logo_data', null)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        border: '1px solid #dc2626',
+                        background: '#fff',
+                        color: '#dc2626',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Remover logo
+                    </button>
+                  </div>
+                ) : (
+                  <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                    Nenhuma logo enviada ainda.
+                  </span>
+                )}
+              </div>
             </Field>
 
             <Field label="Responsável">

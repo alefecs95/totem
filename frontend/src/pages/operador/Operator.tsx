@@ -128,7 +128,8 @@ export default function Operator() {
     if (printTickets.length === 0) return;
     printFichasViaIframe(
       printTickets,
-      nomeFestival || localStorage.getItem('tenantName') || 'Festival'
+      nomeFestival || localStorage.getItem('tenantName') || 'Festival',
+      localStorage.getItem('fichaLogo')
     );
   }, [printTickets, nomeFestival]);
 
