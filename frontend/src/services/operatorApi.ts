@@ -87,6 +87,32 @@ export async function createManualSale(
   return data;
 }
 
+export interface OperatorSaleItem {
+  nome: string;
+  quantidade: number;
+  preco?: number;
+  subtotal?: number;
+}
+
+export interface OperatorSale {
+  id: string;
+  metodo: string;
+  status: string;
+  gateway: string;
+  valor_bruto: string | number;
+  itens: OperatorSaleItem[] | string;
+  criado_em: string;
+  totem_nome: string | null;
+}
+
+export async function getRecentSales(limit = 30): Promise<OperatorSale[]> {
+  const { data } = await portalApi.get<{ transactions: OperatorSale[] }>(
+    '/portal/transactions',
+    { params: { limit, page: 1, status: 'approved' } }
+  );
+  return data.transactions ?? [];
+}
+
 export function buildQueuedSale(
   items: CartItem[],
   total: number,

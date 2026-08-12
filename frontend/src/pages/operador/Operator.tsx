@@ -7,11 +7,56 @@ import {
   startOfflineSyncLoop,
   submitManualSale,
   subscribeOfflineSync,
+  getRecentSales,
+  type OperatorSale,
 } from '../../services/operatorApi';
 import { useCartStore, type Product } from '../../store/cartStore';
 
 function formatPreco(preco: number): string {
   return `R$ ${preco.toFixed(2).replace('.', ',')}`;
+}
+
+function formatHora(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function metodoLabel(metodo: string): string {
+  const map: Record<string, string> = {
+    dinheiro: 'Dinheiro',
+    cartao_fisico: 'Cartão físico',
+    pix: 'Pix',
+    cartao: 'Cartão',
+  };
+  return map[metodo] ?? metodo;
+}
+
+function parseItens(itens: OperatorSale['itens']): Array<{
+  nome: string;
+  quantidade: number;
+}> {
+  let list = itens;
+  if (typeof list === 'string') {
+    try {
+      list = JSON.parse(list) as OperatorSale['itens'];
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(list)) return [];
+  return list.map((i) => ({
+    nome: i.nome ?? 'Item',
+    quantidade: Number(i.quantidade) || 0,
+  }));
 }
 
 /**
@@ -44,6 +89,10 @@ export default function Operator() {
   /** Modal de dinheiro: valor recebido (centavos como string de dígitos, ex: "5000" = R$ 50,00). */
   const [cashOpen, setCashOpen] = useState(false);
   const [cashDigits, setCashDigits] = useState('');
+  const [salesOpen, setSalesOpen] = useState(false);
+  const [sales, setSales] = useState<OperatorSale[]>([]);
+  const [salesLoading, setSalesLoading] = useState(false);
+  const [salesErro, setSalesErro] = useState('');
 
   const items = useCartStore((s) => s.items);
   const addItem = useCartStore((s) => s.addItem);
@@ -74,6 +123,24 @@ export default function Operator() {
     setToast(msg);
     setErro('');
   }, []);
+
+  const carregarVendas = useCallback(async () => {
+    setSalesLoading(true);
+    setSalesErro('');
+    try {
+      const list = await getRecentSales(40);
+      setSales(list);
+    } catch {
+      setSalesErro('Não foi possível carregar as vendas.');
+    } finally {
+      setSalesLoading(false);
+    }
+  }, []);
+
+  const abrirVendas = useCallback(() => {
+    setSalesOpen(true);
+    void carregarVendas();
+  }, [carregarVendas]);
 
   const fecharDinheiro = useCallback(() => {
     setCashOpen(false);
@@ -109,6 +176,7 @@ export default function Operator() {
         const { queued } = await submitManualSale(state.items, tot, metodo);
         state.clearCart();
         fecharDinheiro();
+        if (salesOpen) void carregarVendas();
         if (metodo === 'dinheiro' && recebido != null) {
           const troco = Math.round((recebido - tot) * 100) / 100;
           flash(
@@ -131,7 +199,7 @@ export default function Operator() {
         setPagando(null);
       }
     },
-    [flash, pagando, fecharDinheiro]
+    [flash, pagando, fecharDinheiro, salesOpen, carregarVendas]
   );
 
   const confirmarDinheiro = useCallback(() => {
@@ -201,6 +269,10 @@ export default function Operator() {
   fecharDinheiroRef.current = fecharDinheiro;
   const cashOpenRef = useRef(cashOpen);
   cashOpenRef.current = cashOpen;
+  const salesOpenRef = useRef(salesOpen);
+  salesOpenRef.current = salesOpen;
+  const carregarVendasRef = useRef(carregarVendas);
+  carregarVendasRef.current = carregarVendas;
   const pixRef = useRef(pagarPix);
   pixRef.current = pagarPix;
   const cartaoRef = useRef(pagarCartaoGateway);
@@ -283,6 +355,19 @@ export default function Operator() {
           confirmarDinheiroRef.current();
           return;
         }
+        return;
+      }
+
+      if (key === 'Escape' && salesOpenRef.current) {
+        e.preventDefault();
+        setSalesOpen(false);
+        return;
+      }
+
+      if (key.toLowerCase() === 'h' && !salesOpenRef.current) {
+        e.preventDefault();
+        setSalesOpen(true);
+        void carregarVendasRef.current();
         return;
       }
 
@@ -436,6 +521,9 @@ export default function Operator() {
           </span>
         )}
 
+        <button type="button" onClick={abrirVendas} style={hdrBtn}>
+          Últimas vendas
+        </button>
         <button type="button" onClick={() => setShowHelp((v) => !v)} style={hdrBtn}>
           Atalhos
         </button>
@@ -462,6 +550,7 @@ export default function Operator() {
           <span>20 + toque = 20 un.</span>
           <span>F1–F9 produto</span>
           <span>0–9 quantidade</span>
+          <span>H últimas vendas</span>
           <span>D / Enter dinheiro</span>
           <span>F cartão físico</span>
           {pagamentos.pix && <span>P Pix</span>}
@@ -838,6 +927,100 @@ export default function Operator() {
           </div>
         </div>
       )}
+
+      {salesOpen && (
+        <div style={modalOverlay} onClick={() => setSalesOpen(false)}>
+          <div
+            style={{ ...modalCard, maxWidth: 520, maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label="Últimas vendas"
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                marginBottom: 12,
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 18 }}>Últimas vendas</div>
+                <div style={{ fontSize: 12, color: '#a8a29e' }}>
+                  Aprovadas · mais recentes primeiro
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => void carregarVendas()}
+                  style={hdrBtn}
+                  disabled={salesLoading}
+                >
+                  {salesLoading ? '...' : 'Atualizar'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSalesOpen(false)}
+                  style={hdrBtn}
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+
+            {salesErro && <div style={erroBox}>{salesErro}</div>}
+
+            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
+              {salesLoading && sales.length === 0 ? (
+                <div style={{ color: '#a8a29e', textAlign: 'center', padding: 24 }}>
+                  Carregando...
+                </div>
+              ) : sales.length === 0 ? (
+                <div style={{ color: '#a8a29e', textAlign: 'center', padding: 24 }}>
+                  Nenhuma venda aprovada ainda.
+                </div>
+              ) : (
+                sales.map((sale) => {
+                  const itens = parseItens(sale.itens);
+                  const valor = Number(sale.valor_bruto);
+                  return (
+                    <div key={sale.id} style={saleRow}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 8,
+                          marginBottom: 4,
+                        }}
+                      >
+                        <strong style={{ color: '#ea580c', fontSize: 16 }}>
+                          {formatPreco(valor)}
+                        </strong>
+                        <span style={{ fontSize: 12, color: '#a8a29e' }}>
+                          {formatHora(sale.criado_em)}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+                        {metodoLabel(sale.metodo)}
+                        {sale.totem_nome ? ` · ${sale.totem_nome}` : ''}
+                      </div>
+                      <div style={{ fontSize: 13, color: '#d6d3d1', lineHeight: 1.4 }}>
+                        {itens.length === 0
+                          ? '—'
+                          : itens
+                              .map((i) => `${i.quantidade}× ${i.nome}`)
+                              .join(' · ')}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1175,6 +1358,14 @@ const cashChip: React.CSSProperties = {
   padding: '10px 14px',
   borderRadius: 8,
   cursor: 'pointer',
+};
+
+const saleRow: React.CSSProperties = {
+  background: '#0c0a09',
+  borderRadius: 10,
+  padding: '12px 14px',
+  marginBottom: 8,
+  border: '1px solid #292524',
 };
 
 const qtyBtn: React.CSSProperties = {
