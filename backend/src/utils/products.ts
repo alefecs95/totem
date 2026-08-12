@@ -3,6 +3,22 @@ import {
   PRODUCT_CATEGORIES,
 } from './productCategories';
 
+const fichaLogoDataSchema = z.preprocess(
+  (v) => (v === '' || v === undefined ? null : v),
+  z
+    .string()
+    .max(1_800_000)
+    .refine(
+      (v) =>
+        v.startsWith('data:image/png;base64,') ||
+        v.startsWith('data:image/jpeg;base64,') ||
+        v.startsWith('data:image/webp;base64,'),
+      'Logo deve ser PNG/JPEG/WebP em data URL'
+    )
+    .nullable()
+    .optional()
+);
+
 export const productSchema = z.object({
   nome: z.string().min(1).max(100),
   preco: z.number().positive(),
@@ -16,9 +32,12 @@ export const productSchema = z.object({
   ativo: z.boolean().optional(),
   /** Se true, cada unidade da venda imprime uma ficha (página) na térmica. */
   imprime_ficha: z.boolean().optional(),
+  /** Logo individual da ficha deste produto (data URL). */
+  ficha_logo_data: fichaLogoDataSchema,
 });
 
 export function mapProductRow(row: Record<string, unknown>) {
+  const logo = (row.ficha_logo_data as string | null) || null;
   return {
     id: row.id as string,
     tenant_id: row.tenant_id as string,
@@ -30,6 +49,8 @@ export function mapProductRow(row: Record<string, unknown>) {
     ordem: row.ordem as number,
     ativo: row.ativo as boolean,
     imprime_ficha: Boolean(row.imprime_ficha),
+    ficha_logo_data: logo,
+    ficha_logo_set: Boolean(logo),
     criado_em: row.criado_em as string,
   };
 }

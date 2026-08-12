@@ -61,6 +61,7 @@ ALTER TABLE tenants ADD COLUMN IF NOT EXISTS portal_senha_hash TEXT;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS ficha_logo_data TEXT;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS categoria VARCHAR(50) NOT NULL DEFAULT 'outro';
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS imprime_ficha BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS ficha_logo_data TEXT;
 
 -- Categorias para produtos já existentes (antes da coluna categoria).
 UPDATE produtos SET categoria = 'bebida_alcoolica' WHERE categoria = 'outro' AND nome ILIKE '%cerveja%';

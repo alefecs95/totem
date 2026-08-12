@@ -44,8 +44,7 @@ export default function Success() {
 
   const imprimirFichas = () => {
     const tickets = expandFichaTickets(items);
-    const logo = localStorage.getItem('fichaLogo');
-    printFichasViaIframe(tickets, tenantName, logo);
+    printFichasViaIframe(tickets, tenantName);
     setSecondsLeft(VOLTAR_EM);
   };
 

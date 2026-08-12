@@ -30,22 +30,18 @@ function formatDataHora(date: Date): string {
 }
 
 /**
- * Ficha térmica:
- * - Largura: 100% do papel (80mm)
- * - Altura: só FICHA_ALTURA_MM (padrão 25mm)
- * - Com logo: EVENTO → LOGO → DATA/HORA
+ * Ficha térmica (logo por produto):
+ * - Com logo do produto: EVENTO → LOGO → DATA/HORA
  * - Sem logo: EVENTO → NOME PRODUTO → DATA/HORA
  */
 export function buildFichasHtml(
   tickets: FichaTicket[],
   tenantName?: string,
-  logoDataUrl?: string | null,
   printedAt: Date = new Date(),
   alturaMm: number = FICHA_ALTURA_MM
 ): string {
   const festival = (tenantName || 'FESTIVAL').trim().toUpperCase();
   const when = formatDataHora(printedAt);
-  const hasLogo = Boolean(logoDataUrl && logoDataUrl.startsWith('data:image/'));
   const h = Math.max(15, Math.min(80, alturaMm));
   const w = FICHA_LARGURA_MM;
 
@@ -54,13 +50,15 @@ export function buildFichasHtml(
       const isLast = index === tickets.length - 1;
       const nome = ticket.nome.trim().toUpperCase() || 'FICHA';
       const size = nomeFontSize(nome);
+      const logo = ticket.logo || null;
+      const hasLogo = Boolean(logo && logo.startsWith('data:image/'));
 
       if (hasLogo) {
         return `<section class="page${isLast ? ' last' : ''}">
   <div class="ticket with-logo">
     <div class="event">${escapeHtml(festival)}</div>
     <div class="logo-area">
-      <img class="logo" src="${logoDataUrl}" alt="${escapeHtml(nome)}" />
+      <img class="logo" src="${logo}" alt="${escapeHtml(nome)}" />
     </div>
     <div class="when">${escapeHtml(when)}</div>
   </div>
@@ -85,7 +83,6 @@ export function buildFichasHtml(
 <meta charset="utf-8" />
 <title>Fichas</title>
 <style>
-  /* Largura = papel 80mm (100%). Só a altura é definida pelo app. */
   @page {
     size: ${w}mm ${h}mm;
     margin: 0;
@@ -220,14 +217,13 @@ ${pages}
 export function printFichasViaIframe(
   tickets: FichaTicket[],
   tenantName?: string,
-  logoDataUrl?: string | null,
   printedAt: Date = new Date(),
   alturaMm: number = FICHA_ALTURA_MM
 ): void {
   if (tickets.length === 0) return;
 
   const h = Math.max(15, Math.min(80, alturaMm));
-  const html = buildFichasHtml(tickets, tenantName, logoDataUrl, printedAt, h);
+  const html = buildFichasHtml(tickets, tenantName, printedAt, h);
   const iframe = document.createElement('iframe');
   iframe.setAttribute('aria-hidden', 'true');
   iframe.style.cssText = `position:fixed;left:0;top:0;width:${FICHA_LARGURA_MM}mm;height:${h}mm;border:0;opacity:0;pointer-events:none;z-index:-1;`;

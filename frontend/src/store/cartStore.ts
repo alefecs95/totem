@@ -9,6 +9,8 @@ export interface Product {
   categoria: string;
   /** Se true, cada unidade imprime uma ficha na térmica. */
   imprime_ficha?: boolean;
+  /** Logo individual da ficha deste produto. */
+  ficha_logo_data?: string | null;
 }
 
 export interface CartItem extends Product {
@@ -32,6 +34,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       const qtd = Math.max(1, Math.floor(quantidade));
       const existing = state.items.find((item) => item.id === product.id);
       const imprime_ficha = Boolean(product.imprime_ficha);
+      const ficha_logo_data = product.ficha_logo_data ?? null;
       if (existing) {
         return {
           items: state.items.map((item) =>
@@ -40,6 +43,7 @@ export const useCartStore = create<CartState>((set, get) => ({
                   ...item,
                   ...product,
                   imprime_ficha,
+                  ficha_logo_data,
                   quantidade: item.quantidade + qtd,
                 }
               : item
@@ -49,7 +53,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       return {
         items: [
           ...state.items,
-          { ...product, imprime_ficha, quantidade: qtd },
+          { ...product, imprime_ficha, ficha_logo_data, quantidade: qtd },
         ],
       };
     }),

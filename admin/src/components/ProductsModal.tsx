@@ -4,7 +4,6 @@ import {
   deleteProduct,
   getProducts,
   updateProduct,
-  updateTenant,
   type Product,
   type ProductInput,
   type Tenant,
@@ -14,15 +13,9 @@ import { formatBRL } from '../utils/format';
 interface ProductsModalProps {
   tenant: Tenant;
   onClose: () => void;
-  /** Atualiza o tenant no pai após salvar a logo. */
-  onTenantUpdated?: (tenant: Tenant) => void;
 }
 
-export default function ProductsModal({
-  tenant,
-  onClose,
-  onTenantUpdated,
-}: ProductsModalProps) {
+export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
   const [produtos, setProdutos] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [nome, setNome] = useState('');
@@ -31,13 +24,10 @@ export default function ProductsModal({
   const [cor, setCor] = useState('#FF6B00');
   const [categoria, setCategoria] = useState('outro');
   const [imprimeFicha, setImprimeFicha] = useState(false);
+  const [logoData, setLogoData] = useState<string | null>(null);
+  const [logoMsg, setLogoMsg] = useState('');
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [logoData, setLogoData] = useState<string | null>(
-    tenant.ficha_logo_data ?? null
-  );
-  const [savingLogo, setSavingLogo] = useState(false);
-  const [logoMsg, setLogoMsg] = useState('');
 
   const carregar = () => {
     setLoading(true);
@@ -48,10 +38,6 @@ export default function ProductsModal({
 
   useEffect(carregar, [tenant.id]);
 
-  useEffect(() => {
-    setLogoData(tenant.ficha_logo_data ?? null);
-  }, [tenant.id, tenant.ficha_logo_data]);
-
   const limparForm = () => {
     setNome('');
     setPreco('');
@@ -59,48 +45,9 @@ export default function ProductsModal({
     setCor('#FF6B00');
     setCategoria('outro');
     setImprimeFicha(false);
+    setLogoData(null);
+    setLogoMsg('');
     setEditingId(null);
-  };
-
-  const salvar = async (e: FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    const input: ProductInput = {
-      nome,
-      preco: Number(preco),
-      categoria,
-      emoji,
-      cor,
-      ativo: true,
-      imprime_ficha: imprimeFicha,
-    };
-    try {
-      if (editingId) {
-        await updateProduct(tenant.id, editingId, input);
-      } else {
-        await createProduct(tenant.id, input);
-      }
-      limparForm();
-      carregar();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const editar = (p: Product) => {
-    setEditingId(p.id);
-    setNome(p.nome);
-    setPreco(String(p.preco));
-    setEmoji(p.emoji);
-    setCor(p.cor);
-    setCategoria(p.categoria ?? 'outro');
-    setImprimeFicha(Boolean(p.imprime_ficha));
-  };
-
-  const desativar = async (p: Product) => {
-    if (!window.confirm(`Desativar "${p.nome}"?`)) return;
-    await deleteProduct(tenant.id, p.id);
-    carregar();
   };
 
   const onLogoSelected = (file: File | null) => {
@@ -125,26 +72,53 @@ export default function ProductsModal({
         return;
       }
       setLogoData(result);
-      setLogoMsg('Prévia pronta — clique em Salvar logo.');
+      setLogoMsg('Prévia pronta — salve o produto para gravar a logo.');
     };
     reader.readAsDataURL(file);
   };
 
-  const salvarLogo = async () => {
-    setSavingLogo(true);
-    setLogoMsg('');
+  const salvar = async (e: FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    const input: ProductInput = {
+      nome,
+      preco: Number(preco),
+      categoria,
+      emoji,
+      cor,
+      ativo: true,
+      imprime_ficha: imprimeFicha,
+      ficha_logo_data: logoData,
+    };
     try {
-      const { tenant: updated } = await updateTenant(tenant.id, {
-        ficha_logo_data: logoData,
-      });
-      onTenantUpdated?.(updated);
-      setLogoData(updated.ficha_logo_data ?? logoData);
-      setLogoMsg(logoData ? 'Logo salva!' : 'Logo removida.');
-    } catch {
-      setLogoMsg('Falha ao salvar a logo. Redeploy da API/admin se a opção for nova.');
+      if (editingId) {
+        await updateProduct(tenant.id, editingId, input);
+      } else {
+        await createProduct(tenant.id, input);
+      }
+      limparForm();
+      carregar();
     } finally {
-      setSavingLogo(false);
+      setSaving(false);
     }
+  };
+
+  const editar = (p: Product) => {
+    setEditingId(p.id);
+    setNome(p.nome);
+    setPreco(String(p.preco));
+    setEmoji(p.emoji);
+    setCor(p.cor);
+    setCategoria(p.categoria ?? 'outro');
+    setImprimeFicha(Boolean(p.imprime_ficha));
+    setLogoData(p.ficha_logo_data ?? null);
+    setLogoMsg('');
+  };
+
+  const desativar = async (p: Product) => {
+    if (!window.confirm(`Desativar "${p.nome}"?`)) return;
+    await deleteProduct(tenant.id, p.id);
+    carregar();
   };
 
   return (
@@ -157,139 +131,132 @@ export default function ProductsModal({
           </button>
         </div>
 
-        <div style={logoBox}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>
-            Logo da ficha (PNG) — 80 mm × 25 mm
-          </div>
-          <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>
-            Impressa em paisagem na térmica: <b>80 mm na horizontal</b> ×{' '}
-            <b>25 mm na vertical</b>. A logo preenche essa área. Preferência: PNG
-            ~300×95 px.
-          </p>
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            onChange={(e) => onLogoSelected(e.target.files?.[0] ?? null)}
-          />
-          {logoData ? (
-            <img
-              src={logoData}
-              alt="Prévia logo ficha"
-              style={{
-                width: 320,
-                height: 100,
-                objectFit: 'contain',
-                background: '#fff',
-                border: '1px solid #cbd5e1',
-                borderRadius: 6,
-              }}
-            />
-          ) : (
-            <span style={{ fontSize: 12, color: '#94a3b8' }}>
-              Nenhuma logo enviada.
-            </span>
-          )}
+        <form
+          onSubmit={salvar}
+          style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+        >
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={salvarLogo}
-              disabled={savingLogo}
-              style={btn}
+            <input
+              style={{ ...input, flex: 2, minWidth: 140 }}
+              placeholder="Nome"
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              required
+            />
+            <input
+              style={{ ...input, width: 90 }}
+              type="number"
+              step="0.01"
+              min="0.01"
+              placeholder="Preço"
+              value={preco}
+              onChange={(e) => setPreco(e.target.value)}
+              required
+            />
+            <select
+              style={{ ...input, minWidth: 160 }}
+              value={categoria}
+              onChange={(e) => setCategoria(e.target.value)}
+              required
             >
-              {savingLogo ? 'Salvando...' : 'Salvar logo'}
+              <option value="bebida_alcoolica">Bebida alcoólica</option>
+              <option value="bebida_nao_alcoolica">Bebida não alcoólica</option>
+              <option value="comida">Comida</option>
+              <option value="outro">Outro</option>
+            </select>
+            <input
+              style={{ ...input, width: 50 }}
+              value={emoji}
+              onChange={(e) => setEmoji(e.target.value)}
+            />
+            <input
+              style={{ ...input, width: 50, padding: 4 }}
+              type="color"
+              value={cor}
+              onChange={(e) => setCor(e.target.value)}
+            />
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 13,
+                fontWeight: 600,
+                color: '#334155',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={imprimeFicha}
+                onChange={(e) => setImprimeFicha(e.target.checked)}
+              />
+              Imprime ficha
+            </label>
+          </div>
+
+          {imprimeFicha && (
+            <div style={logoBox}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>
+                Logo deste produto na ficha (individual)
+              </div>
+              <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>
+                Cada produto tem a própria arte. Sem logo, a ficha mostra o nome
+                do produto. PNG ~300×95 px.
+              </p>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(e) => onLogoSelected(e.target.files?.[0] ?? null)}
+              />
+              {logoData ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <img
+                    src={logoData}
+                    alt="Prévia logo do produto"
+                    style={{
+                      width: 240,
+                      height: 75,
+                      objectFit: 'contain',
+                      background: '#fff',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 6,
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLogoData(null);
+                      setLogoMsg('Logo será removida ao salvar o produto.');
+                    }}
+                    style={btnSecondary}
+                  >
+                    Remover logo
+                  </button>
+                </div>
+              ) : (
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                  Nenhuma logo neste produto.
+                </span>
+              )}
+              {logoMsg && (
+                <p style={{ margin: 0, fontSize: 12, color: '#15803d' }}>
+                  {logoMsg}
+                </p>
+              )}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="submit" disabled={saving} style={btn}>
+              {saving ? '...' : editingId ? 'Atualizar' : 'Adicionar'}
             </button>
-            {logoData && (
-              <button
-                type="button"
-                onClick={() => {
-                  setLogoData(null);
-                  setLogoMsg('Clique em Salvar logo para remover.');
-                }}
-                style={btnSecondary}
-              >
-                Remover
+            {editingId && (
+              <button type="button" onClick={limparForm} style={btnSecondary}>
+                Cancelar
               </button>
             )}
           </div>
-          {logoMsg && (
-            <p
-              style={{
-                margin: 0,
-                fontSize: 13,
-                color: logoMsg.includes('Falha') ? '#dc2626' : '#15803d',
-              }}
-            >
-              {logoMsg}
-            </p>
-          )}
-        </div>
-
-        <form onSubmit={salvar} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <input
-            style={{ ...input, flex: 2, minWidth: 140 }}
-            placeholder="Nome"
-            value={nome}
-            onChange={(e) => setNome(e.target.value)}
-            required
-          />
-          <input
-            style={{ ...input, width: 90 }}
-            type="number"
-            step="0.01"
-            min="0.01"
-            placeholder="Preço"
-            value={preco}
-            onChange={(e) => setPreco(e.target.value)}
-            required
-          />
-          <select
-            style={{ ...input, minWidth: 160 }}
-            value={categoria}
-            onChange={(e) => setCategoria(e.target.value)}
-            required
-          >
-            <option value="bebida_alcoolica">Bebida alcoólica</option>
-            <option value="bebida_nao_alcoolica">Bebida não alcoólica</option>
-            <option value="comida">Comida</option>
-            <option value="outro">Outro</option>
-          </select>
-          <input
-            style={{ ...input, width: 50 }}
-            value={emoji}
-            onChange={(e) => setEmoji(e.target.value)}
-          />
-          <input
-            style={{ ...input, width: 50, padding: 4 }}
-            type="color"
-            value={cor}
-            onChange={(e) => setCor(e.target.value)}
-          />
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              fontSize: 13,
-              fontWeight: 600,
-              color: '#334155',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={imprimeFicha}
-              onChange={(e) => setImprimeFicha(e.target.checked)}
-            />
-            Imprime ficha
-          </label>
-          <button type="submit" disabled={saving} style={btn}>
-            {saving ? '...' : editingId ? 'Atualizar' : 'Adicionar'}
-          </button>
-          {editingId && (
-            <button type="button" onClick={limparForm} style={btnSecondary}>
-              Cancelar
-            </button>
-          )}
         </form>
 
         {loading ? (
@@ -302,6 +269,7 @@ export default function ProductsModal({
                 <th style={th}>Nome</th>
                 <th style={th}>Preço</th>
                 <th style={th}>Ficha</th>
+                <th style={th}>Logo</th>
                 <th style={th}>Status</th>
                 <th style={th}></th>
               </tr>
@@ -315,6 +283,22 @@ export default function ProductsModal({
                   <td style={td}>{p.nome}</td>
                   <td style={td}>{formatBRL(p.preco)}</td>
                   <td style={td}>{p.imprime_ficha ? 'Sim' : '—'}</td>
+                  <td style={td}>
+                    {p.ficha_logo_data ? (
+                      <img
+                        src={p.ficha_logo_data}
+                        alt=""
+                        style={{
+                          width: 56,
+                          height: 18,
+                          objectFit: 'contain',
+                          verticalAlign: 'middle',
+                        }}
+                      />
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td style={td}>{p.ativo ? 'Ativo' : 'Inativo'}</td>
                   <td style={{ ...td, textAlign: 'right' }}>
                     <button onClick={() => editar(p)} style={linkBtn}>
@@ -354,7 +338,7 @@ const modal: React.CSSProperties = {
   background: '#fff',
   borderRadius: 12,
   padding: 24,
-  width: 720,
+  width: 780,
   maxWidth: '100%',
   maxHeight: '90vh',
   overflow: 'auto',
@@ -367,7 +351,7 @@ const logoBox: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 8,
-  padding: 14,
+  padding: 12,
   borderRadius: 10,
   border: '1px solid #fcd34d',
   background: '#fffbeb',

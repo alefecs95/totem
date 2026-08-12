@@ -30,7 +30,6 @@ export interface TotemConfig {
     debitPercent: number;
     creditPercent: number;
   } | null;
-  fichaLogo?: string | null;
 }
 
 export function persistTotemConfig(config: TotemConfig): void {
@@ -46,16 +45,18 @@ export function persistTotemConfig(config: TotemConfig): void {
   } else {
     localStorage.removeItem('sumupSurcharge');
   }
-  if (config.fichaLogo) {
-    localStorage.setItem('fichaLogo', config.fichaLogo);
-  } else {
-    localStorage.removeItem('fichaLogo');
-  }
+  localStorage.removeItem('fichaLogo');
   const fichaFlags: Record<string, boolean> = {};
+  const fichaLogos: Record<string, string> = {};
   for (const p of config.produtos ?? []) {
-    if (p.id) fichaFlags[p.id] = Boolean(p.imprime_ficha);
+    if (!p.id) continue;
+    fichaFlags[p.id] = Boolean(p.imprime_ficha);
+    if (p.ficha_logo_data && p.ficha_logo_data.startsWith('data:image/')) {
+      fichaLogos[p.id] = p.ficha_logo_data;
+    }
   }
   localStorage.setItem('productFichaFlags', JSON.stringify(fichaFlags));
+  localStorage.setItem('productFichaLogos', JSON.stringify(fichaLogos));
 }
 
 export interface CardPaymentResponse {

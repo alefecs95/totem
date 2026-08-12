@@ -29,6 +29,7 @@ const emptyForm: ProductInput = {
   cor: '#FF6B00',
   ativo: true,
   imprime_ficha: false,
+  ficha_logo_data: null,
 };
 
 export default function Products() {
@@ -121,6 +122,7 @@ export default function Products() {
       cor: p.cor,
       ativo: p.ativo,
       imprime_ficha: Boolean(p.imprime_ficha),
+      ficha_logo_data: p.ficha_logo_data ?? null,
     });
     setFormErro('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -219,6 +221,73 @@ export default function Products() {
           />
           Imprime ficha (1 unidade = 1 página na térmica 80mm)
         </label>
+
+        {form.imprime_ficha && (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              padding: 12,
+              borderRadius: 10,
+              border: '1px solid #fcd34d',
+              background: '#fffbeb',
+            }}
+          >
+            <strong style={{ fontSize: 13 }}>Logo deste produto na ficha</strong>
+            <span style={{ fontSize: 12, color: '#78716c' }}>
+              Individual por produto. Sem logo, imprime o nome do produto.
+            </span>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (file.size > 700_000) {
+                  setFormErro('Logo muito grande (máx. ~700 KB).');
+                  return;
+                }
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const result = String(reader.result || '');
+                  if (!result.startsWith('data:image/')) {
+                    setFormErro('Não foi possível ler a imagem.');
+                    return;
+                  }
+                  setForm((prev) => ({ ...prev, ficha_logo_data: result }));
+                  setFormErro('');
+                };
+                reader.readAsDataURL(file);
+              }}
+            />
+            {form.ficha_logo_data ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <img
+                  src={form.ficha_logo_data}
+                  alt="Prévia"
+                  style={{
+                    width: 200,
+                    height: 62,
+                    objectFit: 'contain',
+                    background: '#fff',
+                    border: '1px solid #e7e5e4',
+                    borderRadius: 6,
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm((prev) => ({ ...prev, ficha_logo_data: null }))
+                  }
+                  style={btnSecondary}
+                >
+                  Remover logo
+                </button>
+              </div>
+            ) : null}
+          </div>
+        )}
 
         <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
