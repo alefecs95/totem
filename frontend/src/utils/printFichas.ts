@@ -145,9 +145,7 @@ async function renderFichaBitmap(
 }
 
 /**
- * HTML de UMA ficha = UMA página 80×35.
- * O cortador POS ("After one page") só age por job/página real do spooler;
- * vários <section> no mesmo HTML o Chrome/driver costuma fundir em 1 página.
+ * HTML de UMA ficha = UMA página 80×35 (modo corte com kiosk silencioso).
  */
 function buildSingleFichaHtml(pngDataUrl: string): string {
   const w = FICHA_LARGURA_MM;
@@ -179,15 +177,7 @@ function buildSingleFichaHtml(pngDataUrl: string): string {
     display: block !important;
     width: ${w}mm !important;
     height: ${h}mm !important;
-    max-width: ${w}mm !important;
-    max-height: ${h}mm !important;
     object-fit: fill !important;
-  }
-  @media print {
-    html, body, img.ficha {
-      width: ${w}mm !important;
-      height: ${h}mm !important;
-    }
   }
 </style>
 </head>
@@ -197,12 +187,99 @@ function buildSingleFichaHtml(pngDataUrl: string): string {
 </html>`;
 }
 
+/**
+ * HTML com N fichas (1 confirmação no Chrome).
+ * page-break ajuda se o driver respeitar; senão corta só no fim.
+ */
+function buildBatchFichasHtml(pageImages: string[]): string {
+  const w = FICHA_LARGURA_MM;
+  const h = FICHA_ALTURA_MM;
+  const totalH = h * Math.max(1, pageImages.length);
+
+  const pages = pageImages
+    .map((src, index) => {
+      const isLast = index === pageImages.length - 1;
+      return `<section class="page${isLast ? ' last' : ''}">
+  <img class="ficha" width="${PX_W}" height="${PX_H}" src="${src}" alt="Ficha ${index + 1}" />
+</section>`;
+    })
+    .join('\n');
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Fichas</title>
+<style>
+  @page {
+    size: ${w}mm ${h}mm;
+    margin: 0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: ${w}mm;
+    height: auto;
+    min-height: ${totalH}mm;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  .page {
+    display: block;
+    width: ${w}mm;
+    height: ${h}mm;
+    min-height: ${h}mm;
+    max-height: ${h}mm;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .page.last {
+    page-break-after: auto;
+    break-after: auto;
+  }
+  .page + .page {
+    page-break-before: always;
+    break-before: page;
+  }
+  img.ficha {
+    display: block !important;
+    width: ${w}mm !important;
+    height: ${h}mm !important;
+    object-fit: fill !important;
+  }
+  @media print {
+    .page {
+      width: ${w}mm !important;
+      height: ${h}mm !important;
+      page-break-after: always !important;
+      break-after: page !important;
+    }
+    .page.last {
+      page-break-after: auto !important;
+      break-after: auto !important;
+    }
+  }
+</style>
+</head>
+<body>
+${pages}
+</body>
+</html>`;
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-/** Imprime um HTML de 1 página e espera o diálogo fechar (afterprint). */
-function printOnePageHtml(html: string): Promise<void> {
+function printHtmlOnce(html: string, frameHeightMm: number): Promise<void> {
   return new Promise((resolve) => {
     const iframe = document.createElement('iframe');
     iframe.setAttribute('aria-hidden', 'true');
@@ -211,7 +288,7 @@ function printOnePageHtml(html: string): Promise<void> {
       'left:0',
       'top:0',
       `width:${FICHA_LARGURA_MM}mm`,
-      `height:${FICHA_ALTURA_MM}mm`,
+      `height:${frameHeightMm}mm`,
       'border:0',
       'opacity:0.01',
       'pointer-events:none',
@@ -272,13 +349,12 @@ function printOnePageHtml(html: string): Promise<void> {
       } catch {
         finish();
       }
-      // Segurança
       window.setTimeout(finish, 180_000);
     };
 
     window.setTimeout(() => {
       void run();
-    }, 200);
+    }, 250);
   });
 }
 
@@ -300,9 +376,10 @@ export function buildFichasHtml(
 }
 
 /**
- * Impressão com corte: 1 ficha = 1 job = 1 página 80×35.
- * Com “Cutting: After one page” no POS80, corta a cada ficha.
- * (Várias fichas no mesmo HTML o Chrome funde numa página só — sem corte.)
+ * Padrão: 1 diálogo só (todas as fichas no mesmo job) — operador confirma 1x.
+ *
+ * Corte por ficha sem confirmar N vezes: só com Chrome em modo silencioso
+ * (`--kiosk-printing`) + localStorage fichaPrintCutEach=1.
  */
 export function printFichasViaIframe(
   tickets: FichaTicket[],
@@ -314,6 +391,7 @@ export function printFichasViaIframe(
 
   const festival = (tenantName || 'FESTIVAL').trim().toUpperCase();
   const when = formatDataHora(printedAt);
+  const cutEach = localStorage.getItem('fichaPrintCutEach') === '1';
 
   void (async () => {
     const pageImages: string[] = [];
@@ -327,9 +405,21 @@ export function printFichasViaIframe(
       }
     }
 
-    for (let i = 0; i < pageImages.length; i += 1) {
-      await printOnePageHtml(buildSingleFichaHtml(pageImages[i]));
-      if (i < pageImages.length - 1) await sleep(500);
+    if (cutEach) {
+      // Requer --kiosk-printing; senão o operador confirma cada ficha.
+      for (let i = 0; i < pageImages.length; i += 1) {
+        await printHtmlOnce(
+          buildSingleFichaHtml(pageImages[i]),
+          FICHA_ALTURA_MM
+        );
+        if (i < pageImages.length - 1) await sleep(400);
+      }
+      return;
     }
+
+    await printHtmlOnce(
+      buildBatchFichasHtml(pageImages),
+      FICHA_ALTURA_MM * pageImages.length
+    );
   })();
 }
