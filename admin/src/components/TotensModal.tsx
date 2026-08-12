@@ -84,8 +84,8 @@ export default function TotensModal({ tenant, onClose }: TotensModalProps) {
   };
 
   return (
-    <div style={overlay} onClick={onClose}>
-      <div style={modal} onClick={(e) => e.stopPropagation()}>
+    <div className="admin-overlay" onClick={onClose}>
+      <div className="admin-modal" style={{ width: 'min(640px, 100%)' }} onClick={(e) => e.stopPropagation()}>
         <div
           style={{
             display: 'flex',
