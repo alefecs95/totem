@@ -49,8 +49,10 @@ router.post('/login', async (req, res) => {
   }
 
   const { email, senha, mode } = parsed.data;
+  const emailNorm = email.trim().toLowerCase();
 
   try {
+    // Aceita e-mail do portal OU do operador para achar o tenant.
     const result = await query<{
       id: string;
       nome: string;
@@ -60,21 +62,12 @@ router.post('/login', async (req, res) => {
       operador_senha_hash: string | null;
       ativo: boolean;
     }>(
-      mode === 'operador'
-        ? `SELECT id, nome, email, operador_email, portal_senha_hash, operador_senha_hash, ativo
-           FROM tenants
-           WHERE ativo = true
-             AND (
-               (operador_email IS NOT NULL AND TRIM(operador_email) <> '' AND LOWER(operador_email) = LOWER($1))
-               OR
-               ((operador_email IS NULL OR TRIM(operador_email) = '') AND LOWER(email) = LOWER($1))
-             )
-           LIMIT 1`
-        : `SELECT id, nome, email, operador_email, portal_senha_hash, operador_senha_hash, ativo
-           FROM tenants
-           WHERE LOWER(email) = LOWER($1)
-           LIMIT 1`,
-      [email]
+      `SELECT id, nome, email, operador_email, portal_senha_hash, operador_senha_hash, ativo
+       FROM tenants
+       WHERE LOWER(TRIM(email)) = $1
+          OR (operador_email IS NOT NULL AND TRIM(operador_email) <> '' AND LOWER(TRIM(operador_email)) = $1)
+       LIMIT 1`,
+      [emailNorm]
     );
 
     const tenant = result.rows[0];
@@ -83,19 +76,32 @@ router.post('/login', async (req, res) => {
       return;
     }
 
+    // Portal exige senha do portal; operador usa senha de operador (fallback portal).
     const hash =
       mode === 'operador'
         ? tenant.operador_senha_hash || tenant.portal_senha_hash
         : tenant.portal_senha_hash;
 
     if (!hash) {
-      res.status(401).json({ error: 'invalid_credentials' });
+      res.status(401).json({
+        error: 'invalid_credentials',
+        detalhe:
+          mode === 'operador'
+            ? 'Senha do operador nao configurada. Redefina no super admin.'
+            : 'Senha do portal nao configurada. Redefina no super admin.',
+      });
       return;
     }
 
     const ok = await bcrypt.compare(senha, hash);
     if (!ok) {
-      res.status(401).json({ error: 'invalid_credentials' });
+      res.status(401).json({
+        error: 'invalid_credentials',
+        detalhe:
+          mode === 'operador'
+            ? 'Senha incorreta para o perfil OPERADOR.'
+            : 'Senha incorreta para o perfil PORTAL (adm do evento).',
+      });
       return;
     }
 

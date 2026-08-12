@@ -17,17 +17,20 @@ export default function OperatorLogin() {
       await portalLogin(email.trim(), senha);
       navigate('/operador', { replace: true });
     } catch (err: unknown) {
-      const status = (err as { response?: { status?: number; data?: { error?: string } } })
+      const status = (err as { response?: { status?: number; data?: { error?: string; detalhe?: string } } })
         ?.response?.status;
       const code = (err as { response?: { data?: { error?: string } } })?.response?.data
         ?.error;
+      const detalhe = (err as { response?: { data?: { detalhe?: string } } })?.response?.data
+        ?.detalhe;
       if (status === 400) {
         setErro(
           'Requisição inválida (verifique e-mail). Se persistir, limpe cookies do site e tente de novo.'
         );
       } else if (status === 401 || code === 'invalid_credentials') {
         setErro(
-          'E-mail ou senha inválidos. Use o e-mail/senha do operador (não o do portal, se forem diferentes).'
+          detalhe ||
+            'E-mail ou senha inválidos. Perfil OPERADOR: use a senha do operador (botão Senha operador no super admin).'
         );
       } else {
         setErro('Não foi possível entrar. Verifique a conexão e tente novamente.');

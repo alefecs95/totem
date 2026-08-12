@@ -16,8 +16,14 @@ export default function Login() {
     try {
       await login(email, senha);
       navigate('/dashboard');
-    } catch {
-      setErro('E-mail ou senha inválidos. Peça ao administrador a senha do portal.');
+    } catch (err: unknown) {
+      const detalhe = (
+        err as { response?: { data?: { detalhe?: string } } }
+      )?.response?.data?.detalhe;
+      setErro(
+        detalhe ||
+          'E-mail ou senha inválidos. Use a senha do PORTAL (adm do evento), não a do operador.'
+      );
     } finally {
       setLoading(false);
     }

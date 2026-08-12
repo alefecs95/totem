@@ -65,7 +65,7 @@ UPDATE tenants
   WHERE operador_senha_hash IS NULL AND portal_senha_hash IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS tenants_operador_email_uidx
   ON tenants (LOWER(operador_email))
-  WHERE operador_email IS NOT NULL AND TRIM(operador_email) <> '';
+  WHERE operador_email IS NOT NULL AND operador_email <> '';
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS ficha_logo_data TEXT;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS categoria VARCHAR(50) NOT NULL DEFAULT 'outro';
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS imprime_ficha BOOLEAN NOT NULL DEFAULT false;
