@@ -10,10 +10,10 @@ function escapeHtml(value: string): string {
 
 function nomeFontSize(nome: string): string {
   const len = nome.trim().length;
-  if (len <= 10) return '11px';
-  if (len <= 16) return '9px';
-  if (len <= 22) return '8px';
-  return '7px';
+  if (len <= 10) return '12px';
+  if (len <= 16) return '10px';
+  if (len <= 22) return '8.5px';
+  return '7.5px';
 }
 
 function formatDataHora(date: Date): string {
@@ -26,9 +26,9 @@ function formatDataHora(date: Date): string {
 }
 
 /**
- * Ficha 80mm × 25mm — ocupa 100% da área
- * - Com logo: logo em cima (preenche) + tarja preta com nome do produto
- * - Sem logo: evento / nome produto / data-hora
+ * Ficha 80mm × 25mm
+ * - Com logo: EVENTO → LOGO → DATA/HORA (sem tarja de produto)
+ * - Sem logo: EVENTO → NOME PRODUTO → DATA/HORA
  */
 export function buildFichasHtml(
   tickets: FichaTicket[],
@@ -49,12 +49,11 @@ export function buildFichasHtml(
       if (hasLogo) {
         return `<section class="page${isLast ? ' last' : ''}">
   <div class="ticket with-logo">
+    <div class="event">${escapeHtml(festival)}</div>
     <div class="logo-area">
       <img class="logo" src="${logoDataUrl}" alt="${escapeHtml(nome)}" />
     </div>
-    <div class="bar">
-      <span class="nome" style="font-size:${size}">${escapeHtml(nome)}</span>
-    </div>
+    <div class="when">${escapeHtml(when)}</div>
   </div>
 </section>`;
       }
@@ -116,70 +115,15 @@ export function buildFichasHtml(
     width: 80mm !important;
     height: 25mm !important;
     margin: 0 !important;
-    padding: 0 !important;
+    padding: 0.8mm 2mm;
     overflow: hidden;
-    position: relative;
-  }
-
-  /* Com logo: logo preenche tudo acima da tarja */
-  .with-logo {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .logo-area {
-    flex: 1 1 auto;
-    width: 80mm;
-    height: 16mm;
-    min-height: 16mm;
-    max-height: 16mm;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #fff;
-    overflow: hidden;
-  }
-
-  .logo {
-    width: 80mm;
-    height: 16mm;
-    object-fit: contain;
-    object-position: center;
-    display: block;
-  }
-
-  .bar {
-    flex: 0 0 9mm;
-    width: 80mm;
-    height: 9mm;
-    background: #000 !important;
-    color: #fff !important;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 2mm;
-  }
-
-  .bar .nome {
-    font-family: Arial, Helvetica, sans-serif;
-    font-weight: 900;
-    letter-spacing: 0.6px;
-    text-align: center;
-    text-transform: uppercase;
-    line-height: 1.05;
-    word-break: break-word;
-    color: #fff !important;
-  }
-
-  /* Sem logo: evento / produto / data — preenche 80×25 */
-  .no-logo {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding: 1.5mm 2.5mm;
   }
 
-  .no-logo .event {
+  .event {
+    flex: 0 0 auto;
     font-family: Arial, Helvetica, sans-serif;
     font-size: 6.5px;
     font-weight: 800;
@@ -189,13 +133,48 @@ export function buildFichasHtml(
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    line-height: 1.2;
   }
 
-  .no-logo .nome-block {
-    flex: 1;
+  .when {
+    flex: 0 0 auto;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 6.5px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  /* Com logo: EVENTO / LOGO / DATA */
+  .with-logo .logo-area {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
+    margin: 0.4mm 0;
+    overflow: hidden;
+  }
+
+  .with-logo .logo {
+    width: 100%;
+    height: 100%;
+    max-height: 16mm;
+    object-fit: contain;
+    object-position: center;
+    display: block;
+  }
+
+  /* Sem logo: EVENTO / PRODUTO / DATA */
+  .no-logo .nome-block {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0.4mm 0;
   }
 
   .no-logo .nome {
@@ -209,14 +188,7 @@ export function buildFichasHtml(
     width: 100%;
     background: #000;
     color: #fff;
-    padding: 2mm 2.5mm;
-  }
-
-  .no-logo .when {
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 6.5px;
-    font-weight: 700;
-    text-align: center;
+    padding: 1.8mm 2mm;
   }
 
   @media print {
@@ -224,7 +196,6 @@ export function buildFichasHtml(
       width: 80mm !important;
       height: 25mm !important;
       margin: 0 !important;
-      padding: 0 !important;
     }
   }
 </style>
