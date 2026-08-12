@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { createCardPayment, getConfig } from '../../services/api';
+import { createCardPayment, getConfig, persistTotemConfig } from '../../services/api';
+import {
+  computeCardSurchargeForCardType,
+  formatSurchargePercent,
+  isSumupGateway,
+  readSumupSurchargeConfig,
+  type CardType,
+} from '../../utils/cardSurcharge';
 import {
   isOperadorLoggedIn,
   operadorLogout,
@@ -93,6 +100,7 @@ export default function Operator() {
   const [sales, setSales] = useState<OperatorSale[]>([]);
   const [salesLoading, setSalesLoading] = useState(false);
   const [salesErro, setSalesErro] = useState('');
+  const [cardPickerOpen, setCardPickerOpen] = useState(false);
 
   const items = useCartStore((s) => s.items);
   const addItem = useCartStore((s) => s.addItem);
@@ -103,6 +111,23 @@ export default function Operator() {
 
   const total = getTotal();
   const totalItems = getTotalItems();
+  const sumupSurcharge = readSumupSurchargeConfig();
+  const debitPreview =
+    cardPickerOpen && sumupSurcharge?.enabled
+      ? computeCardSurchargeForCardType({
+          netAmount: total,
+          config: sumupSurcharge,
+          cardType: 'debit',
+        })
+      : null;
+  const creditPreview =
+    cardPickerOpen && sumupSurcharge?.enabled
+      ? computeCardSurchargeForCardType({
+          netAmount: total,
+          config: sumupSurcharge,
+          cardType: 'credit',
+        })
+      : null;
   const pendingQty = Math.min(
     999,
     Math.max(1, qtyDigits === '' ? 1 : Number.parseInt(qtyDigits, 10) || 1)
@@ -224,36 +249,52 @@ export default function Operator() {
     });
   }, [navigate, pagando]);
 
-  const pagarCartaoGateway = useCallback(async () => {
-    const state = useCartStore.getState();
-    const tid = localStorage.getItem('tenantId') ?? '';
-    if (state.items.length === 0 || !tid || pagando) return;
-    setPagando('gateway');
-    setErro('');
-    try {
-      const payment = await createCardPayment(
-        state.items,
-        state.getTotal(),
-        tid
-      );
-      navigate('/card', {
-        state: {
-          items: [...state.items],
-          total: state.getTotal(),
-          intentId: payment.intentId,
-          transactionId: payment.transactionId,
-          returnTo: '/operador',
-        },
-      });
-    } catch (err: unknown) {
-      const data = (
-        err as { response?: { data?: { detalhe?: string } } }
-      )?.response?.data;
-      setErro(data?.detalhe ?? 'Falha no leitor. Tente de novo.');
-    } finally {
-      setPagando(null);
+  const pagarCartaoGateway = useCallback(
+    async (cardType?: CardType) => {
+      const state = useCartStore.getState();
+      const tid = localStorage.getItem('tenantId') ?? '';
+      if (state.items.length === 0 || !tid || pagando) return;
+      setPagando('gateway');
+      setErro('');
+      setCardPickerOpen(false);
+      try {
+        const netTotal = state.getTotal();
+        const payment = await createCardPayment(
+          state.items,
+          netTotal,
+          tid,
+          cardType
+        );
+        navigate('/card', {
+          state: {
+            items: [...state.items],
+            total: netTotal,
+            chargedAmount: payment.chargedAmount ?? netTotal,
+            intentId: payment.intentId,
+            transactionId: payment.transactionId,
+            returnTo: '/operador',
+          },
+        });
+      } catch (err: unknown) {
+        const data = (
+          err as { response?: { data?: { detalhe?: string } } }
+        )?.response?.data;
+        setErro(data?.detalhe ?? 'Falha no leitor. Tente de novo.');
+      } finally {
+        setPagando(null);
+      }
+    },
+    [navigate, pagando]
+  );
+
+  const iniciarCartaoGateway = useCallback(() => {
+    const surcharge = readSumupSurchargeConfig();
+    if (isSumupGateway() && surcharge?.enabled) {
+      setCardPickerOpen(true);
+      return;
     }
-  }, [navigate, pagando]);
+    void pagarCartaoGateway();
+  }, [pagarCartaoGateway]);
 
   const produtosRef = useRef(produtos);
   produtosRef.current = produtos;
@@ -275,8 +316,8 @@ export default function Operator() {
   carregarVendasRef.current = carregarVendas;
   const pixRef = useRef(pagarPix);
   pixRef.current = pagarPix;
-  const cartaoRef = useRef(pagarCartaoGateway);
-  cartaoRef.current = pagarCartaoGateway;
+  const cartaoRef = useRef(iniciarCartaoGateway);
+  cartaoRef.current = iniciarCartaoGateway;
   const qtyDigitsRef = useRef(qtyDigits);
   qtyDigitsRef.current = qtyDigits;
 
@@ -303,10 +344,8 @@ export default function Operator() {
       .then((cfg) => {
         setNomeFestival(cfg.nomeFestival);
         setProdutos(cfg.produtos);
-        if (cfg.pagamentos) {
-          localStorage.setItem('pagamentos', JSON.stringify(cfg.pagamentos));
-          setPagamentos(cfg.pagamentos);
-        }
+        persistTotemConfig(cfg);
+        setPagamentos(cfg.pagamentos ?? { pix: true, cartao: true });
       })
       .finally(() => setLoadingProdutos(false));
 
@@ -772,7 +811,7 @@ export default function Operator() {
                 color="#1d4ed8"
                 disabled={!canPay}
                 loading={pagando === 'gateway'}
-                onClick={pagarCartaoGateway}
+                onClick={iniciarCartaoGateway}
               />
             )}
           </div>
@@ -922,6 +961,84 @@ export default function Operator() {
                 }}
               >
                 {pagando === 'dinheiro' ? '...' : 'Confirmar (Enter)'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cardPickerOpen && debitPreview && creditPreview && sumupSurcharge && (
+        <div style={modalOverlay} onClick={() => setCardPickerOpen(false)}>
+          <div
+            style={modalCard}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label="Tipo de cartão"
+          >
+            <div style={{ fontWeight: 800, fontSize: 14, color: '#a8a29e' }}>
+              LEITOR SUMUP
+            </div>
+            <div style={{ marginTop: 4, color: '#d6d3d1', fontSize: 14 }}>
+              Venda {formatPreco(total)} — escolha débito ou crédito
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
+              <button
+                type="button"
+                onClick={() => void pagarCartaoGateway('debit')}
+                disabled={pagando === 'gateway'}
+                style={{
+                  padding: 14,
+                  borderRadius: 10,
+                  border: 'none',
+                  background: '#2563eb',
+                  color: '#fff',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                DÉBITO — {formatPreco(debitPreview.grossAmount)}
+                {debitPreview.surchargeAmount > 0 && (
+                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
+                    +{formatPreco(debitPreview.surchargeAmount)} (
+                    {formatSurchargePercent(sumupSurcharge.debitPercent)})
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => void pagarCartaoGateway('credit')}
+                disabled={pagando === 'gateway'}
+                style={{
+                  padding: 14,
+                  borderRadius: 10,
+                  border: 'none',
+                  background: '#1d4ed8',
+                  color: '#fff',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                CRÉDITO — {formatPreco(creditPreview.grossAmount)}
+                {creditPreview.surchargeAmount > 0 && (
+                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
+                    +{formatPreco(creditPreview.surchargeAmount)} (
+                    {formatSurchargePercent(sumupSurcharge.creditPercent)})
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setCardPickerOpen(false)}
+                style={{
+                  padding: 12,
+                  borderRadius: 10,
+                  border: '1px solid #57534e',
+                  background: 'transparent',
+                  color: '#fff',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancelar (Esc)
               </button>
             </div>
           </div>

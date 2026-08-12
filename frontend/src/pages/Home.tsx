@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProductCard from '../components/ProductCard';
-import { getConfig } from '../services/api';
+import { getConfig, persistTotemConfig } from '../services/api';
 import { useCartStore, type Product } from '../store/cartStore';
 
 export default function Home() {
@@ -22,13 +22,7 @@ export default function Home() {
         if (!ativo) return;
         setNomeFestival(config.nomeFestival);
         setProdutos(config.produtos);
-        localStorage.setItem('tenantName', config.nomeFestival);
-        if (config.pagamentos) {
-          localStorage.setItem(
-            'pagamentos',
-            JSON.stringify(config.pagamentos)
-          );
-        }
+        persistTotemConfig(config);
       })
       .catch((err) => {
         console.error('Falha ao carregar configuração do totem:', err);

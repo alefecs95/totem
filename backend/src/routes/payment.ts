@@ -17,7 +17,14 @@ import {
   createSumUpPixPayment,
   getSumUpPaymentStatus,
   getSumUpReaderStatus,
+  resolveTenantSumUpConfig,
+  terminateSumUpReaderCheckout,
+  SumUpError,
 } from '../services/sumup';
+import {
+  computeCardSurchargeForCardType,
+  type CardType,
+} from '../utils/cardSurcharge';
 import {
   PaymentValidationError,
   validatePaymentItems,
@@ -45,6 +52,7 @@ const cardSchema = z.object({
   total: z.number().positive(),
   tenantId: z.string().uuid(),
   deviceId: z.string().min(1).optional(),
+  cardType: z.enum(['credit', 'debit']).optional(),
 });
 
 function round2(value: number): number {
@@ -105,15 +113,34 @@ router.post('/pix', async (req, res) => {
     let expiresIn = 300;
 
     if (gateway === 'sumup') {
-      const apiKey = tenant.sumup_api_key || env.sumup.apiKey;
-      if (!apiKey) {
-        res.status(400).json({ error: 'missing_api_key' });
+      const sumup = resolveTenantSumUpConfig(tenant);
+      if (!sumup.apiKey) {
+        res.status(400).json({
+          error: 'missing_api_key',
+          detalhe: 'Configure a API Key SumUp no admin do organizador.',
+        });
         return;
       }
-      const sumup = await createSumUpPixPayment({ apiKey, total, tenantId });
-      paymentId = sumup.checkoutId;
-      pixCode = sumup.pixCode;
-      qrCodeBase64 = sumup.qrCodeBase64;
+      if (!sumup.payToEmail) {
+        res.status(400).json({
+          error: 'missing_pay_to_email',
+          detalhe: 'Configure o Pay To Email SumUp no admin do organizador.',
+        });
+        return;
+      }
+      const returnUrl = env.publicUrl
+        ? `${env.publicUrl}/api/webhook/sumup?type=checkout`
+        : undefined;
+      const pixResult = await createSumUpPixPayment({
+        apiKey: sumup.apiKey,
+        total,
+        tenantId,
+        payToEmail: sumup.payToEmail,
+        returnUrl,
+      });
+      paymentId = pixResult.checkoutId;
+      pixCode = pixResult.pixCode;
+      qrCodeBase64 = pixResult.qrCodeBase64;
     } else {
       const accessToken = tenant.mp_access_token || env.mercadopago.accessToken;
       if (!accessToken) {
@@ -197,15 +224,22 @@ router.get('/status/:paymentId', async (req, res) => {
     }
 
     const tenantResult = await query(
-      'SELECT mp_access_token, sumup_api_key FROM tenants WHERE id = $1',
+      `SELECT mp_access_token, sumup_api_key, sumup_merchant_code,
+              sumup_affiliate_app_id, sumup_affiliate_key, sumup_pay_to_email,
+              sumup_reader_id
+       FROM tenants WHERE id = $1`,
       [transaction.tenant_id]
     );
     const tenant = tenantResult.rows[0];
 
     let status: string;
     if (transaction.gateway === 'sumup') {
-      const apiKey = tenant?.sumup_api_key || env.sumup.apiKey;
-      ({ status } = await getSumUpPaymentStatus(apiKey, paymentId));
+      const sumup = resolveTenantSumUpConfig(tenant ?? {});
+      if (!sumup.apiKey) {
+        res.status(400).json({ error: 'missing_sumup_config' });
+        return;
+      }
+      ({ status } = await getSumUpPaymentStatus(sumup.apiKey, paymentId));
     } else {
       const accessToken = tenant?.mp_access_token || env.mercadopago.accessToken;
       ({ status } = await getPaymentStatus(accessToken, paymentId));
@@ -233,7 +267,8 @@ router.post('/card', async (req, res) => {
     return;
   }
 
-  const { items, total: clientTotal, tenantId, deviceId: bodyDeviceId } = parsed.data;
+  const { items, total: clientTotal, tenantId, deviceId: bodyDeviceId, cardType: bodyCardType } =
+    parsed.data;
 
   try {
     const tenantResult = await query(
@@ -266,13 +301,34 @@ router.post('/card', async (req, res) => {
 
     const gateway = tenant.gateway === 'sumup' ? 'sumup' : 'mercadopago';
     const deviceId = bodyDeviceId || (tenant.mp_device_id as string | null) || undefined;
+    const sumupConfig = gateway === 'sumup' ? resolveTenantSumUpConfig(tenant) : null;
+    const cardType: CardType = bodyCardType ?? 'credit';
+    const surcharge =
+      gateway === 'sumup' && sumupConfig
+        ? computeCardSurchargeForCardType({
+            netAmount: total,
+            config: sumupConfig.surcharge,
+            cardType,
+          })
+        : null;
+    const chargedAmount = surcharge?.grossAmount ?? total;
 
     // Valida as credenciais do gateway antes de registrar a transação.
     if (gateway === 'sumup') {
-      const hasKey = tenant.sumup_api_key || env.sumup.apiKey;
-      const hasMerchant = tenant.sumup_merchant_code || env.sumup.merchantCode;
-      if (!hasKey || !tenant.sumup_reader_id || !hasMerchant) {
-        res.status(400).json({ error: 'missing_sumup_config' });
+      if (!sumupConfig?.apiKey || !sumupConfig.merchantCode || !sumupConfig.readerId) {
+        res.status(400).json({
+          error: 'missing_sumup_config',
+          detalhe:
+            'Configure API Key, Merchant Code e Reader ID no admin do organizador.',
+        });
+        return;
+      }
+      if (!sumupConfig.affiliateKey || !sumupConfig.affiliateAppId) {
+        res.status(400).json({
+          error: 'missing_sumup_affiliate',
+          detalhe:
+            'Configure Affiliate App ID e Affiliate Key no admin do organizador.',
+        });
         return;
       }
     } else {
@@ -295,7 +351,14 @@ router.post('/card', async (req, res) => {
     }
 
     const comissaoPct = Number(tenant.comissao_pct);
-    const taxaGatewayValor = round2(total * TAXA_CARD_MP);
+    const taxaGatewayPct =
+      gateway === 'sumup' && sumupConfig?.surcharge.enabled
+        ? 0
+        : gateway === 'sumup'
+          ? 0
+          : TAXA_CARD_MP;
+    const taxaGatewayValor =
+      gateway === 'sumup' ? 0 : round2(total * TAXA_CARD_MP);
     const comissaoValor = round2(total * (comissaoPct / 100));
     const valorLiquido = round2(total - taxaGatewayValor - comissaoValor);
 
@@ -315,39 +378,50 @@ router.post('/card', async (req, res) => {
       `INSERT INTO transactions
         (id, tenant_id, totem_id, gateway, metodo, status,
          valor_bruto, taxa_gateway_pct, taxa_gateway_valor,
-         comissao_pct, comissao_valor, valor_liquido, itens)
+         comissao_pct, comissao_valor, valor_liquido, itens,
+         sumup_surcharge_valor, sumup_charged_amount, sumup_card_type)
        VALUES ($1, $2, $3, $4, 'cartao', 'pending',
-         $5, $6, $7, $8, $9, $10, $11)`,
+         $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         transactionId,
         tenantId,
         totemId,
         gateway,
         total,
-        TAXA_CARD_MP,
+        taxaGatewayPct,
         taxaGatewayValor,
         comissaoPct,
         comissaoValor,
         valorLiquido,
         JSON.stringify(itens),
+        surcharge && surcharge.surchargeAmount > 0 ? surcharge.surchargeAmount : null,
+        gateway === 'sumup' ? chargedAmount : null,
+        gateway === 'sumup' ? cardType : null,
       ]
     );
 
     let intentId: string;
     if (gateway === 'sumup') {
-      const apiKey = tenant.sumup_api_key || env.sumup.apiKey;
-      const merchantCode = tenant.sumup_merchant_code || env.sumup.merchantCode;
-      const affiliateKey =
-        tenant.sumup_affiliate_key || env.sumup.affiliateKey;
+      const returnUrl = env.publicUrl
+        ? `${env.publicUrl}/api/webhook/sumup?type=reader`
+        : 'https://localhost/api/webhook/sumup?type=reader';
       const result = await createSumUpCardPayment({
-        apiKey,
-        total,
-        readerId: tenant.sumup_reader_id,
-        merchantCode,
-        affiliateKey,
-        tenantId,
+        apiKey: sumupConfig!.apiKey!,
+        total: chargedAmount,
+        readerId: sumupConfig!.readerId!,
+        merchantCode: sumupConfig!.merchantCode!,
+        affiliateAppId: sumupConfig!.affiliateAppId!,
+        affiliateKey: sumupConfig!.affiliateKey!,
+        foreignTransactionId: transactionId,
+        returnUrl,
+        cardType,
       });
       intentId = result.paymentId;
+
+      await query(
+        'UPDATE transactions SET payment_id = $1 WHERE id = $2',
+        [intentId, transactionId]
+      );
     } else {
       const accessToken = tenant.mp_access_token || env.mercadopago.accessToken;
 
@@ -396,16 +470,25 @@ router.post('/card', async (req, res) => {
       [intentId, transactionId]
     );
 
-    res.json({ intentId, transactionId, status: 'aguardando_maquininha' });
+    res.json({
+      intentId,
+      transactionId,
+      status: 'aguardando_maquininha',
+      netAmount: total,
+      chargedAmount,
+      surchargeAmount: surcharge?.surchargeAmount ?? 0,
+      cardType: gateway === 'sumup' ? cardType : undefined,
+    });
   } catch (err) {
     console.error('Erro ao criar pagamento no cartão:', err);
     const msg = err instanceof Error ? err.message : String(err);
+    const statusCode = err instanceof SumUpError ? err.statusCode : undefined;
     const isQueued =
       msg.includes('409') || msg.includes('queued intent') || msg.includes('2205');
-    res.status(isQueued ? 409 : 500).json({
+    res.status(isQueued ? 409 : statusCode && statusCode >= 400 && statusCode < 600 ? statusCode : 500).json({
       error: isQueued ? 'queued_intent' : 'card_payment_failed',
       detalhe: isQueued
-        ? 'Há um pagamento pendente na maquininha. Cancele na Point (segure o botão inferior direito → Sair) e tente de novo.'
+        ? 'Há um pagamento pendente na maquininha. Cancele na Point/Solo e tente de novo.'
         : msg,
     });
   }
@@ -432,7 +515,8 @@ router.get('/card-status/:intentId', async (req, res) => {
     if (tenantId) {
       const tenantResult = await query(
         `SELECT gateway, mp_access_token, mp_device_id,
-                sumup_api_key, sumup_merchant_code
+                sumup_api_key, sumup_merchant_code, sumup_reader_id,
+                sumup_affiliate_app_id, sumup_affiliate_key, sumup_pay_to_email
          FROM tenants WHERE id = $1`,
         [tenantId]
       );
@@ -445,10 +529,24 @@ router.get('/card-status/:intentId', async (req, res) => {
     let mpPaymentId: string | undefined;
     let rawStatus: string | undefined;
 
+    const txResult = await query<{ id: string; status: string }>(
+      'SELECT id, status FROM transactions WHERE payment_id = $1',
+      [intentId]
+    );
+    const transaction = txResult.rows[0];
+
     if (tenant?.gateway === 'sumup') {
-      const apiKey = tenant.sumup_api_key || env.sumup.apiKey;
-      const merchantCode = tenant.sumup_merchant_code || env.sumup.merchantCode;
-      ({ status } = await getSumUpReaderStatus(apiKey, merchantCode, intentId));
+      const sumup = resolveTenantSumUpConfig(tenant);
+      if (!sumup.apiKey || !sumup.merchantCode) {
+        res.status(400).json({ error: 'missing_sumup_config' });
+        return;
+      }
+      ({ status, rawStatus } = await getSumUpReaderStatus(
+        sumup.apiKey,
+        sumup.merchantCode,
+        intentId,
+        transaction?.id
+      ));
     } else {
       ({ status, mpPaymentId, rawStatus } = await getCardPaymentStatus({
         accessToken,
@@ -456,12 +554,6 @@ router.get('/card-status/:intentId', async (req, res) => {
         intentId,
       }));
     }
-
-    const txResult = await query<{ id: string; status: string }>(
-      'SELECT id, status FROM transactions WHERE payment_id = $1',
-      [intentId]
-    );
-    const transaction = txResult.rows[0];
 
     if (
       status === 'approved' &&
@@ -483,6 +575,60 @@ router.get('/card-status/:intentId', async (req, res) => {
   } catch (err) {
     console.error('Erro ao consultar status do cartão:', err);
     res.status(500).json({ error: 'card_status_failed' });
+  }
+});
+
+// POST /api/payment/card-terminate — cancela cobrança pendente no Solo (SumUp)
+router.post('/card-terminate', async (req, res) => {
+  const { tenantId, intentId } = req.body as {
+    tenantId?: string;
+    intentId?: string;
+  };
+
+  if (!tenantId || !intentId) {
+    res.status(400).json({ error: 'missing_params' });
+    return;
+  }
+
+  try {
+    const tenantResult = await query(
+      `SELECT gateway, sumup_api_key, sumup_merchant_code, sumup_reader_id
+       FROM tenants WHERE id = $1`,
+      [tenantId]
+    );
+    const tenant = tenantResult.rows[0];
+    if (!tenant || tenant.gateway !== 'sumup') {
+      res.status(400).json({ error: 'not_sumup_tenant' });
+      return;
+    }
+
+    const sumup = resolveTenantSumUpConfig(tenant);
+    if (!sumup.apiKey || !sumup.merchantCode || !sumup.readerId) {
+      res.status(400).json({ error: 'missing_sumup_config' });
+      return;
+    }
+
+    await terminateSumUpReaderCheckout(
+      sumup.apiKey,
+      sumup.merchantCode,
+      sumup.readerId
+    );
+
+    await query(
+      `UPDATE transactions SET status = 'cancelled', atualizado_em = NOW()
+       WHERE payment_id = $1 AND status = 'pending'`,
+      [intentId]
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Erro ao cancelar checkout SumUp:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    const statusCode = err instanceof SumUpError ? err.statusCode : 500;
+    res.status(statusCode >= 400 && statusCode < 600 ? statusCode : 500).json({
+      error: 'terminate_failed',
+      detalhe: msg,
+    });
   }
 });
 

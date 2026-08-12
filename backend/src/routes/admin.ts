@@ -15,7 +15,13 @@ import {
   setTerminalOperatingMode,
 } from '../services/mercadopago';
 import { geocodeBrazil } from '../services/geocode';
-import { listSumUpReaders, pairSumUpReader } from '../services/sumup';
+import {
+  listSumUpReaders,
+  pairSumUpReader,
+  resolveTenantSumUpConfig,
+  SumUpError,
+  type TenantSumUpFields,
+} from '../services/sumup';
 import { productSchema, mapProductRow, stripTenantSecrets } from '../utils/products';
 
 const router = Router();
@@ -137,6 +143,14 @@ const tenantSchema = z.object({
   sumup_reader_id: z.string().optional().nullable(),
   sumup_merchant_code: z.string().optional().nullable(),
   sumup_affiliate_key: z.string().optional().nullable(),
+  sumup_affiliate_app_id: z.string().optional().nullable(),
+  sumup_pay_to_email: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? null : v),
+    z.string().email().nullable().optional()
+  ),
+  sumup_surcharge_enabled: z.boolean().optional(),
+  sumup_debit_surcharge_percent: z.number().nonnegative().optional(),
+  sumup_credit_surcharge_percent: z.number().nonnegative().optional(),
   endereco: z.string().optional().nullable(),
   numero: z.string().optional().nullable(),
   bairro: z.string().optional().nullable(),
@@ -401,20 +415,24 @@ router.get('/tenants/:id/sumup-readers', verifyAdmin, async (req, res) => {
       return;
     }
 
-    const apiKey =
-      (tenant.sumup_api_key as string | null) || env.sumup.apiKey;
-    const merchantCode =
-      (tenant.sumup_merchant_code as string | null) || env.sumup.merchantCode;
-    if (!apiKey || !merchantCode) {
-      res.status(400).json({ error: 'missing_sumup_config' });
+    const sumup = resolveTenantSumUpConfig(tenant as TenantSumUpFields);
+    if (!sumup.apiKey || !sumup.merchantCode) {
+      res.status(400).json({
+        error: 'missing_sumup_config',
+        detalhe: 'Preencha API Key e Merchant Code no cadastro do organizador.',
+      });
       return;
     }
 
-    const readers = await listSumUpReaders(apiKey, merchantCode);
+    const live = req.query.live === '1' || req.query.live === 'true';
+    const readers = await listSumUpReaders(sumup.apiKey, sumup.merchantCode, {
+      includeDeviceStatus: live,
+    });
     res.json({ readers });
   } catch (err) {
     console.error('Erro ao listar leitores SumUp:', err);
-    res.status(500).json({
+    const statusCode = err instanceof SumUpError ? err.statusCode : 500;
+    res.status(statusCode >= 400 && statusCode < 600 ? statusCode : 500).json({
       error: 'list_sumup_readers_failed',
       detalhe: err instanceof Error ? err.message : String(err),
     });
@@ -434,12 +452,12 @@ router.post('/tenants/:id/sumup-readers', verifyAdmin, async (req, res) => {
       return;
     }
 
-    const apiKey =
-      (tenant.sumup_api_key as string | null) || env.sumup.apiKey;
-    const merchantCode =
-      (tenant.sumup_merchant_code as string | null) || env.sumup.merchantCode;
-    if (!apiKey || !merchantCode) {
-      res.status(400).json({ error: 'missing_sumup_config' });
+    const sumup = resolveTenantSumUpConfig(tenant as TenantSumUpFields);
+    if (!sumup.apiKey || !sumup.merchantCode) {
+      res.status(400).json({
+        error: 'missing_sumup_config',
+        detalhe: 'Preencha API Key e Merchant Code no cadastro do organizador.',
+      });
       return;
     }
 
@@ -450,8 +468,8 @@ router.post('/tenants/:id/sumup-readers', verifyAdmin, async (req, res) => {
     }
 
     const reader = await pairSumUpReader(
-      apiKey,
-      merchantCode,
+      sumup.apiKey,
+      sumup.merchantCode,
       pairingCode,
       (tenant.nome as string) || 'Totem'
     );
@@ -465,7 +483,8 @@ router.post('/tenants/:id/sumup-readers', verifyAdmin, async (req, res) => {
     res.json({ reader });
   } catch (err) {
     console.error('Erro ao parear leitor SumUp:', err);
-    res.status(500).json({
+    const statusCode = err instanceof SumUpError ? err.statusCode : 500;
+    res.status(statusCode >= 400 && statusCode < 600 ? statusCode : 500).json({
       error: 'pair_sumup_reader_failed',
       detalhe: err instanceof Error ? err.message : String(err),
     });
@@ -612,11 +631,13 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
         (nome, responsavel, telefone, email, gateway, comissao_pct,
          mp_access_token, mp_webhook_secret, mp_device_id,
          sumup_api_key, sumup_reader_id, sumup_merchant_code,
-         sumup_affiliate_key,
+         sumup_affiliate_key, sumup_affiliate_app_id, sumup_pay_to_email,
+         sumup_surcharge_enabled, sumup_debit_surcharge_percent,
+         sumup_credit_surcharge_percent,
          endereco, numero, bairro, cidade, estado, latitude, longitude,
          portal_senha_hash)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-         $13, $14, $15, $16, $17, $18, $19, $20, $21)
+         $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
        RETURNING *`,
       [
         tenantFields.nome,
@@ -632,6 +653,11 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
         tenantFields.sumup_reader_id ?? null,
         tenantFields.sumup_merchant_code ?? null,
         tenantFields.sumup_affiliate_key ?? null,
+        tenantFields.sumup_affiliate_app_id ?? null,
+        tenantFields.sumup_pay_to_email ?? null,
+        tenantFields.sumup_surcharge_enabled ?? false,
+        tenantFields.sumup_debit_surcharge_percent ?? 0,
+        tenantFields.sumup_credit_surcharge_percent ?? 0,
         tenantFields.endereco ?? null,
         tenantFields.numero ?? null,
         tenantFields.bairro ?? null,

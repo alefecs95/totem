@@ -2,6 +2,13 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createCardPayment } from '../services/api';
 import { useCartStore, type CartItem } from '../store/cartStore';
+import {
+  computeCardSurchargeForCardType,
+  formatSurchargePercent,
+  isSumupGateway,
+  readSumupSurchargeConfig,
+  type CardType,
+} from '../utils/cardSurcharge';
 
 interface PaymentLocationState {
   items?: CartItem[];
@@ -28,6 +35,25 @@ export default function Payment() {
 
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
+  const [cardPickerOpen, setCardPickerOpen] = useState(false);
+
+  const sumupSurcharge = readSumupSurchargeConfig();
+  const needsCardType =
+    isSumupGateway() && Boolean(sumupSurcharge?.enabled);
+  const debitPreview = needsCardType
+    ? computeCardSurchargeForCardType({
+        netAmount: total,
+        config: sumupSurcharge,
+        cardType: 'debit',
+      })
+    : null;
+  const creditPreview = needsCardType
+    ? computeCardSurchargeForCardType({
+        netAmount: total,
+        config: sumupSurcharge,
+        cardType: 'credit',
+      })
+    : null;
 
   const pagamentos = (() => {
     try {
@@ -66,7 +92,7 @@ export default function Payment() {
     navigate('/pix', { state: { items, total } });
   };
 
-  const pagarCartao = async () => {
+  const pagarCartao = async (cardType?: CardType) => {
     setErro('');
     const tenantId = localStorage.getItem('tenantId');
     if (!tenantId) {
@@ -75,12 +101,14 @@ export default function Payment() {
     }
 
     setLoading(true);
+    setCardPickerOpen(false);
     try {
-      const payment = await createCardPayment(items, total, tenantId);
+      const payment = await createCardPayment(items, total, tenantId, cardType);
       navigate('/card', {
         state: {
           items,
           total,
+          chargedAmount: payment.chargedAmount ?? total,
           intentId: payment.intentId,
           transactionId: payment.transactionId,
         },
@@ -94,6 +122,14 @@ export default function Payment() {
       console.error('Falha ao ativar a maquininha:', err);
       setLoading(false);
     }
+  };
+
+  const iniciarCartao = () => {
+    if (needsCardType) {
+      setCardPickerOpen(true);
+      return;
+    }
+    void pagarCartao();
   };
 
   if (loading) {
@@ -195,7 +231,7 @@ export default function Payment() {
 
         {pagamentos.cartao && (
           <button
-            onClick={pagarCartao}
+            onClick={iniciarCartao}
             className="card"
             style={{
               textAlign: 'center',
@@ -240,6 +276,96 @@ export default function Payment() {
           </div>
         )}
       </main>
+
+      {cardPickerOpen && debitPreview && creditPreview && sumupSurcharge && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            zIndex: 50,
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 420,
+              background: 'var(--bg-card, #1e293b)',
+              borderRadius: 16,
+              padding: 20,
+            }}
+          >
+            <h2
+              style={{
+                fontFamily: "'Bebas Neue', sans-serif",
+                fontSize: 32,
+                margin: '0 0 8px',
+                textAlign: 'center',
+              }}
+            >
+              Tipo de cartão
+            </h2>
+            <p
+              style={{
+                textAlign: 'center',
+                color: 'var(--text-muted)',
+                fontSize: 14,
+                margin: '0 0 16px',
+              }}
+            >
+              Venda {formatPreco(total)} — escolha débito ou crédito na Solo.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => void pagarCartao('debit')}
+                style={{ minHeight: 72 }}
+              >
+                DÉBITO — {formatPreco(debitPreview.grossAmount)}
+                {debitPreview.surchargeAmount > 0 && (
+                  <span style={{ display: 'block', fontSize: 13, opacity: 0.85 }}>
+                    +{formatPreco(debitPreview.surchargeAmount)} taxa (
+                    {formatSurchargePercent(sumupSurcharge.debitPercent)})
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => void pagarCartao('credit')}
+                style={{ minHeight: 72, background: AZUL }}
+              >
+                CRÉDITO — {formatPreco(creditPreview.grossAmount)}
+                {creditPreview.surchargeAmount > 0 && (
+                  <span style={{ display: 'block', fontSize: 13, opacity: 0.85 }}>
+                    +{formatPreco(creditPreview.surchargeAmount)} taxa (
+                    {formatSurchargePercent(sumupSurcharge.creditPercent)})
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setCardPickerOpen(false)}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid #64748b',
+                  color: '#94a3b8',
+                  padding: 12,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {erro && (
         <footer

@@ -34,6 +34,11 @@ const emptyForm: TenantInput = {
   sumup_reader_id: '',
   sumup_merchant_code: '',
   sumup_affiliate_key: '',
+  sumup_affiliate_app_id: '',
+  sumup_pay_to_email: '',
+  sumup_surcharge_enabled: false,
+  sumup_debit_surcharge_percent: 0,
+  sumup_credit_surcharge_percent: 0,
   endereco: '',
   numero: '',
   bairro: '',
@@ -176,7 +181,7 @@ export default function Tenants() {
     setBuscandoReaders(true);
     setReadersMsg('');
     try {
-      const lista = await getTenantSumUpReaders(editingId);
+      const lista = await getTenantSumUpReaders(editingId, { live: true });
       setSumupReaders(lista);
       if (lista.length === 0) {
         setReadersMsg(
@@ -322,6 +327,11 @@ export default function Tenants() {
       sumup_reader_id: t.sumup_reader_id ?? '',
       sumup_merchant_code: t.sumup_merchant_code ?? '',
       sumup_affiliate_key: t.sumup_affiliate_key ?? '',
+      sumup_affiliate_app_id: t.sumup_affiliate_app_id ?? '',
+      sumup_pay_to_email: t.sumup_pay_to_email ?? '',
+      sumup_surcharge_enabled: Boolean(t.sumup_surcharge_enabled),
+      sumup_debit_surcharge_percent: Number(t.sumup_debit_surcharge_percent ?? 0),
+      sumup_credit_surcharge_percent: Number(t.sumup_credit_surcharge_percent ?? 0),
       endereco: t.endereco ?? '',
       numero: t.numero ?? '',
       bairro: t.bairro ?? '',
@@ -379,7 +389,7 @@ export default function Tenants() {
 
   const setField = (
     key: keyof TenantInput,
-    value: string | number | undefined
+    value: string | number | boolean | undefined
   ) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const usarLocalizacaoAtual = () => {
@@ -1027,6 +1037,20 @@ export default function Tenants() {
                     Está em me.sumup.com → Configurações (código do comerciante).
                   </p>
                 </Field>
+                <Field label="SumUp Affiliate App ID">
+                  <input
+                    style={input}
+                    value={form.sumup_affiliate_app_id ?? ''}
+                    onChange={(e) =>
+                      setField('sumup_affiliate_app_id', e.target.value)
+                    }
+                    placeholder="com.sumup.xxx ou UUID do app"
+                  />
+                  <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
+                    Obrigatório para Solo (Cloud API). Crie em me.sumup.com →
+                    Developers → Affiliate App.
+                  </p>
+                </Field>
                 <Field label="SumUp Affiliate Key">
                   <input
                     style={input}
@@ -1037,10 +1061,131 @@ export default function Tenants() {
                     placeholder="sup_afk_..."
                   />
                   <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
-                    Obrigatória para a maquininha. Gere em me.sumup.com →
-                    Configurações → Affiliate Keys.
+                    Obrigatória para a maquininha Solo. Gere em me.sumup.com →
+                    Developers → Affiliate Keys.
                   </p>
                 </Field>
+                <Field label="Pay To Email (Pix SumUp)">
+                  <input
+                    style={input}
+                    value={form.sumup_pay_to_email ?? ''}
+                    onChange={(e) =>
+                      setField('sumup_pay_to_email', e.target.value)
+                    }
+                    placeholder="email@conta.sumup.com"
+                  />
+                  <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
+                    E-mail da conta SumUp que recebe Pix online. Obrigatório para
+                    Pix quando o gateway é SumUp.
+                  </p>
+                </Field>
+
+                <div
+                  style={{
+                    padding: 16,
+                    borderRadius: 10,
+                    border: '1px solid #e2e8f0',
+                    background: '#f8fafc',
+                  }}
+                >
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 10,
+                      cursor: 'pointer',
+                      marginBottom: 12,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.sumup_surcharge_enabled)}
+                      onChange={(e) =>
+                        setField('sumup_surcharge_enabled', e.target.checked)
+                      }
+                      style={{ marginTop: 4 }}
+                    />
+                    <span>
+                      <strong>Repassar taxa da maquininha ao cliente</strong>
+                      <p
+                        style={{
+                          margin: '4px 0 0',
+                          fontSize: 12,
+                          color: '#64748b',
+                          fontWeight: 400,
+                        }}
+                      >
+                        A venda continua valendo o valor dos produtos. A taxa é
+                        somada só no valor cobrado no cartão, para o organizador
+                        receber o líquido cheio.
+                      </p>
+                    </span>
+                  </label>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: 12,
+                    }}
+                  >
+                    <div>
+                      <label
+                        style={{
+                          display: 'block',
+                          fontSize: 13,
+                          fontWeight: 600,
+                          marginBottom: 4,
+                          color: '#334155',
+                        }}
+                      >
+                        Taxa débito (%)
+                      </label>
+                      <input
+                        style={input}
+                        inputMode="decimal"
+                        value={form.sumup_debit_surcharge_percent ?? 0}
+                        onChange={(e) =>
+                          setField(
+                            'sumup_debit_surcharge_percent',
+                            Number(e.target.value.replace(',', '.')) || 0
+                          )
+                        }
+                        placeholder="Ex: 1,99"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        style={{
+                          display: 'block',
+                          fontSize: 13,
+                          fontWeight: 600,
+                          marginBottom: 4,
+                          color: '#334155',
+                        }}
+                      >
+                        Taxa crédito (%)
+                      </label>
+                      <input
+                        style={input}
+                        inputMode="decimal"
+                        value={form.sumup_credit_surcharge_percent ?? 0}
+                        onChange={(e) =>
+                          setField(
+                            'sumup_credit_surcharge_percent',
+                            Number(e.target.value.replace(',', '.')) || 0
+                          )
+                        }
+                        placeholder="Ex: 4,99"
+                      />
+                    </div>
+                  </div>
+                  <p style={{ margin: '10px 0 0', fontSize: 12, color: '#64748b' }}>
+                    Use as taxas do contrato SumUp (app/extrato da Solo). Exemplo
+                    em venda de R$ 100: débito 1,99% → cobra ~R$ 102,04; crédito
+                    4,99% → cobra ~R$ 105,25. Informe o cliente sobre diferença
+                    débito/crédito (Lei 13.455/2017).
+                  </p>
+                </div>
                 <Field label="SumUp Reader ID (maquininha Solo)">
                   <input
                     style={input}
@@ -1104,9 +1249,9 @@ export default function Tenants() {
                       </button>
                     </div>
                     <p style={{ margin: '0 0 10px', fontSize: 12, color: '#64748b' }}>
-                      Na Solo (ou virtual): <b>deslogue</b> da conta → Conexões →
-                      API → Conectar → copie o código (expira em 5 min). Use a
-                      mesma conta sandbox da API Key.
+                      <b>Sandbox:</b> API Key <code>sk_test_</code> + Virtual Solo
+                      (mesma conta). <b>Produção:</b> Solo física — deslogue do app,
+                      Wi‑Fi only, firmware ≥ 3.3.39. Status &quot;paired&quot; ≠ online.
                     </p>
                     <button
                       type="button"
@@ -1172,7 +1317,7 @@ export default function Tenants() {
                               {r.name || r.id}
                             </div>
                             <div style={{ fontSize: 12, color: '#64748b' }}>
-                              {r.id} · {r.model || 'reader'} ·{' '}
+                              {r.id} · {r.model || 'reader'} · pareamento{' '}
                               <b
                                 style={{
                                   color:
@@ -1183,6 +1328,22 @@ export default function Tenants() {
                               >
                                 {r.status}
                               </b>
+                              {r.deviceStatus != null && (
+                                <>
+                                  {' '}
+                                  · aparelho{' '}
+                                  <b
+                                    style={{
+                                      color:
+                                        r.deviceStatus === 'online'
+                                          ? '#15803d'
+                                          : '#dc2626',
+                                    }}
+                                  >
+                                    {r.deviceStatus}
+                                  </b>
+                                </>
+                              )}
                             </div>
                           </button>
                         ))}

@@ -49,6 +49,14 @@ ALTER TABLE tenants ADD COLUMN IF NOT EXISTS longitude NUMERIC(10,7);
 ALTER TABLE totens ADD COLUMN IF NOT EXISTS mp_pos_id VARCHAR(50);
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sumup_merchant_code VARCHAR(100);
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sumup_affiliate_key TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sumup_affiliate_app_id VARCHAR(100);
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sumup_pay_to_email VARCHAR(255);
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sumup_surcharge_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sumup_debit_surcharge_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sumup_credit_surcharge_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sumup_surcharge_valor NUMERIC(10,2);
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sumup_charged_amount NUMERIC(10,2);
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sumup_card_type VARCHAR(10);
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS portal_senha_hash TEXT;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS categoria VARCHAR(50) NOT NULL DEFAULT 'outro';
 

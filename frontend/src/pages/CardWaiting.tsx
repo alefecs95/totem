@@ -8,6 +8,7 @@ type Estado = 'aguardando' | 'aprovado' | 'recusado' | 'erro';
 interface CardLocationState {
   items?: CartItem[];
   total?: number;
+  chargedAmount?: number;
   intentId?: string;
   transactionId?: string;
   returnTo?: string;
@@ -30,6 +31,7 @@ export default function CardWaiting() {
 
   const items = state.items ?? storeItems;
   const total = state.total ?? getTotal();
+  const chargedAmount = state.chargedAmount ?? total;
   const intentId = state.intentId ?? '';
   const transactionId = state.transactionId ?? '';
   const returnTo = state.returnTo;
@@ -155,8 +157,13 @@ export default function CardWaiting() {
           color: 'var(--secondary)',
         }}
       >
-        {formatPreco(total)}
+        {formatPreco(chargedAmount)}
       </p>
+      {chargedAmount > total + 0.009 && (
+        <p style={{ color: 'var(--text-muted)', fontSize: 14, margin: 0 }}>
+          Venda {formatPreco(total)} + taxa da maquininha
+        </p>
+      )}
       <p style={{ color: 'var(--text-muted)', fontSize: 18, textAlign: 'center' }}>
         Aguardando confirmação na maquininha ao lado...
       </p>

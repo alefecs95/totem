@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { query } from '../config/database';
 import { isValidMpDeviceId } from '../services/mercadopago';
+import { getTenantCardSurchargeConfig } from '../services/sumup';
 
 const router = Router();
 
@@ -17,7 +18,9 @@ router.get('/config', async (req, res) => {
   try {
     const tenantResult = await query(
       `SELECT id, nome, gateway, mp_device_id, mp_access_token,
-              sumup_api_key, sumup_reader_id, sumup_merchant_code
+              sumup_api_key, sumup_reader_id, sumup_merchant_code,
+              sumup_surcharge_enabled, sumup_debit_surcharge_percent,
+              sumup_credit_surcharge_percent
        FROM tenants WHERE id = $1 AND ativo = true`,
       [tenantId]
     );
@@ -81,11 +84,16 @@ router.get('/config', async (req, res) => {
 
     res.json({
       nomeFestival: tenant.nome,
+      gateway,
       produtos,
       pagamentos: {
         pix: pixDisponivel,
         cartao: cartaoDisponivel,
       },
+      sumupSurcharge:
+        gateway === 'sumup'
+          ? getTenantCardSurchargeConfig(tenant)
+          : null,
     });
   } catch (err) {
     console.error('Erro ao carregar config do totem:', err);

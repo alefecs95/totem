@@ -19,17 +19,42 @@ api.interceptors.request.use((config) => {
 
 export interface TotemConfig {
   nomeFestival: string;
+  gateway?: 'mercadopago' | 'sumup';
   produtos: Product[];
   pagamentos?: {
     pix: boolean;
     cartao: boolean;
   };
+  sumupSurcharge?: {
+    enabled: boolean;
+    debitPercent: number;
+    creditPercent: number;
+  } | null;
+}
+
+export function persistTotemConfig(config: TotemConfig): void {
+  localStorage.setItem('tenantName', config.nomeFestival);
+  if (config.pagamentos) {
+    localStorage.setItem('pagamentos', JSON.stringify(config.pagamentos));
+  }
+  if (config.gateway) {
+    localStorage.setItem('gateway', config.gateway);
+  }
+  if (config.sumupSurcharge) {
+    localStorage.setItem('sumupSurcharge', JSON.stringify(config.sumupSurcharge));
+  } else {
+    localStorage.removeItem('sumupSurcharge');
+  }
 }
 
 export interface CardPaymentResponse {
   intentId: string;
   transactionId: string;
   status: string;
+  netAmount?: number;
+  chargedAmount?: number;
+  surchargeAmount?: number;
+  cardType?: 'credit' | 'debit';
 }
 
 export interface PixPaymentResponse {
@@ -83,7 +108,8 @@ export async function getPaymentStatus(
 export async function createCardPayment(
   items: CartItem[],
   total: number,
-  tenantId: string
+  tenantId: string,
+  cardType?: 'credit' | 'debit'
 ): Promise<CardPaymentResponse> {
   const { data } = await api.post<CardPaymentResponse>('/payment/card', {
     items: items.map(({ id, quantidade }) => ({
@@ -92,6 +118,7 @@ export async function createCardPayment(
     })),
     total,
     tenantId,
+    ...(cardType ? { cardType } : {}),
   });
   return data;
 }

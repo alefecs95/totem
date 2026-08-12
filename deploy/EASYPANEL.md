@@ -52,10 +52,9 @@ Repositório: https://github.com/alefecs95/totem (branch `main`).
    ADMIN_URL=
    PORTAL_URL=
    PUBLIC_URL=
-   # opcionais (pagamentos):
+   # opcionais (pagamentos Mercado Pago global — SumUp fica no admin por organizador):
    MP_ACCESS_TOKEN=
    MP_WEBHOOK_SECRET=
-   SUMUP_API_KEY=
    ```
 5. **Domains**: adicione um domínio. Sem domínio próprio, o EasyPanel gera um
    automático (ex.: `totem-api-xxxx.easypanel.host`).
@@ -203,4 +202,7 @@ Ordem recomendada: `totem-api` → `totem-pwa` → `totem-admin` → `totem-port
 - **Webhook do Mercado Pago**: usa `PUBLIC_URL`. Ao migrar para um domínio próprio,
   atualize `PUBLIC_URL` e faça redeploy da API. O PWA também faz *polling* do status,
   então pagamentos Pix funcionam mesmo sem webhook configurado.
+- **SumUp**: credenciais (API Key, Merchant Code, Affiliate App ID/Key, Pay To Email,
+  Reader ID) ficam no **admin → editar organizador** (gateway SumUp). Não use variáveis
+  de ambiente no EasyPanel para isso — cada organizador configura e altera quando quiser.
 - **Auto-deploy**: habilite o webhook do GitHub no EasyPanel para reconstruir a cada push.

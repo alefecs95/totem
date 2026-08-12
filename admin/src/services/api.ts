@@ -46,6 +46,11 @@ export interface Tenant {
   sumup_reader_id: string | null;
   sumup_merchant_code: string | null;
   sumup_affiliate_key: string | null;
+  sumup_affiliate_app_id: string | null;
+  sumup_pay_to_email: string | null;
+  sumup_surcharge_enabled?: boolean;
+  sumup_debit_surcharge_percent?: string | number;
+  sumup_credit_surcharge_percent?: string | number;
   endereco: string | null;
   numero: string | null;
   bairro: string | null;
@@ -73,13 +78,26 @@ export type TenantInput = Partial<
     | 'sumup_reader_id'
     | 'sumup_merchant_code'
     | 'sumup_affiliate_key'
+    | 'sumup_affiliate_app_id'
+    | 'sumup_pay_to_email'
+    | 'sumup_surcharge_enabled'
+    | 'sumup_debit_surcharge_percent'
+    | 'sumup_credit_surcharge_percent'
     | 'endereco'
     | 'numero'
     | 'bairro'
     | 'cidade'
     | 'estado'
   >
-> & { comissao_pct?: number; latitude?: number; longitude?: number; portal_senha?: string };
+> & {
+  comissao_pct?: number;
+  latitude?: number;
+  longitude?: number;
+  portal_senha?: string;
+  sumup_surcharge_enabled?: boolean;
+  sumup_debit_surcharge_percent?: number;
+  sumup_credit_surcharge_percent?: number;
+};
 
 // Status retornado pelo backend ao tentar criar loja/caixa no Mercado Pago.
 export interface MpProvisionStatus {
@@ -188,13 +206,16 @@ export interface SumUpReader {
   name: string;
   status: string;
   model: string;
+  deviceStatus?: string | null;
 }
 
 export async function getTenantSumUpReaders(
-  tenantId: string
+  tenantId: string,
+  options?: { live?: boolean }
 ): Promise<SumUpReader[]> {
+  const params = options?.live ? '?live=1' : '';
   const { data } = await api.get<{ readers: SumUpReader[] }>(
-    `/admin/tenants/${tenantId}/sumup-readers`
+    `/admin/tenants/${tenantId}/sumup-readers${params}`
   );
   return data.readers;
 }

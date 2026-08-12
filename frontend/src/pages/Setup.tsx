@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getConfig } from '../services/api';
+import { getConfig, persistTotemConfig } from '../services/api';
 
 type Status = 'aguardando' | 'configurando' | 'erro';
 
@@ -40,13 +40,7 @@ export default function Setup() {
     getConfig()
       .then((config) => {
         if (!ativo) return;
-        localStorage.setItem('tenantName', config.nomeFestival);
-        if (config.pagamentos) {
-          localStorage.setItem(
-            'pagamentos',
-            JSON.stringify(config.pagamentos)
-          );
-        }
+        persistTotemConfig(config);
         navigate('/', { replace: true });
       })
       .catch((err: unknown) => {
