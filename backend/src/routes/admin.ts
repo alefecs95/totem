@@ -144,7 +144,10 @@ const tenantSchema = z.object({
   estado: z.string().optional().nullable(),
   latitude: z.number().optional().nullable(),
   longitude: z.number().optional().nullable(),
-  portal_senha: z.string().min(4).optional().nullable(),
+  portal_senha: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : v),
+    z.string().min(4).optional()
+  ),
 });
 
 type TenantRow = Record<string, unknown> & {

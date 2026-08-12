@@ -339,9 +339,17 @@ export default function Tenants() {
     setSaving(true);
     setAviso('');
     try {
+      const payload: TenantInput = { ...form };
+      if (!payload.portal_senha?.trim()) {
+        delete payload.portal_senha;
+      }
+      if (!editingId && !payload.portal_senha) {
+        setAviso('Defina a senha do portal (mínimo 4 caracteres) para o organizador.');
+        return;
+      }
       const { mpStore } = editingId
-        ? await updateTenant(editingId, form)
-        : await createTenant(form);
+        ? await updateTenant(editingId, payload)
+        : await createTenant(payload);
       carregar();
       if (form.gateway === 'mercadopago' && mpStore && !mpStore.ok) {
         const base = mensagemMpStore(mpStore.motivo);
@@ -349,6 +357,15 @@ export default function Tenants() {
       } else {
         setModalOpen(false);
       }
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error ?? 'Falha ao salvar. Tente novamente.';
+      setAviso(
+        msg === 'invalid_body'
+          ? 'Dados inválidos. Confira e-mail e senha do portal (mín. 4 caracteres).'
+          : String(msg)
+      );
     } finally {
       setSaving(false);
     }
@@ -572,13 +589,15 @@ export default function Tenants() {
                 onChange={(e) => setField('portal_senha', e.target.value)}
                 placeholder={
                   editingId
-                    ? 'Deixe em branco para manter a senha atual'
-                    : 'Mínimo 4 caracteres — usada no portal do organizador'
+                    ? 'Digite uma NOVA senha para redefinir (mín. 4)'
+                    : 'Mínimo 4 caracteres — usada no portal / modo operador'
                 }
-                minLength={editingId ? undefined : 4}
+                minLength={4}
+                autoComplete="new-password"
               />
               <span style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                O dono acessa o portal com o e-mail acima e esta senha.
+                Isso NÃO é o login do admin. O Modo Operador usa este e-mail + esta
+                senha. Ao editar, preencha aqui para redefinir e clique em Salvar.
               </span>
             </Field>
 
