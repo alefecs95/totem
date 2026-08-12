@@ -175,6 +175,7 @@ export function buildFichasHtml(
     margin: 0 !important;
     padding: 0 !important;
     overflow: hidden;
+    display: block;
     break-after: page;
     page-break-after: always;
     break-inside: avoid;
@@ -284,37 +285,17 @@ export function printFichasViaIframe(
 
   void (async () => {
     const prepared = await prepareTicketsForPrint(tickets);
+    // Um único job: N páginas de 80×25 (papel da impressora). Corte = após cada página.
+    const html = buildFichasHtml(prepared, tenantName, printedAt, h);
 
-    // Uma ficha = um job de impressão = um corte (POS "Cutting: After one page").
-    // Com papel 80×210 o Chrome empilha várias fichas na mesma página e só corta no fim.
-    for (let i = 0; i < prepared.length; i += 1) {
-      await printSingleFichaHtml(
-        buildFichasHtml([prepared[i]], tenantName, printedAt, h),
-        h
-      );
-      // Pequena pausa para o cortador / spooler da térmica
-      if (i < prepared.length - 1) {
-        await sleep(400);
-      }
-    }
-  })();
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function printSingleFichaHtml(html: string, heightMm: number): Promise<void> {
-  return new Promise((resolve) => {
     const iframe = document.createElement('iframe');
     iframe.setAttribute('aria-hidden', 'true');
-    // NÃO usar opacity:0 — alguns drivers térmicos omitem imagens invisíveis.
     iframe.style.cssText = [
       'position:fixed',
       'left:-10000px',
       'top:0',
       `width:${FICHA_LARGURA_MM}mm`,
-      `height:${heightMm}mm`,
+      `height:${h}mm`,
       'border:0',
       'visibility:hidden',
       'pointer-events:none',
@@ -326,7 +307,6 @@ function printSingleFichaHtml(html: string, heightMm: number): Promise<void> {
     const doc = iframe.contentDocument || win?.document;
     if (!win || !doc) {
       iframe.remove();
-      resolve();
       return;
     }
 
@@ -335,7 +315,7 @@ function printSingleFichaHtml(html: string, heightMm: number): Promise<void> {
     doc.close();
 
     let finished = false;
-    const finish = () => {
+    const cleanup = () => {
       if (finished) return;
       finished = true;
       window.setTimeout(() => {
@@ -344,8 +324,7 @@ function printSingleFichaHtml(html: string, heightMm: number): Promise<void> {
         } catch {
           /* ignore */
         }
-        resolve();
-      }, 300);
+      }, 1500);
     };
 
     const trigger = async () => {
@@ -377,29 +356,16 @@ function printSingleFichaHtml(html: string, heightMm: number): Promise<void> {
         iframe.style.left = '0';
         iframe.style.top = '0';
         win.focus();
-        win.addEventListener('afterprint', finish, { once: true });
-        // matchMedia: alguns Chromium disparam isso no lugar de afterprint
-        const mql = win.matchMedia('print');
-        const onMql = (e: MediaQueryListEvent) => {
-          if (!e.matches) {
-            mql.removeEventListener('change', onMql);
-            finish();
-          }
-        };
-        if (typeof mql.addEventListener === 'function') {
-          mql.addEventListener('change', onMql);
-        }
+        win.addEventListener('afterprint', cleanup, { once: true });
         win.print();
       } catch {
-        finish();
+        cleanup();
       }
-
-      // Segurança: se o diálogo nunca fechar / afterprint falhar
-      window.setTimeout(finish, 180_000);
+      window.setTimeout(cleanup, 180_000);
     };
 
     window.setTimeout(() => {
       void trigger();
-    }, 200);
-  });
+    }, 250);
+  })();
 }
