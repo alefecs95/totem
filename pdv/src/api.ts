@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 const DEFAULT_API =
-  import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api';
+  import.meta.env.VITE_API_URL ??
+  'https://totem-totem-api.jgdvyu.easypanel.host/api';
 
 export function getApiBase(): string {
   return localStorage.getItem('pdvApiUrl') || DEFAULT_API;

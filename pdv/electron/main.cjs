@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+﻿const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 
 const isDev = !app.isPackaged;
@@ -48,8 +48,8 @@ ipcMain.handle('list-printers', async () => {
 });
 
 /**
- * Imprime cada PNG (data URL) em silêncio — 1 página = 1 corte no POS
- * com "Cutting: After one page" e papel 80×35.
+ * Imprime cada PNG (data URL) em silÃªncio â€” 1 pÃ¡gina = 1 corte no POS
+ * com "Cutting: After one page" e papel 80Ã—35.
  */
 ipcMain.handle('print-fichas-silent', async (_event, payload) => {
   const pages = Array.isArray(payload?.pages) ? payload.pages : [];
@@ -78,9 +78,9 @@ function printOneBitmap(dataUrl, deviceName) {
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <style>
-  @page { size: 80mm 35mm; margin: 0; }
-  html, body { margin: 0; padding: 0; width: 80mm; height: 35mm; }
-  img { display: block; width: 80mm; height: 35mm; object-fit: fill; }
+  @page { size: 80mm 30mm; margin: 0; }
+  html, body { margin: 0; padding: 0; width: 80mm; height: 30mm; }
+  img { display: block; width: 80mm; height: 30mm; object-fit: fill; }
 </style></head><body>
 <img src="${dataUrl}" />
 </body></html>`;
@@ -103,9 +103,9 @@ function printOneBitmap(dataUrl, deviceName) {
             deviceName: deviceName || undefined,
             margins: { marginType: 'none' },
             pageSize: {
-              // mícrons (Electron)
+              // mÃ­crons (Electron)
               width: 80 * 1000,
-              height: 35 * 1000,
+              height: 30 * 1000,
             },
           },
           () => done()
@@ -119,3 +119,4 @@ function printOneBitmap(dataUrl, deviceName) {
     setTimeout(done, 60_000);
   });
 }
+

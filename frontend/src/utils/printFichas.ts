@@ -1,16 +1,16 @@
-import type { FichaTicket } from './fichas';
+﻿import type { FichaTicket } from './fichas';
 import { readProductFichaLogos } from './fichas';
 
-/** Largura = 100% do rolo 80mm. Só a altura é controlada pelo sistema. */
+/** Largura = 100% do rolo 80mm. SÃ³ a altura Ã© controlada pelo sistema. */
 export const FICHA_LARGURA_MM = 80;
-export const FICHA_ALTURA_MM = 35;
+export const FICHA_ALTURA_MM = 30;
 
 /**
- * Resolução proporcional à anterior (576×200 para 80×25mm → 8 px/mm).
- * 80×35mm → 576×280.
+ * ResoluÃ§Ã£o proporcional (576Ã—200 para 80Ã—25mm â†’ 8 px/mm).
+ * 80Ã—30mm â†’ 576Ã—240.
  */
 const PX_W = 576;
-const PX_H = 280;
+const PX_H = 240;
 
 function escapeHtml(value: string): string {
   return value
@@ -39,7 +39,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Converte canvas para preto/branco — térmica monócroma falha com verde/cor. */
+/** Converte canvas para preto/branco â€” tÃ©rmica monÃ³croma falha com verde/cor. */
 function toThermalMono(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   const data = ctx.getImageData(0, 0, w, h);
   const px = data.data;
@@ -54,7 +54,7 @@ function toThermalMono(ctx: CanvasRenderingContext2D, w: number, h: number): voi
   ctx.putImageData(data, 0, 0);
 }
 
-/** Preenche 100% do box (cover) — sem faixas brancas; pode cortar bordas da arte. */
+/** Preenche 100% do box (cover) â€” sem faixas brancas; pode cortar bordas da arte. */
 function drawCoverImage(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
@@ -145,7 +145,7 @@ async function renderFichaBitmap(
 }
 
 /**
- * HTML de UMA ficha = UMA página 80×35 (modo corte com kiosk silencioso).
+ * HTML de UMA ficha = UMA pÃ¡gina 80Ã—35 (modo corte com kiosk silencioso).
  */
 function buildSingleFichaHtml(pngDataUrl: string): string {
   const w = FICHA_LARGURA_MM;
@@ -188,8 +188,8 @@ function buildSingleFichaHtml(pngDataUrl: string): string {
 }
 
 /**
- * HTML com N fichas (1 confirmação no Chrome).
- * page-break ajuda se o driver respeitar; senão corta só no fim.
+ * HTML com N fichas (1 confirmaÃ§Ã£o no Chrome).
+ * page-break ajuda se o driver respeitar; senÃ£o corta sÃ³ no fim.
  */
 function buildBatchFichasHtml(pageImages: string[]): string {
   const w = FICHA_LARGURA_MM;
@@ -369,16 +369,16 @@ export function buildFichasHtml(
   const pages = tickets
     .map((t, i) => {
       const isLast = i === tickets.length - 1;
-      return `<section class="page${isLast ? ' last' : ''}"><div>${escapeHtml(festival)} — ${escapeHtml(t.nome)} — ${escapeHtml(when)}</div></section>`;
+      return `<section class="page${isLast ? ' last' : ''}"><div>${escapeHtml(festival)} â€” ${escapeHtml(t.nome)} â€” ${escapeHtml(when)}</div></section>`;
     })
     .join('');
   return `<!DOCTYPE html><html><body>${pages}</body></html>`;
 }
 
 /**
- * Padrão: 1 diálogo só (todas as fichas no mesmo job) — operador confirma 1x.
+ * PadrÃ£o: 1 diÃ¡logo sÃ³ (todas as fichas no mesmo job) â€” operador confirma 1x.
  *
- * Corte por ficha sem confirmar N vezes: só com Chrome em modo silencioso
+ * Corte por ficha sem confirmar N vezes: sÃ³ com Chrome em modo silencioso
  * (`--kiosk-printing`) + localStorage fichaPrintCutEach=1.
  */
 export function printFichasViaIframe(
@@ -406,7 +406,7 @@ export function printFichasViaIframe(
     }
 
     if (cutEach) {
-      // Requer --kiosk-printing; senão o operador confirma cada ficha.
+      // Requer --kiosk-printing; senÃ£o o operador confirma cada ficha.
       for (let i = 0; i < pageImages.length; i += 1) {
         await printHtmlOnce(
           buildSingleFichaHtml(pageImages[i]),
@@ -423,3 +423,4 @@ export function printFichasViaIframe(
     );
   })();
 }
+

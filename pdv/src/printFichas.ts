@@ -1,9 +1,9 @@
 /** Bitmap da ficha 80×35 mm para impressão silenciosa no Electron. */
 
 export const FICHA_LARGURA_MM = 80;
-export const FICHA_ALTURA_MM = 35;
+export const FICHA_ALTURA_MM = 30;
 const PX_W = 576;
-const PX_H = 280;
+const PX_H = 240; // 8 px/mm × 30mm
 
 export type FichaTicket = {
   key: string;

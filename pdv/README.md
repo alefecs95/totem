@@ -25,17 +25,23 @@ Ou: `npm run electron:dev` (Vite + Electron juntos).
 
 Na tela de login:
 - **Código**: o do admin (ex. `FESTA3K9`)
-- **URL da API**: `http://localhost:3001/api` (ou a URL pública `/api`)
+- **URL da API** (produção atual): `https://totem-totem-api.jgdvyu.easypanel.host/api`
+  (o instalador já vem com essa URL como padrão; PWA: https://totem-totem-pwa.jgdvyu.easypanel.host/)
 
-## Build Windows
+## Instalador Windows
+
+Gerado em:
+
+```text
+pdv/release/Totem PDV Setup 1.0.0.exe
+```
+
+Para regenerar:
 
 ```bash
 cd pdv
-npm install
 npm run electron:build
 ```
-
-Instalador em `pdv/release/`.
 
 ## Uso no evento
 
