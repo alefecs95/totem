@@ -31,7 +31,7 @@ const manualSaleSchema = z.object({
 });
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().email(),
   senha: z.string().min(1),
 });
 
@@ -39,7 +39,10 @@ const loginSchema = z.object({
 router.post('/login', async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: 'invalid_body' });
+    res.status(400).json({
+      error: 'invalid_body',
+      details: parsed.error.flatten(),
+    });
     return;
   }
 

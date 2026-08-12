@@ -4,17 +4,23 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
-    # Proxy para a API — evita CORS e dispensa VITE_API_URL em build-time.
+    client_header_buffer_size 16k;
+    large_client_header_buffers 8 64k;
+    client_max_body_size 10m;
+
     location /api/ {
         proxy_pass ${API_URL}/api/;
         proxy_http_version 1.1;
-        proxy_set_header Host $http_host;
+        proxy_set_header Host $proxy_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Cookie "";
+        proxy_pass_request_body on;
+        proxy_set_header Content-Type $content_type;
+        proxy_set_header Content-Length $content_length;
     }
 
-    # SPA: qualquer rota cai no index.html (React Router).
     location / {
         try_files $uri $uri/ /index.html;
     }

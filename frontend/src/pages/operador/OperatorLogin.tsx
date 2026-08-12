@@ -14,10 +14,24 @@ export default function OperatorLogin() {
     setErro('');
     setLoading(true);
     try {
-      await portalLogin(email, senha);
+      await portalLogin(email.trim(), senha);
       navigate('/operador', { replace: true });
-    } catch {
-      setErro('E-mail ou senha inválidos.');
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number; data?: { error?: string } } })
+        ?.response?.status;
+      const code = (err as { response?: { data?: { error?: string } } })?.response?.data
+        ?.error;
+      if (status === 400) {
+        setErro(
+          'Requisição inválida (verifique e-mail). Se persistir, limpe cookies do site e tente de novo.'
+        );
+      } else if (status === 401 || code === 'invalid_credentials') {
+        setErro(
+          'E-mail ou senha inválidos. Use a senha do portal do organizador (não a do admin).'
+        );
+      } else {
+        setErro('Não foi possível entrar. Verifique a conexão e tente novamente.');
+      }
     } finally {
       setLoading(false);
     }
