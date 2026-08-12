@@ -19,7 +19,8 @@ function formatPreco(preco: number): string {
  * 0–9     → monta quantidade (ex: 20)
  * F1–F9   → adiciona produto × quantidade
  * clique  → adiciona produto × quantidade
- * D/Enter → dinheiro
+ * D/Enter → abre dinheiro (recebido + troco)
+ * No dinheiro: dígitos = recebido, Enter confirma, Esc volta
  * F       → cartão físico
  * P / L   → Pix / leitor
  * Esc     → limpa qtd ou pedido
@@ -40,6 +41,9 @@ export default function Operator() {
   const [showHelp, setShowHelp] = useState(false);
   /** Dígitos digitados para quantidade em lote (ex: "20"). Vazio = 1. */
   const [qtyDigits, setQtyDigits] = useState('');
+  /** Modal de dinheiro: valor recebido (centavos como string de dígitos, ex: "5000" = R$ 50,00). */
+  const [cashOpen, setCashOpen] = useState(false);
+  const [cashDigits, setCashDigits] = useState('');
 
   const items = useCartStore((s) => s.items);
   const addItem = useCartStore((s) => s.addItem);
@@ -71,31 +75,74 @@ export default function Operator() {
     setErro('');
   }, []);
 
+  const fecharDinheiro = useCallback(() => {
+    setCashOpen(false);
+    setCashDigits('');
+  }, []);
+
+  const abrirDinheiro = useCallback(() => {
+    const state = useCartStore.getState();
+    if (state.items.length === 0 || pagando) return;
+    setQtyDigits('');
+    setErro('');
+    setCashDigits('');
+    setCashOpen(true);
+  }, [pagando]);
+
   const finalizarManual = useCallback(
-    async (metodo: 'dinheiro' | 'cartao_fisico') => {
+    async (metodo: 'dinheiro' | 'cartao_fisico', recebido?: number) => {
       const state = useCartStore.getState();
       if (state.items.length === 0 || pagando) return;
       const tot = state.getTotal();
+
+      if (metodo === 'dinheiro') {
+        const valorRecebido = recebido ?? 0;
+        if (valorRecebido + 0.001 < tot) {
+          setErro('Valor recebido menor que o total.');
+          return;
+        }
+      }
+
       setPagando(metodo);
       setErro('');
       try {
         const { queued } = await submitManualSale(state.items, tot, metodo);
         state.clearCart();
-        flash(
-          queued
-            ? 'Offline — sincroniza em breve'
-            : metodo === 'dinheiro'
-              ? '✓ Dinheiro OK'
+        fecharDinheiro();
+        if (metodo === 'dinheiro' && recebido != null) {
+          const troco = Math.round((recebido - tot) * 100) / 100;
+          flash(
+            queued
+              ? `Offline · Troco ${formatPreco(troco)}`
+              : troco > 0
+                ? `✓ Troco ${formatPreco(troco)}`
+                : '✓ Dinheiro OK (sem troco)'
+          );
+        } else {
+          flash(
+            queued
+              ? 'Offline — sincroniza em breve'
               : '✓ Cartão físico OK'
-        );
+          );
+        }
       } catch {
         setErro('Não foi possível registrar a venda.');
       } finally {
         setPagando(null);
       }
     },
-    [flash, pagando]
+    [flash, pagando, fecharDinheiro]
   );
+
+  const confirmarDinheiro = useCallback(() => {
+    const tot = useCartStore.getState().getTotal();
+    const recebido = cashDigits === '' ? 0 : Number.parseInt(cashDigits, 10) / 100;
+    if (recebido + 0.001 < tot) {
+      setErro('Valor recebido insuficiente.');
+      return;
+    }
+    void finalizarManual('dinheiro', recebido);
+  }, [cashDigits, finalizarManual]);
 
   const pagarPix = useCallback(() => {
     const state = useCartStore.getState();
@@ -146,6 +193,14 @@ export default function Operator() {
   pagamentosRef.current = pagamentos;
   const finalizarRef = useRef(finalizarManual);
   finalizarRef.current = finalizarManual;
+  const abrirDinheiroRef = useRef(abrirDinheiro);
+  abrirDinheiroRef.current = abrirDinheiro;
+  const confirmarDinheiroRef = useRef(confirmarDinheiro);
+  confirmarDinheiroRef.current = confirmarDinheiro;
+  const fecharDinheiroRef = useRef(fecharDinheiro);
+  fecharDinheiroRef.current = fecharDinheiro;
+  const cashOpenRef = useRef(cashOpen);
+  cashOpenRef.current = cashOpen;
   const pixRef = useRef(pagarPix);
   pixRef.current = pagarPix;
   const cartaoRef = useRef(pagarCartaoGateway);
@@ -206,6 +261,31 @@ export default function Operator() {
 
       const key = e.key;
 
+      // Modal dinheiro aberto: dígitos = valor recebido (centavos)
+      if (cashOpenRef.current) {
+        if (/^[0-9]$/.test(key)) {
+          e.preventDefault();
+          setCashDigits((prev) => (prev + key).replace(/^0+(?=\d)/, '').slice(0, 8));
+          return;
+        }
+        if (key === 'Backspace') {
+          e.preventDefault();
+          setCashDigits((prev) => prev.slice(0, -1));
+          return;
+        }
+        if (key === 'Escape') {
+          e.preventDefault();
+          fecharDinheiroRef.current();
+          return;
+        }
+        if (key === 'Enter') {
+          e.preventDefault();
+          confirmarDinheiroRef.current();
+          return;
+        }
+        return;
+      }
+
       // Quantidade: dígitos 0–9 (teclado principal ou numpad)
       if (/^[0-9]$/.test(key)) {
         e.preventDefault();
@@ -263,7 +343,7 @@ export default function Operator() {
       if (k === 'd' || key === 'Enter') {
         e.preventDefault();
         setQtyDigits('');
-        void finalizarRef.current('dinheiro');
+        abrirDinheiroRef.current();
         return;
       }
       if (k === 'f') {
@@ -300,6 +380,27 @@ export default function Operator() {
   const busy = pagando !== null;
   const canPay = items.length > 0 && !busy;
   const QTY_CHIPS = [2, 5, 10, 20, 50];
+
+  const cashRecebido =
+    cashDigits === '' ? 0 : Number.parseInt(cashDigits, 10) / 100;
+  const cashTroco = Math.round((cashRecebido - total) * 100) / 100;
+  const cashOk = cashRecebido + 0.001 >= total && total > 0;
+
+  const sugerirRecebido = (valor: number) => {
+    const cents = Math.round(valor * 100);
+    setCashDigits(String(cents));
+    setErro('');
+  };
+
+  const sugestoesDinheiro = (() => {
+    const base = [total];
+    for (const n of [10, 20, 50, 100, 200]) {
+      if (n >= total) base.push(n);
+    }
+    const ceil10 = Math.ceil(total / 10) * 10;
+    if (ceil10 > total) base.push(ceil10);
+    return [...new Set(base.map((v) => Math.round(v * 100) / 100))].slice(0, 6);
+  })();
 
   return (
     <div style={shell}>
@@ -555,7 +656,7 @@ export default function Operator() {
               color="#16a34a"
               disabled={!canPay}
               loading={pagando === 'dinheiro'}
-              onClick={() => finalizarManual('dinheiro')}
+              onClick={abrirDinheiro}
               primary
             />
             <PayBtn
@@ -590,6 +691,153 @@ export default function Operator() {
       </div>
 
       {toast && <div style={toastStyle}>{toast}</div>}
+
+      {cashOpen && (
+        <div style={modalOverlay} onClick={fecharDinheiro}>
+          <div
+            style={modalCard}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label="Pagamento em dinheiro"
+          >
+            <div style={{ fontWeight: 800, fontSize: 14, color: '#a8a29e' }}>
+              DINHEIRO
+            </div>
+            <div style={{ marginTop: 4, color: '#d6d3d1', fontSize: 14 }}>
+              Total a pagar
+            </div>
+            <div
+              style={{
+                fontFamily: "'Bebas Neue', sans-serif",
+                fontSize: 48,
+                color: '#ea580c',
+                lineHeight: 1,
+              }}
+            >
+              {formatPreco(total)}
+            </div>
+
+            <div style={{ marginTop: 18, color: '#a8a29e', fontSize: 13 }}>
+              Valor recebido (digite no teclado)
+            </div>
+            <div
+              style={{
+                fontFamily: "'Bebas Neue', sans-serif",
+                fontSize: 44,
+                color: '#fff',
+                lineHeight: 1.1,
+                background: '#0c0a09',
+                borderRadius: 10,
+                padding: '12px 16px',
+                marginTop: 6,
+                border: '2px solid #44403c',
+              }}
+            >
+              {formatPreco(cashRecebido)}
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 8,
+                marginTop: 12,
+              }}
+            >
+              {sugestoesDinheiro.map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => sugerirRecebido(v)}
+                  style={cashChip}
+                >
+                  {v === total ? 'Exato' : formatPreco(v)}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setCashDigits('');
+                  setErro('');
+                }}
+                style={{ ...cashChip, background: '#44403c' }}
+              >
+                Limpar
+              </button>
+            </div>
+
+            <div
+              style={{
+                marginTop: 16,
+                padding: '14px 16px',
+                borderRadius: 10,
+                background: cashOk
+                  ? cashTroco > 0
+                    ? '#14532d'
+                    : '#1c1917'
+                  : '#7f1d1d',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <span style={{ fontWeight: 700, fontSize: 15 }}>Troco</span>
+              <span
+                style={{
+                  fontFamily: "'Bebas Neue', sans-serif",
+                  fontSize: 36,
+                  lineHeight: 1,
+                  color: cashOk ? '#86efac' : '#fecaca',
+                }}
+              >
+                {cashOk ? formatPreco(Math.max(0, cashTroco)) : '—'}
+              </span>
+            </div>
+
+            {erro && (
+              <div style={{ ...erroBox, marginTop: 10 }}>{erro}</div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button
+                type="button"
+                onClick={fecharDinheiro}
+                style={{
+                  flex: 1,
+                  padding: 14,
+                  borderRadius: 10,
+                  border: '1px solid #57534e',
+                  background: 'transparent',
+                  color: '#fff',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Voltar (Esc)
+              </button>
+              <button
+                type="button"
+                onClick={confirmarDinheiro}
+                disabled={!cashOk || pagando === 'dinheiro'}
+                style={{
+                  flex: 1.4,
+                  padding: 14,
+                  borderRadius: 10,
+                  border: 'none',
+                  background: cashOk ? '#16a34a' : '#44403c',
+                  color: '#fff',
+                  fontWeight: 800,
+                  fontSize: 16,
+                  cursor: cashOk ? 'pointer' : 'default',
+                  opacity: pagando === 'dinheiro' ? 0.7 : 1,
+                }}
+              >
+                {pagando === 'dinheiro' ? '...' : 'Confirmar (Enter)'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -895,6 +1143,38 @@ const toastStyle: React.CSSProperties = {
   fontSize: 18,
   zIndex: 200,
   boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+};
+
+const modalOverlay: React.CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(0,0,0,0.72)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 300,
+  padding: 16,
+};
+
+const modalCard: React.CSSProperties = {
+  background: '#1c1917',
+  borderRadius: 16,
+  padding: 22,
+  width: '100%',
+  maxWidth: 420,
+  border: '2px solid #ea580c',
+  boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+};
+
+const cashChip: React.CSSProperties = {
+  border: 'none',
+  background: '#292524',
+  color: '#fff',
+  fontWeight: 700,
+  fontSize: 14,
+  padding: '10px 14px',
+  borderRadius: 8,
+  cursor: 'pointer',
 };
 
 const qtyBtn: React.CSSProperties = {
