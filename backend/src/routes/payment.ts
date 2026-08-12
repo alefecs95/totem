@@ -54,6 +54,8 @@ const cardSchema = z.object({
   deviceId: z.string().min(1).optional(),
   /** Override do leitor SumUp (PDV Electron pode escolher a maquininha). */
   readerId: z.string().min(3).optional(),
+  /** Operador escolhe SumUp ou Mercado Pago na hora da venda. */
+  gateway: z.enum(['sumup', 'mercadopago']).optional(),
   cardType: z.enum(['credit', 'debit']).optional(),
 });
 
@@ -277,6 +279,7 @@ router.post('/card', async (req, res) => {
     tenantId,
     deviceId: bodyDeviceId,
     readerId: bodyReaderId,
+    gateway: bodyGateway,
     cardType: bodyCardType,
   } = parsed.data;
 
@@ -309,9 +312,13 @@ router.post('/card', async (req, res) => {
       preco,
     }));
 
-    const gateway = tenant.gateway === 'sumup' ? 'sumup' : 'mercadopago';
+    const defaultGateway = tenant.gateway === 'sumup' ? 'sumup' : 'mercadopago';
+    const gateway = bodyGateway === 'sumup' || bodyGateway === 'mercadopago'
+      ? bodyGateway
+      : defaultGateway;
     const deviceId = bodyDeviceId || (tenant.mp_device_id as string | null) || undefined;
-    const sumupConfig = gateway === 'sumup' ? resolveTenantSumUpConfig(tenant) : null;
+    const sumupConfig =
+      gateway === 'sumup' ? resolveTenantSumUpConfig(tenant) : null;
     const cardType: CardType = bodyCardType ?? 'credit';
     const surcharge =
       gateway === 'sumup' && sumupConfig
@@ -544,14 +551,20 @@ router.get('/card-status/:intentId', async (req, res) => {
     let mpPaymentId: string | undefined;
     let rawStatus: string | undefined;
 
-    const txResult = await query<{ id: string; status: string }>(
-      'SELECT id, status FROM transactions WHERE payment_id = $1',
+    const txResult = await query<{ id: string; status: string; gateway: string }>(
+      'SELECT id, status, gateway FROM transactions WHERE payment_id = $1',
       [intentId]
     );
     const transaction = txResult.rows[0];
+    const effectiveGateway =
+      transaction?.gateway === 'sumup' || transaction?.gateway === 'mercadopago'
+        ? transaction.gateway
+        : tenant?.gateway === 'sumup'
+          ? 'sumup'
+          : 'mercadopago';
 
-    if (tenant?.gateway === 'sumup') {
-      const sumup = resolveTenantSumUpConfig(tenant);
+    if (effectiveGateway === 'sumup') {
+      const sumup = resolveTenantSumUpConfig(tenant || {});
       if (!sumup.apiKey || !sumup.merchantCode) {
         res.status(400).json({ error: 'missing_sumup_config' });
         return;

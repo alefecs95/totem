@@ -4,13 +4,16 @@ import {
   createCardPayment,
   getApiBase,
   getCardPaymentStatus,
+  getPdvSales,
   listSumupReaders,
   loadEvento,
   selectSumupReader,
   setApiBase,
   type CardType,
+  type PayGateway,
   type PdvConfig,
   type PdvProduct,
+  type PdvSale,
   type SumUpReader,
 } from './api';
 import {
@@ -138,6 +141,10 @@ export default function App() {
     () => localStorage.getItem('pdvSumupReaderId') || ''
   );
   const [cardPickerOpen, setCardPickerOpen] = useState(false);
+  const [gatewayPickerOpen, setGatewayPickerOpen] = useState(false);
+  const [salesOpen, setSalesOpen] = useState(false);
+  const [sales, setSales] = useState<PdvSale[]>([]);
+  const [salesLoading, setSalesLoading] = useState(false);
   const [cardWaiting, setCardWaiting] = useState<{
     intentId: string;
     chargedAmount: number;
@@ -197,10 +204,11 @@ export default function App() {
   const pendingQty =
     qtyDigits === '' ? 1 : Math.max(1, parseInt(qtyDigits, 10) || 1);
   const canPay = cart.length > 0 && !pagando && !cardWaiting;
-  const cartaoMaquininha = Boolean(config?.pagamentos?.cartao);
+  const sumupOk = Boolean(config?.pagamentos?.sumup);
+  const mpOk = Boolean(config?.pagamentos?.mercadopago);
+  const cartaoMaquininha = sumupOk || mpOk || Boolean(config?.pagamentos?.cartao);
   const sumupSurcharge = config?.sumupSurcharge ?? null;
-  const needsCardType =
-    config?.gateway === 'sumup' && Boolean(sumupSurcharge?.enabled);
+  const needsCardType = Boolean(sumupSurcharge?.enabled);
   const debitPreview =
     cardPickerOpen && needsCardType && sumupSurcharge
       ? computeCardSurchargeForCardType({
@@ -577,11 +585,15 @@ export default function App() {
     }
   };
 
-  const pagarCartaoGateway = async (cardType?: CardType) => {
+  const pagarCartaoGateway = async (
+    gateway: PayGateway,
+    cardType?: CardType
+  ) => {
     if (!config || cart.length === 0) return;
     setPagando('gateway');
     setErro('');
     setCardPickerOpen(false);
+    setGatewayPickerOpen(false);
     const snapshot = cart.map((i) => ({ ...i }));
     const netTotal = Math.round(total * 100) / 100;
     const printPayload: PrintItem[] = snapshot.map((i) => ({
@@ -599,8 +611,16 @@ export default function App() {
           quantidade: i.quantidade,
         })),
         total: netTotal,
-        cardType,
-        readerId: selectedReaderId || config.sumupReaderId || undefined,
+        gateway,
+        cardType: gateway === 'sumup' ? cardType : undefined,
+        readerId:
+          gateway === 'sumup'
+            ? selectedReaderId || config.sumupReaderId || undefined
+            : undefined,
+        deviceId:
+          gateway === 'mercadopago'
+            ? config.mpDeviceId || undefined
+            : undefined,
       });
       limpar();
       setCardWaiting({
@@ -610,7 +630,11 @@ export default function App() {
       });
     } catch (err: unknown) {
       const data = (
-        err as { response?: { data?: { error?: string; detalhe?: string; message?: string } } }
+        err as {
+          response?: {
+            data?: { error?: string; detalhe?: string; message?: string };
+          };
+        }
       )?.response?.data;
       setErro(
         data?.detalhe ||
@@ -623,18 +647,50 @@ export default function App() {
     }
   };
 
-  const iniciarLeitor = () => {
-    if (!canPay || !cartaoMaquininha) return;
-    if (!selectedReaderId && !config?.sumupReaderId) {
-      setErro('Selecione a maquininha (botao Maquininha).');
-      void abrirMaquininhas();
-      return;
-    }
+  const iniciarSumupComTipo = () => {
     if (needsCardType) {
+      setGatewayPickerOpen(false);
       setCardPickerOpen(true);
       return;
     }
-    void pagarCartaoGateway();
+    void pagarCartaoGateway('sumup');
+  };
+
+  const iniciarLeitor = () => {
+    if (!canPay) return;
+    if (sumupOk && mpOk) {
+      setGatewayPickerOpen(true);
+      return;
+    }
+    if (sumupOk) {
+      if (!selectedReaderId && !config?.sumupReaderId) {
+        setErro('Selecione a maquininha SumUp (botao Maquininha).');
+        void abrirMaquininhas();
+        return;
+      }
+      iniciarSumupComTipo();
+      return;
+    }
+    if (mpOk) {
+      void pagarCartaoGateway('mercadopago');
+      return;
+    }
+    setErro('Nenhuma maquininha configurada (SumUp ou Mercado Pago).');
+    void abrirMaquininhas();
+  };
+
+  const abrirHistorico = async () => {
+    if (!config) return;
+    setSalesOpen(true);
+    setSalesLoading(true);
+    try {
+      setSales(await getPdvSales(config.codigo, 40));
+    } catch {
+      setErro('Falha ao carregar historico.');
+      setSales([]);
+    } finally {
+      setSalesLoading(false);
+    }
   };
 
   const cancelarCartaoEspera = () => {
@@ -733,6 +789,9 @@ export default function App() {
       } else if (e.key.toLowerCase() === 'l') {
         e.preventDefault();
         iniciarLeitor();
+      } else if (e.key.toLowerCase() === 'h') {
+        e.preventDefault();
+        void abrirHistorico();
       } else if (e.key.toLowerCase() === 'r') {
         e.preventDefault();
         reimprimirUltima();
@@ -867,6 +926,14 @@ export default function App() {
         </select>
         <button
           type="button"
+          onClick={() => void abrirHistorico()}
+          style={hdrBtn}
+          title="Historico de vendas (H)"
+        >
+          Historico
+        </button>
+        <button
+          type="button"
           onClick={() => void abrirMaquininhas()}
           style={{
             ...hdrBtn,
@@ -929,7 +996,8 @@ export default function App() {
           <span>F1-F9 produto</span>
           <span>D/Enter dinheiro</span>
           <span>F cartao fisico</span>
-          <span>L leitor SumUp</span>
+          <span>L leitor (SumUp/MP)</span>
+          <span>H historico</span>
           <span>B filtro drinks</span>
           <span>R reimprimir</span>
           <span>F11 tela cheia</span>
@@ -1239,6 +1307,179 @@ export default function App() {
         </div>
       )}
 
+      {gatewayPickerOpen && (
+        <div style={modalOverlay} onClick={() => setGatewayPickerOpen(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 18 }}>Passar cartao em</div>
+            <p style={{ color: '#a8a29e', fontSize: 13, marginTop: 6 }}>
+              Escolha a maquininha desta venda
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
+              {sumupOk && (
+                <button
+                  type="button"
+                  disabled={!!pagando}
+                  onClick={iniciarSumupComTipo}
+                  style={{
+                    padding: 18,
+                    borderRadius: 10,
+                    border: 'none',
+                    background: '#0f766e',
+                    color: '#fff',
+                    fontWeight: 900,
+                    fontSize: 18,
+                    cursor: 'pointer',
+                  }}
+                >
+                  SUMUP
+                </button>
+              )}
+              {mpOk && (
+                <button
+                  type="button"
+                  disabled={!!pagando}
+                  onClick={() => void pagarCartaoGateway('mercadopago')}
+                  style={{
+                    padding: 18,
+                    borderRadius: 10,
+                    border: 'none',
+                    background: '#009ee3',
+                    color: '#fff',
+                    fontWeight: 900,
+                    fontSize: 18,
+                    cursor: 'pointer',
+                  }}
+                >
+                  MERCADO PAGO
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setGatewayPickerOpen(false)}
+                style={{
+                  padding: 12,
+                  borderRadius: 10,
+                  border: '1px solid #57534e',
+                  background: 'transparent',
+                  color: '#fff',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {salesOpen && (
+        <div style={modalOverlay} onClick={() => setSalesOpen(false)}>
+          <div
+            style={{ ...modalCard, width: 'min(520px, 96vw)', maxHeight: '80vh' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <div style={{ fontWeight: 800, fontSize: 18 }}>Historimas vendas</div>
+              <button
+                type="button"
+                onClick={() => void abrirHistorico()}
+                style={{ ...hdrBtn, padding: '6px 10px' }}
+              >
+                Atualizar
+              </button>
+            </div>
+            <div
+              style={{
+                marginTop: 12,
+                overflow: 'auto',
+                maxHeight: '60vh',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}
+            >
+              {salesLoading ? (
+                <p style={{ color: '#a8a29e' }}>Carregando...</p>
+              ) : sales.length === 0 ? (
+                <p style={{ color: '#a8a29e' }}>Nenhuma venda ainda.</p>
+              ) : (
+                sales.map((s) => {
+                  const itens = Array.isArray(s.itens)
+                    ? (s.itens as Array<{ nome?: string; quantidade?: number }>)
+                    : [];
+                  const resumo = itens
+                    .map((i) => `${i.quantidade ?? 1}x ${i.nome ?? '?'}`)
+                    .join(', ');
+                  const when = new Date(s.criado_em).toLocaleString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  });
+                  return (
+                    <div
+                      key={s.id}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 10,
+                        background: '#292524',
+                        border: '1px solid #44403c',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 8,
+                        }}
+                      >
+                        <strong style={{ color: '#ea580c' }}>
+                          {formatPreco(s.valor_bruto)}
+                        </strong>
+                        <span style={{ fontSize: 12, color: '#a8a29e' }}>{when}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#d6d3d1', marginTop: 4 }}>
+                        {s.metodo}
+                        {s.gateway ? ` · ${s.gateway}` : ''}
+                      </div>
+                      {resumo && (
+                        <div style={{ fontSize: 12, color: '#a8a29e', marginTop: 2 }}>
+                          {resumo}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setSalesOpen(false)}
+              style={{
+                marginTop: 14,
+                width: '100%',
+                padding: 12,
+                borderRadius: 10,
+                border: '1px solid #57534e',
+                background: 'transparent',
+                color: '#fff',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+
       {cardPickerOpen && debitPreview && creditPreview && sumupSurcharge && (
         <div style={modalOverlay} onClick={() => setCardPickerOpen(false)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
@@ -1250,7 +1491,7 @@ export default function App() {
               <button
                 type="button"
                 disabled={!!pagando}
-                onClick={() => void pagarCartaoGateway('debit')}
+                onClick={() => void pagarCartaoGateway('sumup', 'debit')}
                 style={{
                   padding: 16,
                   borderRadius: 10,
@@ -1270,7 +1511,7 @@ export default function App() {
               <button
                 type="button"
                 disabled={!!pagando}
-                onClick={() => void pagarCartaoGateway('credit')}
+                onClick={() => void pagarCartaoGateway('sumup', 'credit')}
                 style={{
                   padding: 16,
                   borderRadius: 10,

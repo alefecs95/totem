@@ -654,7 +654,7 @@ export default function Tenants() {
             </Field>
 
             <div style={{ display: 'flex', gap: 12 }}>
-              <Field label="Gateway">
+              <Field label="Gateway padrao">
                 <select
                   style={input}
                   value={form.gateway}
@@ -665,6 +665,10 @@ export default function Tenants() {
                   <option value="mercadopago">Mercado Pago</option>
                   <option value="sumup">SumUp</option>
                 </select>
+                <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
+                  Configure MP e SumUp abaixo. No PDV Electron o operador escolhe
+                  qual maquininha usar em cada venda.
+                </p>
               </Field>
               <Field label="Comissão (%)">
                 <input
@@ -680,7 +684,18 @@ export default function Tenants() {
               </Field>
             </div>
 
-            {form.gateway === 'mercadopago' ? (
+            {(
+              <>
+              <div
+                style={{
+                  fontWeight: 800,
+                  fontSize: 14,
+                  marginTop: 4,
+                  color: '#0f172a',
+                }}
+              >
+                Mercado Pago
+              </div>
               <>
                 <Field label="MP Access Token">
                   <input
@@ -1053,7 +1068,16 @@ export default function Tenants() {
                   </div>
                 </div>
               </>
-            ) : (
+              <div
+                style={{
+                  fontWeight: 800,
+                  fontSize: 14,
+                  marginTop: 16,
+                  color: '#0f172a',
+                }}
+              >
+                SumUp
+              </div>
               <>
                 <Field label="SumUp API Key">
                   <input
@@ -1448,6 +1472,7 @@ export default function Tenants() {
                     )}
                   </div>
                 )}
+              </>
               </>
             )}
 

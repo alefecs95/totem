@@ -84,40 +84,86 @@ router.get('/:codigo', async (req, res) => {
       ficha_logo_data: (row.ficha_logo_data as string | null) || null,
     }));
 
-    const gateway = tenant.gateway === 'sumup' ? 'sumup' : 'mercadopago';
-    const pixDisponivel =
-      gateway === 'sumup'
-        ? Boolean(tenant.sumup_api_key)
-        : Boolean(tenant.mp_access_token);
-    const cartaoDisponivel =
-      gateway === 'sumup'
-        ? Boolean(
-            tenant.sumup_api_key &&
-              tenant.sumup_reader_id &&
-              tenant.sumup_merchant_code
-          )
-        : Boolean(
-            tenant.mp_access_token &&
-              isValidMpDeviceId(tenant.mp_device_id as string)
-          );
+    const defaultGateway = tenant.gateway === 'sumup' ? 'sumup' : 'mercadopago';
+    const sumupCartao = Boolean(
+      tenant.sumup_api_key &&
+        tenant.sumup_reader_id &&
+        tenant.sumup_merchant_code &&
+        tenant.sumup_affiliate_key &&
+        tenant.sumup_affiliate_app_id
+    );
+    const mpCartao = Boolean(
+      tenant.mp_access_token &&
+        isValidMpDeviceId(tenant.mp_device_id as string)
+    );
+    const sumupPix = Boolean(tenant.sumup_api_key && tenant.sumup_pay_to_email);
+    const mpPix = Boolean(tenant.mp_access_token);
 
     res.json({
       codigo: normalizeEventCode(String(req.params.codigo)),
       tenantId: tenant.id as string,
       nomeFestival: tenant.nome as string,
-      gateway,
+      gateway: defaultGateway,
       produtos,
       pagamentos: {
-        pix: pixDisponivel,
-        cartao: cartaoDisponivel,
+        pix: sumupPix || mpPix,
+        cartao: sumupCartao || mpCartao,
+        sumup: sumupCartao,
+        mercadopago: mpCartao,
       },
       sumupReaderId: (tenant.sumup_reader_id as string | null) || null,
-      sumupSurcharge:
-        gateway === 'sumup' ? getTenantCardSurchargeConfig(tenant) : null,
+      mpDeviceId: (tenant.mp_device_id as string | null) || null,
+      sumupSurcharge: getTenantCardSurchargeConfig(tenant),
     });
   } catch (err) {
     console.error('Erro PDV config:', err);
     res.status(500).json({ error: 'pdv_config_failed' });
+  }
+});
+
+/**
+ * GET /api/pdv/:codigo/transactions
+ * Ultimas vendas do evento (historico do PDV Electron).
+ */
+router.get('/:codigo/transactions', async (req, res) => {
+  try {
+    const tenant = await findTenantByCodigo(String(req.params.codigo || ''));
+    if (!tenant) {
+      res.status(404).json({ error: 'evento_nao_encontrado' });
+      return;
+    }
+
+    const limitRaw = Number(req.query.limit ?? 40);
+    const limit = Math.min(100, Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 40));
+    const status = String(req.query.status || 'approved');
+
+    const result = await query(
+      `SELECT t.id, t.metodo, t.status, t.gateway, t.valor_bruto, t.itens, t.criado_em,
+              tt.nome AS totem_nome
+       FROM transactions t
+       LEFT JOIN totens tt ON tt.id = t.totem_id
+       WHERE t.tenant_id = $1
+         AND ($2 = 'all' OR t.status = $2)
+       ORDER BY t.criado_em DESC
+       LIMIT $3`,
+      [tenant.id, status, limit]
+    );
+
+    res.json({
+      transactions: result.rows.map((row) => ({
+        id: row.id,
+        metodo: row.metodo,
+        status: row.status,
+        gateway: row.gateway,
+        valor_bruto: Number(row.valor_bruto),
+        itens: row.itens,
+        criado_em: row.criado_em,
+        totem_nome: row.totem_nome ?? null,
+      })),
+    });
+  } catch (err) {
+    console.error('Erro PDV transactions:', err);
+    res.status(500).json({ error: 'pdv_transactions_failed' });
   }
 });
 

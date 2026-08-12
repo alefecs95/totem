@@ -25,6 +25,7 @@ export interface PdvProduct {
 }
 
 export type CardType = 'credit' | 'debit';
+export type PayGateway = 'sumup' | 'mercadopago';
 
 export interface SumupSurcharge {
   enabled: boolean;
@@ -40,14 +41,31 @@ export interface SumUpReader {
   deviceStatus?: string | null;
 }
 
+export interface PdvSale {
+  id: string;
+  metodo: string;
+  status: string;
+  gateway: string;
+  valor_bruto: number;
+  itens: unknown;
+  criado_em: string;
+  totem_nome: string | null;
+}
+
 export interface PdvConfig {
   codigo: string;
   tenantId: string;
   nomeFestival: string;
   gateway: string;
   produtos: PdvProduct[];
-  pagamentos?: { pix: boolean; cartao: boolean };
+  pagamentos?: {
+    pix: boolean;
+    cartao: boolean;
+    sumup?: boolean;
+    mercadopago?: boolean;
+  };
   sumupReaderId?: string | null;
+  mpDeviceId?: string | null;
   sumupSurcharge?: SumupSurcharge | null;
 }
 
@@ -78,6 +96,17 @@ export async function selectSumupReader(
     `${getApiBase()}/pdv/${encodeURIComponent(codigo)}/sumup-reader`,
     { readerId }
   );
+}
+
+export async function getPdvSales(
+  codigo: string,
+  limit = 40
+): Promise<PdvSale[]> {
+  const { data } = await axios.get<{ transactions: PdvSale[] }>(
+    `${getApiBase()}/pdv/${encodeURIComponent(codigo)}/transactions`,
+    { params: { limit, status: 'approved' } }
+  );
+  return data.transactions ?? [];
 }
 
 export async function criarVenda(input: {
@@ -118,6 +147,8 @@ export async function createCardPayment(input: {
   total: number;
   cardType?: CardType;
   readerId?: string;
+  deviceId?: string;
+  gateway?: PayGateway;
 }): Promise<{
   intentId: string;
   transactionId: string;
@@ -129,6 +160,8 @@ export async function createCardPayment(input: {
     total: input.total,
     ...(input.cardType ? { cardType: input.cardType } : {}),
     ...(input.readerId ? { readerId: input.readerId } : {}),
+    ...(input.deviceId ? { deviceId: input.deviceId } : {}),
+    ...(input.gateway ? { gateway: input.gateway } : {}),
   });
   return data;
 }
