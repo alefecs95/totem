@@ -1,12 +1,22 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   criarVenda,
+  createCardPayment,
   getApiBase,
+  getCardPaymentStatus,
+  listSumupReaders,
   loadEvento,
+  selectSumupReader,
   setApiBase,
+  type CardType,
   type PdvConfig,
   type PdvProduct,
+  type SumUpReader,
 } from './api';
+import {
+  computeCardSurchargeForCardType,
+  formatSurchargePercent,
+} from './cardSurcharge';
 import {
   countOfflineQueue,
   enqueueOfflineSale,
@@ -121,6 +131,18 @@ export default function App() {
   /** Se true, digitos vao para as casas decimais. */
   const [cashComma, setCashComma] = useState(false);
   const [cursorHidden, setCursorHidden] = useState(false);
+  const [readersOpen, setReadersOpen] = useState(false);
+  const [readers, setReaders] = useState<SumUpReader[]>([]);
+  const [readersLoading, setReadersLoading] = useState(false);
+  const [selectedReaderId, setSelectedReaderId] = useState(
+    () => localStorage.getItem('pdvSumupReaderId') || ''
+  );
+  const [cardPickerOpen, setCardPickerOpen] = useState(false);
+  const [cardWaiting, setCardWaiting] = useState<{
+    intentId: string;
+    chargedAmount: number;
+    printItems: PrintItem[];
+  } | null>(null);
   const [online, setOnline] = useState(
     typeof navigator !== 'undefined' ? navigator.onLine : true
   );
@@ -174,7 +196,27 @@ export default function App() {
   );
   const pendingQty =
     qtyDigits === '' ? 1 : Math.max(1, parseInt(qtyDigits, 10) || 1);
-  const canPay = cart.length > 0 && !pagando;
+  const canPay = cart.length > 0 && !pagando && !cardWaiting;
+  const cartaoMaquininha = Boolean(config?.pagamentos?.cartao);
+  const sumupSurcharge = config?.sumupSurcharge ?? null;
+  const needsCardType =
+    config?.gateway === 'sumup' && Boolean(sumupSurcharge?.enabled);
+  const debitPreview =
+    cardPickerOpen && needsCardType && sumupSurcharge
+      ? computeCardSurchargeForCardType({
+          netAmount: total,
+          config: sumupSurcharge,
+          cardType: 'debit',
+        })
+      : null;
+  const creditPreview =
+    cardPickerOpen && needsCardType && sumupSurcharge
+      ? computeCardSurchargeForCardType({
+          netAmount: total,
+          config: sumupSurcharge,
+          cardType: 'credit',
+        })
+      : null;
 
   const cashRecebido = useMemo(() => {
     const reais = cashInt === '' ? 0 : parseInt(cashInt, 10) || 0;
@@ -327,6 +369,10 @@ export default function App() {
       setConfig(cfg);
       localStorage.setItem('pdvCodigo', cfg.codigo);
       localStorage.setItem('pdvConfigCache', JSON.stringify(cfg));
+      if (cfg.sumupReaderId) {
+        setSelectedReaderId(cfg.sumupReaderId);
+        localStorage.setItem('pdvSumupReaderId', cfg.sumupReaderId);
+      }
       setToast(`Conectado: ${cfg.nomeFestival}`);
     } catch {
       // Tenta cache local se estiver offline
@@ -481,6 +527,147 @@ export default function App() {
     }
   };
 
+  const abrirMaquininhas = async () => {
+    if (!config) return;
+    setReadersOpen(true);
+    setReadersLoading(true);
+    setErro('');
+    try {
+      const data = await listSumupReaders(config.codigo);
+      setReaders(data.readers);
+      if (data.selectedReaderId) {
+        setSelectedReaderId(data.selectedReaderId);
+        localStorage.setItem('pdvSumupReaderId', data.selectedReaderId);
+      }
+      if (data.readers.length === 0) {
+        setToast('Nenhuma maquininha pareada. Pareie no admin.');
+      }
+    } catch (err: unknown) {
+      const detalhe = (
+        err as { response?: { data?: { detalhe?: string } } }
+      )?.response?.data?.detalhe;
+      setErro(detalhe || 'Falha ao buscar maquininhas SumUp.');
+    } finally {
+      setReadersLoading(false);
+    }
+  };
+
+  const escolherMaquininha = async (reader: SumUpReader) => {
+    if (!config) return;
+    try {
+      await selectSumupReader(config.codigo, reader.id);
+      setSelectedReaderId(reader.id);
+      localStorage.setItem('pdvSumupReaderId', reader.id);
+      setConfig((c) =>
+        c
+          ? {
+              ...c,
+              sumupReaderId: reader.id,
+              pagamentos: {
+                pix: c.pagamentos?.pix ?? false,
+                cartao: true,
+              },
+            }
+          : c
+      );
+      setToast(`Maquininha: ${reader.name || reader.id}`);
+      setReadersOpen(false);
+    } catch {
+      setErro('Nao foi possivel selecionar a maquininha.');
+    }
+  };
+
+  const pagarCartaoGateway = async (cardType?: CardType) => {
+    if (!config || cart.length === 0) return;
+    setPagando('gateway');
+    setErro('');
+    setCardPickerOpen(false);
+    const snapshot = cart.map((i) => ({ ...i }));
+    const netTotal = Math.round(total * 100) / 100;
+    const printPayload: PrintItem[] = snapshot.map((i) => ({
+      nome: i.nome,
+      quantidade: i.quantidade,
+      imprime_ficha: i.imprime_ficha,
+      ficha_2_vias: i.ficha_2_vias,
+      ficha_logo_data: i.ficha_logo_data,
+    }));
+    try {
+      const payment = await createCardPayment({
+        tenantId: config.tenantId,
+        items: snapshot.map((i) => ({
+          productId: i.id,
+          quantidade: i.quantidade,
+        })),
+        total: netTotal,
+        cardType,
+        readerId: selectedReaderId || config.sumupReaderId || undefined,
+      });
+      limpar();
+      setCardWaiting({
+        intentId: payment.intentId,
+        chargedAmount: payment.chargedAmount ?? netTotal,
+        printItems: printPayload,
+      });
+    } catch (err: unknown) {
+      const data = (
+        err as { response?: { data?: { error?: string; detalhe?: string; message?: string } } }
+      )?.response?.data;
+      setErro(
+        data?.detalhe ||
+          data?.message ||
+          data?.error ||
+          'Falha ao iniciar cartao na maquininha.'
+      );
+    } finally {
+      setPagando(null);
+    }
+  };
+
+  const iniciarLeitor = () => {
+    if (!canPay || !cartaoMaquininha) return;
+    if (!selectedReaderId && !config?.sumupReaderId) {
+      setErro('Selecione a maquininha (botao Maquininha).');
+      void abrirMaquininhas();
+      return;
+    }
+    if (needsCardType) {
+      setCardPickerOpen(true);
+      return;
+    }
+    void pagarCartaoGateway();
+  };
+
+  const cancelarCartaoEspera = () => {
+    setCardWaiting(null);
+    setToast('Pagamento cancelado — volte ao PDV');
+  };
+
+  // Poll status da maquininha
+  useEffect(() => {
+    if (!cardWaiting || !config) return;
+    const intentId = cardWaiting.intentId;
+    const id = window.setInterval(async () => {
+      try {
+        const result = await getCardPaymentStatus(intentId, config.tenantId);
+        if (result.status === 'approved') {
+          window.clearInterval(id);
+          const items = cardWaiting.printItems;
+          const festival = config.nomeFestival;
+          setCardWaiting(null);
+          imprimirFichasBg(items, festival);
+          setToast('Cartao aprovado!');
+        } else if (result.status === 'rejected') {
+          window.clearInterval(id);
+          setCardWaiting(null);
+          setToast('Cartao recusado / cancelado na maquininha');
+        }
+      } catch {
+        /* keep polling */
+      }
+    }, 3000);
+    return () => window.clearInterval(id);
+  }, [cardWaiting, config]);
+
   const abrirDinheiro = () => {
     if (!canPay) return;
     limparCash();
@@ -543,6 +730,9 @@ export default function App() {
       } else if (e.key.toLowerCase() === 'f') {
         e.preventDefault();
         if (canPay) void finalizarManual('cartao_fisico');
+      } else if (e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        iniciarLeitor();
       } else if (e.key.toLowerCase() === 'r') {
         e.preventDefault();
         reimprimirUltima();
@@ -677,6 +867,18 @@ export default function App() {
         </select>
         <button
           type="button"
+          onClick={() => void abrirMaquininhas()}
+          style={{
+            ...hdrBtn,
+            background: selectedReaderId ? '#dcfce7' : '#fff',
+            maxWidth: 160,
+          }}
+          title="Escolher maquininha SumUp"
+        >
+          Maquininha
+        </button>
+        <button
+          type="button"
           onClick={() => {
             setSoDrinks((v) => {
               const next = !v;
@@ -727,6 +929,7 @@ export default function App() {
           <span>F1-F9 produto</span>
           <span>D/Enter dinheiro</span>
           <span>F cartao fisico</span>
+          <span>L leitor SumUp</span>
           <span>B filtro drinks</span>
           <span>R reimprimir</span>
           <span>F11 tela cheia</span>
@@ -939,11 +1142,211 @@ export default function App() {
               loading={pagando === 'cartao_fisico'}
               onClick={() => void finalizarManual('cartao_fisico')}
             />
+            {(cartaoMaquininha || config.gateway === 'sumup') && (
+              <PayBtn
+                label="LEITOR"
+                hint="L"
+                color="#1d4ed8"
+                disabled={!canPay}
+                loading={pagando === 'gateway'}
+                onClick={iniciarLeitor}
+              />
+            )}
           </div>
         </aside>
       </div>
 
       {toast && <div style={toastStyle}>{toast}</div>}
+
+      {readersOpen && (
+        <div style={modalOverlay} onClick={() => setReadersOpen(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: '#fff' }}>
+              Escolher maquininha SumUp
+            </div>
+            <p style={{ margin: '8px 0 0', color: '#a8a29e', fontSize: 13 }}>
+              Clique na maquina para usar neste PDV.
+            </p>
+            {readersLoading ? (
+              <p style={{ color: '#a8a29e', marginTop: 16 }}>Buscando...</p>
+            ) : readers.length === 0 ? (
+              <p style={{ color: '#fca5a5', marginTop: 16 }}>
+                Nenhuma maquininha. Pareie no admin primeiro.
+              </p>
+            ) : (
+              <div
+                style={{
+                  marginTop: 14,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                  maxHeight: 360,
+                  overflow: 'auto',
+                }}
+              >
+                {readers.map((r) => {
+                  const selected = selectedReaderId === r.id;
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => void escolherMaquininha(r)}
+                      style={{
+                        textAlign: 'left',
+                        padding: '12px 14px',
+                        borderRadius: 10,
+                        border: selected
+                          ? '2px solid #16a34a'
+                          : '1px solid #57534e',
+                        background: selected ? '#14532d' : '#292524',
+                        color: '#fff',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ fontWeight: 800 }}>
+                        {r.name || r.id}
+                        {selected ? ' (selecionada)' : ''}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#a8a29e', marginTop: 4 }}>
+                        {r.id}
+                        {r.deviceStatus != null
+                          ? ` | aparelho ${r.deviceStatus}`
+                          : ''}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setReadersOpen(false)}
+              style={{
+                marginTop: 16,
+                width: '100%',
+                padding: 12,
+                borderRadius: 10,
+                border: '1px solid #57534e',
+                background: 'transparent',
+                color: '#fff',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {cardPickerOpen && debitPreview && creditPreview && sumupSurcharge && (
+        <div style={modalOverlay} onClick={() => setCardPickerOpen(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 16 }}>Tipo de cartao</div>
+            <p style={{ color: '#a8a29e', fontSize: 13, marginTop: 6 }}>
+              Total base {formatPreco(total)}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
+              <button
+                type="button"
+                disabled={!!pagando}
+                onClick={() => void pagarCartaoGateway('debit')}
+                style={{
+                  padding: 16,
+                  borderRadius: 10,
+                  border: 'none',
+                  background: '#2563eb',
+                  color: '#fff',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                DEBITO — {formatPreco(debitPreview.grossAmount)}
+                <div style={{ fontSize: 12, opacity: 0.85, fontWeight: 600 }}>
+                  taxa {formatSurchargePercent(sumupSurcharge.debitPercent)}
+                </div>
+              </button>
+              <button
+                type="button"
+                disabled={!!pagando}
+                onClick={() => void pagarCartaoGateway('credit')}
+                style={{
+                  padding: 16,
+                  borderRadius: 10,
+                  border: 'none',
+                  background: '#1d4ed8',
+                  color: '#fff',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                CREDITO — {formatPreco(creditPreview.grossAmount)}
+                <div style={{ fontSize: 12, opacity: 0.85, fontWeight: 600 }}>
+                  taxa {formatSurchargePercent(sumupSurcharge.creditPercent)}
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCardPickerOpen(false)}
+                style={{
+                  padding: 12,
+                  borderRadius: 10,
+                  border: '1px solid #57534e',
+                  background: 'transparent',
+                  color: '#fff',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cardWaiting && (
+        <div style={modalOverlay}>
+          <div style={{ ...modalCard, textAlign: 'center' }}>
+            <div style={{ fontSize: 48 }}>💳</div>
+            <div style={{ fontWeight: 800, fontSize: 22, marginTop: 8 }}>
+              Passe o cartao na maquininha
+            </div>
+            <div
+              style={{
+                fontFamily: "'Bebas Neue', sans-serif",
+                fontSize: 40,
+                color: '#ea580c',
+                marginTop: 8,
+              }}
+            >
+              {formatPreco(cardWaiting.chargedAmount)}
+            </div>
+            <p style={{ color: '#a8a29e', marginTop: 8 }}>
+              Aguardando confirmacao...
+            </p>
+            <button
+              type="button"
+              onClick={cancelarCartaoEspera}
+              style={{
+                marginTop: 20,
+                width: '100%',
+                padding: 14,
+                borderRadius: 10,
+                border: '1px solid #57534e',
+                background: 'transparent',
+                color: '#fff',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Cancelar e voltar ao PDV
+            </button>
+          </div>
+        </div>
+      )}
 
       {cashOpen && (
         <div style={modalOverlay} onClick={() => setCashOpen(false)}>

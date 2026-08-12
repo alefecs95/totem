@@ -2,6 +2,14 @@ import { randomUUID } from 'crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { query } from '../config/database';
+import { isValidMpDeviceId } from '../services/mercadopago';
+import {
+  getTenantCardSurchargeConfig,
+  listSumUpReaders,
+  resolveTenantSumUpConfig,
+  SumUpError,
+  type TenantSumUpFields,
+} from '../services/sumup';
 import { normalizeEventCode } from '../utils/eventCode';
 import {
   PaymentValidationError,
@@ -18,7 +26,7 @@ async function findTenantByCodigo(codigoRaw: string) {
   const codigo = normalizeEventCode(codigoRaw);
   if (!codigo) return null;
   const result = await query(
-    `SELECT id, nome, comissao_pct, gateway, ativo
+    `SELECT *
      FROM tenants
      WHERE UPPER(codigo_evento) = $1 AND ativo = true`,
     [codigo]
@@ -38,6 +46,10 @@ const saleSchema = z.object({
     .min(1),
   total: z.number().positive(),
   metodo: z.enum(['dinheiro', 'cartao_fisico']).default('dinheiro'),
+});
+
+const selectReaderSchema = z.object({
+  readerId: z.string().min(3),
 });
 
 /**
@@ -72,16 +84,109 @@ router.get('/:codigo', async (req, res) => {
       ficha_logo_data: (row.ficha_logo_data as string | null) || null,
     }));
 
+    const gateway = tenant.gateway === 'sumup' ? 'sumup' : 'mercadopago';
+    const pixDisponivel =
+      gateway === 'sumup'
+        ? Boolean(tenant.sumup_api_key)
+        : Boolean(tenant.mp_access_token);
+    const cartaoDisponivel =
+      gateway === 'sumup'
+        ? Boolean(
+            tenant.sumup_api_key &&
+              tenant.sumup_reader_id &&
+              tenant.sumup_merchant_code
+          )
+        : Boolean(
+            tenant.mp_access_token &&
+              isValidMpDeviceId(tenant.mp_device_id as string)
+          );
+
     res.json({
       codigo: normalizeEventCode(String(req.params.codigo)),
       tenantId: tenant.id as string,
       nomeFestival: tenant.nome as string,
-      gateway: tenant.gateway === 'sumup' ? 'sumup' : 'mercadopago',
+      gateway,
       produtos,
+      pagamentos: {
+        pix: pixDisponivel,
+        cartao: cartaoDisponivel,
+      },
+      sumupReaderId: (tenant.sumup_reader_id as string | null) || null,
+      sumupSurcharge:
+        gateway === 'sumup' ? getTenantCardSurchargeConfig(tenant) : null,
     });
   } catch (err) {
     console.error('Erro PDV config:', err);
     res.status(500).json({ error: 'pdv_config_failed' });
+  }
+});
+
+/**
+ * GET /api/pdv/:codigo/sumup-readers
+ * Lista leitores SumUp pareados (para selecionar no Electron).
+ */
+router.get('/:codigo/sumup-readers', async (req, res) => {
+  try {
+    const tenant = await findTenantByCodigo(String(req.params.codigo || ''));
+    if (!tenant) {
+      res.status(404).json({ error: 'evento_nao_encontrado' });
+      return;
+    }
+
+    const sumup = resolveTenantSumUpConfig(tenant as TenantSumUpFields);
+    if (!sumup.apiKey || !sumup.merchantCode) {
+      res.status(400).json({
+        error: 'missing_sumup_config',
+        detalhe: 'Configure API Key e Merchant Code no admin.',
+      });
+      return;
+    }
+
+    const live = req.query.live === '1' || req.query.live === 'true';
+    const readers = await listSumUpReaders(sumup.apiKey, sumup.merchantCode, {
+      includeDeviceStatus: live,
+    });
+    res.json({
+      readers,
+      selectedReaderId: (tenant.sumup_reader_id as string | null) || null,
+    });
+  } catch (err) {
+    console.error('Erro PDV list readers:', err);
+    const statusCode = err instanceof SumUpError ? err.statusCode : 500;
+    res.status(statusCode >= 400 && statusCode < 600 ? statusCode : 500).json({
+      error: 'list_sumup_readers_failed',
+      detalhe: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+/**
+ * POST /api/pdv/:codigo/sumup-reader
+ * Seleciona a maquininha ativa deste evento.
+ */
+router.post('/:codigo/sumup-reader', async (req, res) => {
+  const parsed = selectReaderSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid_body' });
+    return;
+  }
+
+  try {
+    const tenant = await findTenantByCodigo(String(req.params.codigo || ''));
+    if (!tenant) {
+      res.status(404).json({ error: 'evento_nao_encontrado' });
+      return;
+    }
+
+    await query(
+      `UPDATE tenants SET sumup_reader_id = $1, atualizado_em = NOW() WHERE id = $2`,
+      [parsed.data.readerId, tenant.id]
+    );
+
+    res.json({ ok: true, sumupReaderId: parsed.data.readerId });
+  } catch (err) {
+    console.error('Erro PDV select reader:', err);
+    res.status(500).json({ error: 'select_sumup_reader_failed' });
   }
 });
 
@@ -150,7 +255,6 @@ router.post('/:codigo/vendas', async (req, res) => {
       ficha_logo_data: undefined as string | undefined,
     }));
 
-    // Anexa logo por produto para o cliente imprimir offline se precisar
     const logoMap = new Map<string, string | null>();
     for (const row of (
       await query(

@@ -52,6 +52,8 @@ const cardSchema = z.object({
   total: z.number().positive(),
   tenantId: z.string().uuid(),
   deviceId: z.string().min(1).optional(),
+  /** Override do leitor SumUp (PDV Electron pode escolher a maquininha). */
+  readerId: z.string().min(3).optional(),
   cardType: z.enum(['credit', 'debit']).optional(),
 });
 
@@ -269,8 +271,14 @@ router.post('/card', async (req, res) => {
     return;
   }
 
-  const { items, total: clientTotal, tenantId, deviceId: bodyDeviceId, cardType: bodyCardType } =
-    parsed.data;
+  const {
+    items,
+    total: clientTotal,
+    tenantId,
+    deviceId: bodyDeviceId,
+    readerId: bodyReaderId,
+    cardType: bodyCardType,
+  } = parsed.data;
 
   try {
     const tenantResult = await query(
@@ -317,7 +325,8 @@ router.post('/card', async (req, res) => {
 
     // Valida as credenciais do gateway antes de registrar a transação.
     if (gateway === 'sumup') {
-      if (!sumupConfig?.apiKey || !sumupConfig.merchantCode || !sumupConfig.readerId) {
+      const readerId = bodyReaderId || sumupConfig?.readerId;
+      if (!sumupConfig?.apiKey || !sumupConfig.merchantCode || !readerId) {
         res.status(400).json({
           error: 'missing_sumup_config',
           detalhe:
@@ -333,6 +342,8 @@ router.post('/card', async (req, res) => {
         });
         return;
       }
+      // Usa leitor escolhido no PDV / admin
+      sumupConfig.readerId = readerId;
     } else {
       if (!(tenant.mp_access_token || env.mercadopago.accessToken)) {
         res.status(400).json({ error: 'missing_access_token' });

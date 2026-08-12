@@ -65,6 +65,8 @@ Cada unidade imprime (barman primeiro):
 2. **CLIENTE** — sabor + o **mesmo** codigo
 
 Extras no PDV:
+- **Maquininha** — lista e seleciona o leitor SumUp (BALCAO etc.)
+- **LEITOR** (tecla `L`) — cobra na maquininha SumUp (debito/credito se taxa ativa)
 - **Drinks / Todos** (tecla `B`) — filtra so produtos 2 vias
 - **Reimprimir** (tecla `R`) — mesma ultima venda (mesmos codigos)
 - Beep + flash laranja ao vender drink 2 vias

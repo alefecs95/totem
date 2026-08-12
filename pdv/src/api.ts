@@ -24,12 +24,31 @@ export interface PdvProduct {
   ficha_logo_data: string | null;
 }
 
+export type CardType = 'credit' | 'debit';
+
+export interface SumupSurcharge {
+  enabled: boolean;
+  debitPercent: number;
+  creditPercent: number;
+}
+
+export interface SumUpReader {
+  id: string;
+  name: string;
+  status: string;
+  model?: string;
+  deviceStatus?: string | null;
+}
+
 export interface PdvConfig {
   codigo: string;
   tenantId: string;
   nomeFestival: string;
   gateway: string;
   produtos: PdvProduct[];
+  pagamentos?: { pix: boolean; cartao: boolean };
+  sumupReaderId?: string | null;
+  sumupSurcharge?: SumupSurcharge | null;
 }
 
 export async function loadEvento(codigo: string): Promise<PdvConfig> {
@@ -37,6 +56,28 @@ export async function loadEvento(codigo: string): Promise<PdvConfig> {
     `${getApiBase()}/pdv/${encodeURIComponent(codigo.trim().toUpperCase())}`
   );
   return data;
+}
+
+export async function listSumupReaders(
+  codigo: string
+): Promise<{ readers: SumUpReader[]; selectedReaderId: string | null }> {
+  const { data } = await axios.get<{
+    readers: SumUpReader[];
+    selectedReaderId: string | null;
+  }>(
+    `${getApiBase()}/pdv/${encodeURIComponent(codigo)}/sumup-readers?live=1`
+  );
+  return data;
+}
+
+export async function selectSumupReader(
+  codigo: string,
+  readerId: string
+): Promise<void> {
+  await axios.post(
+    `${getApiBase()}/pdv/${encodeURIComponent(codigo)}/sumup-reader`,
+    { readerId }
+  );
 }
 
 export async function criarVenda(input: {
@@ -67,6 +108,38 @@ export async function criarVenda(input: {
       total: input.total,
       metodo: input.metodo,
     }
+  );
+  return data;
+}
+
+export async function createCardPayment(input: {
+  tenantId: string;
+  items: Array<{ productId: string; quantidade: number }>;
+  total: number;
+  cardType?: CardType;
+  readerId?: string;
+}): Promise<{
+  intentId: string;
+  transactionId: string;
+  chargedAmount?: number;
+}> {
+  const { data } = await axios.post(`${getApiBase()}/payment/card`, {
+    tenantId: input.tenantId,
+    items: input.items,
+    total: input.total,
+    ...(input.cardType ? { cardType: input.cardType } : {}),
+    ...(input.readerId ? { readerId: input.readerId } : {}),
+  });
+  return data;
+}
+
+export async function getCardPaymentStatus(
+  intentId: string,
+  tenantId: string
+): Promise<{ status: string; rawStatus?: string | null }> {
+  const { data } = await axios.get(
+    `${getApiBase()}/payment/card-status/${encodeURIComponent(intentId)}`,
+    { params: { tenantId } }
   );
   return data;
 }
