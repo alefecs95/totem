@@ -171,6 +171,13 @@ export default function Tenants() {
     }
   };
 
+  const selecionarSumupReader = (reader: SumUpReader) => {
+    setField('sumup_reader_id', reader.id);
+    setReadersMsg(
+      `Maquininha selecionada: ${reader.name || reader.id}. Clique em Salvar para gravar.`
+    );
+  };
+
   const buscarSumupReaders = async () => {
     if (!editingId) {
       setReadersMsg('Salve o organizador primeiro, depois edite.');
@@ -187,7 +194,13 @@ export default function Tenants() {
       setSumupReaders(lista);
       if (lista.length === 0) {
         setReadersMsg(
-          'Nenhum leitor pareado. Pareie a Solo (Conexões → API → Conectar).'
+          'Nenhum leitor pareado. Pareie a Solo (Conexoes → API → Conectar).'
+        );
+      } else if (lista.length === 1 && lista[0]) {
+        selecionarSumupReader(lista[0]);
+      } else {
+        setReadersMsg(
+          `${lista.length} leitores encontrados. Clique em um para selecionar.`
         );
       }
     } catch (err: unknown) {
@@ -1305,9 +1318,12 @@ export default function Tenants() {
                         style={{
                           margin: '8px 0 0',
                           fontSize: 13,
-                          color: readersMsg.startsWith('Leitor pareado')
-                            ? '#15803d'
-                            : '#dc2626',
+                          color:
+                            readersMsg.startsWith('Leitor pareado') ||
+                            readersMsg.startsWith('Maquininha selecionada') ||
+                            readersMsg.includes('encontrados')
+                              ? '#15803d'
+                              : '#dc2626',
                         }}
                       >
                         {readersMsg}
@@ -1322,60 +1338,112 @@ export default function Tenants() {
                           gap: 8,
                         }}
                       >
-                        {sumupReaders.map((r) => (
-                          <button
-                            key={r.id}
-                            type="button"
-                            onClick={() => setField('sumup_reader_id', r.id)}
-                            style={{
-                              textAlign: 'left',
-                              padding: '10px 12px',
-                              borderRadius: 8,
-                              border:
-                                form.sumup_reader_id === r.id
-                                  ? '2px solid #0f172a'
-                                  : '1px solid #cbd5e1',
-                              background:
-                                form.sumup_reader_id === r.id
-                                  ? '#f1f5f9'
-                                  : '#fff',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <div style={{ fontWeight: 600, fontSize: 13 }}>
-                              {r.name || r.id}
-                            </div>
-                            <div style={{ fontSize: 12, color: '#64748b' }}>
-                              {r.id} · {r.model || 'reader'} · pareamento{' '}
-                              <b
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: '#334155',
+                          }}
+                        >
+                          Clique na maquininha para selecionar:
+                        </p>
+                        {sumupReaders.map((r) => {
+                          const selected = form.sumup_reader_id === r.id;
+                          return (
+                            <button
+                              key={r.id}
+                              type="button"
+                              onClick={() => selecionarSumupReader(r)}
+                              style={{
+                                textAlign: 'left',
+                                padding: '12px 14px',
+                                borderRadius: 10,
+                                border: selected
+                                  ? '2px solid #16a34a'
+                                  : '2px solid #94a3b8',
+                                background: selected ? '#dcfce7' : '#f8fafc',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 12,
+                                boxShadow: selected
+                                  ? '0 0 0 3px rgba(22,163,74,0.2)'
+                                  : 'none',
+                              }}
+                            >
+                              <span
                                 style={{
-                                  color:
-                                    r.status === 'paired'
-                                      ? '#15803d'
-                                      : '#dc2626',
+                                  width: 22,
+                                  height: 22,
+                                  borderRadius: '50%',
+                                  border: selected
+                                    ? '6px solid #16a34a'
+                                    : '2px solid #64748b',
+                                  background: '#fff',
+                                  flexShrink: 0,
+                                  boxSizing: 'border-box',
                                 }}
-                              >
-                                {r.status}
-                              </b>
-                              {r.deviceStatus != null && (
-                                <>
-                                  {' '}
-                                  · aparelho{' '}
+                              />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div
+                                  style={{
+                                    fontWeight: 700,
+                                    fontSize: 14,
+                                    color: '#0f172a',
+                                  }}
+                                >
+                                  {r.name || r.id}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: 12,
+                                    color: '#64748b',
+                                    wordBreak: 'break-all',
+                                  }}
+                                >
+                                  {r.id} · {r.model || 'reader'} · pareamento{' '}
                                   <b
                                     style={{
                                       color:
-                                        r.deviceStatus === 'online'
+                                        r.status === 'paired'
                                           ? '#15803d'
                                           : '#dc2626',
                                     }}
                                   >
-                                    {r.deviceStatus}
+                                    {r.status}
                                   </b>
-                                </>
-                              )}
-                            </div>
-                          </button>
-                        ))}
+                                  {r.deviceStatus != null && (
+                                    <>
+                                      {' '}
+                                      · aparelho{' '}
+                                      <b
+                                        style={{
+                                          color:
+                                            r.deviceStatus === 'online'
+                                              ? '#15803d'
+                                              : '#dc2626',
+                                        }}
+                                      >
+                                        {r.deviceStatus}
+                                      </b>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: 800,
+                                  color: selected ? '#15803d' : '#0369a1',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {selected ? 'Selecionada' : 'Usar esta'}
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

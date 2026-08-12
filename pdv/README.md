@@ -47,8 +47,29 @@ npm run electron:build
 
 1. Abrir **Totem PDV**
 2. Informar código do evento + URL da API (uma vez)
-3. Escolher impressora POS80 (papel **80 × 35 mm**, cutting after one page)
+3. Escolher impressora POS80 (papel **80 × 30 mm**, cutting after one page)
 4. Vender → **Finalizar e imprimir fichas**
+
+## Offline
+
+- **Primeiro login** precisa de internet (baixa produtos e salva cache).
+- Se a internet cair **depois**, o PDV continua: vende, imprime fichas e enfileira vendas localmente.
+- Quando a rede voltar, a fila sincroniza sozinha com a API.
+- Reiniciar o app sem rede ainda funciona se o evento já tiver sido logado (cache local).
+
+## 2 vias (barman + cliente)
+
+No admin/portal, marque o produto com **Imprime ficha** + **2 vias**.
+Cada unidade imprime (barman primeiro):
+1. **BARMAN** — sabor + codigo `B-XXXX` + contador do dia `#047`
+2. **CLIENTE** — sabor + o **mesmo** codigo
+
+Extras no PDV:
+- **Drinks / Todos** (tecla `B`) — filtra so produtos 2 vias
+- **Reimprimir** (tecla `R`) — mesma ultima venda (mesmos codigos)
+- Beep + flash laranja ao vender drink 2 vias
+- **Tela cheia** no instalador (F11 alterna) + cursor some apos 5s
+- **Dinheiro**: digite `100` = R$ 100,00; `,` entra nos centavos
 
 ## API usada
 

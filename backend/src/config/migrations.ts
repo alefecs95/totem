@@ -62,6 +62,7 @@ ALTER TABLE tenants ADD COLUMN IF NOT EXISTS ficha_logo_data TEXT;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS categoria VARCHAR(50) NOT NULL DEFAULT 'outro';
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS imprime_ficha BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS ficha_logo_data TEXT;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS ficha_2_vias BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS codigo_evento VARCHAR(32);
 CREATE UNIQUE INDEX IF NOT EXISTS tenants_codigo_evento_uidx
   ON tenants (codigo_evento) WHERE codigo_evento IS NOT NULL;

@@ -32,6 +32,11 @@ export const productSchema = z.object({
   ativo: z.boolean().optional(),
   /** Se true, cada unidade da venda imprime uma ficha (página) na térmica. */
   imprime_ficha: z.boolean().optional(),
+  /**
+   * Se true (com imprime_ficha), cada unidade gera 2 vias:
+   * barman (sabor) + cliente (sabor + código).
+   */
+  ficha_2_vias: z.boolean().optional(),
   /** Logo individual da ficha deste produto (data URL). */
   ficha_logo_data: fichaLogoDataSchema,
 });
@@ -49,6 +54,7 @@ export function mapProductRow(row: Record<string, unknown>) {
     ordem: row.ordem as number,
     ativo: row.ativo as boolean,
     imprime_ficha: Boolean(row.imprime_ficha),
+    ficha_2_vias: Boolean(row.ficha_2_vias),
     ficha_logo_data: logo,
     ficha_logo_set: Boolean(logo),
     criado_em: row.criado_em as string,

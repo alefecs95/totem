@@ -9,6 +9,8 @@ export interface Product {
   categoria: string;
   /** Se true, cada unidade imprime uma ficha na térmica. */
   imprime_ficha?: boolean;
+  /** Se true, imprime 2 vias (barman + cliente com código). */
+  ficha_2_vias?: boolean;
   /** Logo individual da ficha deste produto. */
   ficha_logo_data?: string | null;
 }
@@ -34,6 +36,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       const qtd = Math.max(1, Math.floor(quantidade));
       const existing = state.items.find((item) => item.id === product.id);
       const imprime_ficha = Boolean(product.imprime_ficha);
+      const ficha_2_vias = imprime_ficha && Boolean(product.ficha_2_vias);
       const ficha_logo_data = product.ficha_logo_data ?? null;
       if (existing) {
         return {
@@ -43,6 +46,7 @@ export const useCartStore = create<CartState>((set, get) => ({
                   ...item,
                   ...product,
                   imprime_ficha,
+                  ficha_2_vias,
                   ficha_logo_data,
                   quantidade: item.quantidade + qtd,
                 }
@@ -53,7 +57,13 @@ export const useCartStore = create<CartState>((set, get) => ({
       return {
         items: [
           ...state.items,
-          { ...product, imprime_ficha, ficha_logo_data, quantidade: qtd },
+          {
+            ...product,
+            imprime_ficha,
+            ficha_2_vias,
+            ficha_logo_data,
+            quantidade: qtd,
+          },
         ],
       };
     }),

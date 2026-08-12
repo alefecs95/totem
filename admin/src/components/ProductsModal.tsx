@@ -24,6 +24,7 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
   const [cor, setCor] = useState('#FF6B00');
   const [categoria, setCategoria] = useState('outro');
   const [imprimeFicha, setImprimeFicha] = useState(false);
+  const [ficha2Vias, setFicha2Vias] = useState(false);
   const [logoData, setLogoData] = useState<string | null>(null);
   const [logoMsg, setLogoMsg] = useState('');
   const [saving, setSaving] = useState(false);
@@ -45,6 +46,7 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
     setCor('#FF6B00');
     setCategoria('outro');
     setImprimeFicha(false);
+    setFicha2Vias(false);
     setLogoData(null);
     setLogoMsg('');
     setEditingId(null);
@@ -88,6 +90,7 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
       cor,
       ativo: true,
       imprime_ficha: imprimeFicha,
+      ficha_2_vias: imprimeFicha && ficha2Vias,
       ficha_logo_data: logoData,
     };
     try {
@@ -111,6 +114,7 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
     setCor(p.cor);
     setCategoria(p.categoria ?? 'outro');
     setImprimeFicha(Boolean(p.imprime_ficha));
+    setFicha2Vias(Boolean(p.ficha_2_vias));
     setLogoData(p.ficha_logo_data ?? null);
     setLogoMsg('');
   };
@@ -189,10 +193,34 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
               <input
                 type="checkbox"
                 checked={imprimeFicha}
-                onChange={(e) => setImprimeFicha(e.target.checked)}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setImprimeFicha(on);
+                  if (!on) setFicha2Vias(false);
+                }}
               />
               Imprime ficha
             </label>
+            {imprimeFicha && (
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: '#334155',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={ficha2Vias}
+                  onChange={(e) => setFicha2Vias(e.target.checked)}
+                />
+                2 vias (barman + cliente c/ codigo)
+              </label>
+            )}
           </div>
 
           {imprimeFicha && (
@@ -282,7 +310,13 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
                   </td>
                   <td style={td}>{p.nome}</td>
                   <td style={td}>{formatBRL(p.preco)}</td>
-                  <td style={td}>{p.imprime_ficha ? 'Sim' : '—'}</td>
+                  <td style={td}>
+                    {p.imprime_ficha
+                      ? p.ficha_2_vias
+                        ? '2 vias'
+                        : 'Sim'
+                      : '—'}
+                  </td>
                   <td style={td}>
                     {p.ficha_logo_data ? (
                       <img

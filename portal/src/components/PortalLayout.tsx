@@ -81,7 +81,7 @@ export default function PortalLayout({
         >
           Sair
         </button>
-        {import.meta.env.VITE_PWA_URL && (
+        {import.meta.env.VITE_PWA_URL ? (
           <a
             href={`${import.meta.env.VITE_PWA_URL}/operador/login`}
             target="_blank"
@@ -98,7 +98,7 @@ export default function PortalLayout({
           >
             Modo Operador
           </a>
-        )}
+        ) : null}
       </header>
       <main style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
         {children}

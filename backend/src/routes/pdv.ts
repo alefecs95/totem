@@ -53,7 +53,7 @@ router.get('/:codigo', async (req, res) => {
     }
 
     const produtosResult = await query(
-      `SELECT id, nome, preco, emoji, cor, categoria, imprime_ficha, ficha_logo_data
+      `SELECT id, nome, preco, emoji, cor, categoria, imprime_ficha, ficha_2_vias, ficha_logo_data
        FROM produtos
        WHERE tenant_id = $1 AND ativo = true
        ORDER BY ordem ASC, criado_em ASC`,
@@ -68,6 +68,7 @@ router.get('/:codigo', async (req, res) => {
       cor: row.cor as string,
       categoria: row.categoria as string,
       imprime_ficha: Boolean(row.imprime_ficha),
+      ficha_2_vias: Boolean(row.ficha_2_vias),
       ficha_logo_data: (row.ficha_logo_data as string | null) || null,
     }));
 
@@ -142,6 +143,7 @@ router.post('/:codigo/vendas', async (req, res) => {
       nome: item.nome,
       categoria: item.categoria,
       imprime_ficha: item.imprime_ficha,
+      ficha_2_vias: item.ficha_2_vias,
       quantidade: item.quantidade,
       preco: item.preco,
       subtotal: item.subtotal,

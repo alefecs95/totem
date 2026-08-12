@@ -43,13 +43,21 @@ export interface Product {
   ordem: number;
   ativo: boolean;
   imprime_ficha: boolean;
+  ficha_2_vias?: boolean;
   ficha_logo_data?: string | null;
   criado_em: string;
 }
 
 export type ProductInput = Pick<
   Product,
-  'nome' | 'preco' | 'categoria' | 'emoji' | 'cor' | 'ativo' | 'imprime_ficha'
+  | 'nome'
+  | 'preco'
+  | 'categoria'
+  | 'emoji'
+  | 'cor'
+  | 'ativo'
+  | 'imprime_ficha'
+  | 'ficha_2_vias'
 > & {
   ordem?: number;
   ficha_logo_data?: string | null;

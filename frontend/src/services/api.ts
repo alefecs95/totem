@@ -47,15 +47,18 @@ export function persistTotemConfig(config: TotemConfig): void {
   }
   localStorage.removeItem('fichaLogo');
   const fichaFlags: Record<string, boolean> = {};
+  const ficha2Vias: Record<string, boolean> = {};
   const fichaLogos: Record<string, string> = {};
   for (const p of config.produtos ?? []) {
     if (!p.id) continue;
     fichaFlags[p.id] = Boolean(p.imprime_ficha);
+    ficha2Vias[p.id] = Boolean(p.imprime_ficha) && Boolean(p.ficha_2_vias);
     if (p.ficha_logo_data && p.ficha_logo_data.startsWith('data:image/')) {
       fichaLogos[p.id] = p.ficha_logo_data;
     }
   }
   localStorage.setItem('productFichaFlags', JSON.stringify(fichaFlags));
+  localStorage.setItem('productFicha2ViasFlags', JSON.stringify(ficha2Vias));
   try {
     localStorage.setItem('productFichaLogos', JSON.stringify(fichaLogos));
   } catch {

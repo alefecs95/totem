@@ -102,43 +102,133 @@ async function renderFichaBitmap(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
+  const via = ticket.via || 'unica';
+  const nome = (ticket.nome || 'FICHA').toUpperCase();
   const padX = 12;
-  const headerH = 28;
-  const footerH = 28;
-  const midY = headerH;
-  const midH = PX_H - headerH - footerH;
 
-  ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
-  ctx.fillText(festival.slice(0, 42), PX_W / 2, headerH / 2, PX_W - padX * 2);
+  if (via === 'barman') {
+    const seq =
+      ticket.seqDia != null
+        ? `#${String(ticket.seqDia).padStart(3, '0')}`
+        : '';
+    ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
+    ctx.fillText(
+      seq ? `BARMAN  ${seq}` : 'BARMAN',
+      PX_W / 2,
+      16,
+      PX_W - 24
+    );
 
-  const logoSrc = resolveLogo(ticket);
-  let drewLogo = false;
-  if (logoSrc) {
-    try {
-      const img = await loadImage(logoSrc);
-      drawCoverImage(ctx, img, 0, midY, PX_W, midH);
-      drewLogo = true;
-    } catch {
-      drewLogo = false;
-    }
-  }
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 6]);
+    ctx.beginPath();
+    ctx.moveTo(16, 30);
+    ctx.lineTo(PX_W - 16, 30);
+    ctx.stroke();
+    ctx.setLineDash([]);
 
-  if (!drewLogo) {
-    const nome = (ticket.nome || 'FICHA').toUpperCase();
+    ctx.font = 'bold 24px Arial, Helvetica, sans-serif';
+    ctx.fillText(nome.slice(0, 26), PX_W / 2, 52, PX_W - 24);
+
+    const codigo = (ticket.codigo || 'B----').toUpperCase();
+    const x = 28;
+    const y = 68;
+    const w = PX_W - 56;
+    const h = 132;
     ctx.fillStyle = '#000000';
-    const barPad = 8;
-    ctx.fillRect(padX, midY + barPad, PX_W - padX * 2, midH - barPad * 2);
+    ctx.fillRect(x, y, w, h);
     ctx.fillStyle = '#ffffff';
-    const len = nome.length;
-    const fontSize = len <= 10 ? 36 : len <= 16 ? 28 : len <= 22 ? 22 : 18;
-    ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
-    ctx.fillText(nome, PX_W / 2, midY + midH / 2, PX_W - padX * 4);
+    ctx.fillRect(x + 6, y + 6, w - 12, h - 12);
     ctx.fillStyle = '#000000';
-  }
+    ctx.fillRect(x + 14, y + 14, w - 28, h - 28);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
+    ctx.fillText('CODIGO', PX_W / 2, y + 32);
+    ctx.font = 'bold 48px Arial, Helvetica, sans-serif';
+    ctx.fillText(codigo, PX_W / 2, y + h / 2 + 10, w - 48);
+    ctx.fillStyle = '#000000';
 
-  ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
-  ctx.fillStyle = '#000000';
-  ctx.fillText(when, PX_W / 2, PX_H - footerH / 2, PX_W - padX * 2);
+    ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
+    ctx.fillText(when, PX_W / 2, PX_H - 14, PX_W - 24);
+  } else if (via === 'cliente') {
+    ctx.font = 'bold 14px Arial, Helvetica, sans-serif';
+    ctx.fillText(
+      `CLIENTE - ${(festival || '').slice(0, 28).toUpperCase()}`,
+      PX_W / 2,
+      16,
+      PX_W - 24
+    );
+
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 6]);
+    ctx.beginPath();
+    ctx.moveTo(16, 30);
+    ctx.lineTo(PX_W - 16, 30);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.font = 'bold 22px Arial, Helvetica, sans-serif';
+    ctx.fillText(nome.slice(0, 26), PX_W / 2, 52, PX_W - 24);
+
+    const codigo = (ticket.codigo || 'B----').toUpperCase();
+    const x = 28;
+    const y = 68;
+    const w = PX_W - 56;
+    const h = 132;
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x + 6, y + 6, w - 12, h - 12);
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(x + 14, y + 14, w - 28, h - 28);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
+    ctx.fillText('CODIGO', PX_W / 2, y + 32);
+    ctx.font = 'bold 48px Arial, Helvetica, sans-serif';
+    ctx.fillText(codigo, PX_W / 2, y + h / 2 + 10, w - 48);
+    ctx.fillStyle = '#000000';
+
+    ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
+    ctx.fillText(when, PX_W / 2, PX_H - 14, PX_W - 24);
+  } else {
+    const headerH = 28;
+    const footerH = 28;
+    const midY = headerH;
+    const midH = PX_H - headerH - footerH;
+
+    ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
+    ctx.fillText(festival.slice(0, 42), PX_W / 2, headerH / 2, PX_W - padX * 2);
+
+    const logoSrc = resolveLogo(ticket);
+    let drewLogo = false;
+    if (logoSrc) {
+      try {
+        const img = await loadImage(logoSrc);
+        drawCoverImage(ctx, img, 0, midY, PX_W, midH);
+        drewLogo = true;
+      } catch {
+        drewLogo = false;
+      }
+    }
+
+    if (!drewLogo) {
+      ctx.fillStyle = '#000000';
+      const barPad = 8;
+      ctx.fillRect(padX, midY + barPad, PX_W - padX * 2, midH - barPad * 2);
+      ctx.fillStyle = '#ffffff';
+      const len = nome.length;
+      const fontSize = len <= 10 ? 36 : len <= 16 ? 28 : len <= 22 ? 22 : 18;
+      ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
+      ctx.fillText(nome, PX_W / 2, midY + midH / 2, PX_W - padX * 4);
+      ctx.fillStyle = '#000000';
+    }
+
+    ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(when, PX_W / 2, PX_H - footerH / 2, PX_W - padX * 2);
+  }
 
   toThermalMono(ctx, PX_W, PX_H);
   return canvas.toDataURL('image/png');

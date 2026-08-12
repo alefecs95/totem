@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   criarVenda,
   getApiBase,
@@ -7,7 +7,13 @@ import {
   type PdvConfig,
   type PdvProduct,
 } from './api';
-import { expandFichas, renderFichaBitmap } from './printFichas';
+import {
+  countOfflineQueue,
+  enqueueOfflineSale,
+  flushOfflineQueue,
+  type QueuedPdvSale,
+} from './offline';
+import { expandFichas, renderFichaBitmap, countDualUnits, type PrintItem } from './printFichas';
 
 type CartLine = PdvProduct & { quantidade: number };
 
@@ -17,6 +23,36 @@ function formatPreco(preco: number): string {
 
 function uuid(): string {
   return crypto.randomUUID();
+}
+
+function playSaleBeep(dual: boolean): void {
+  try {
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext })
+        .webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const beep = (freq: number, start: number, dur: number) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'square';
+      o.frequency.value = freq;
+      g.gain.value = 0.08;
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start(ctx.currentTime + start);
+      o.stop(ctx.currentTime + start + dur);
+    };
+    beep(880, 0, 0.08);
+    if (dual) {
+      beep(1175, 0.12, 0.1);
+      beep(880, 0.26, 0.08);
+    }
+    window.setTimeout(() => void ctx.close(), 800);
+  } catch {
+    /* ignore */
+  }
 }
 
 function PayBtn({
@@ -78,7 +114,40 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false);
   const [qtyDigits, setQtyDigits] = useState('');
   const [cashOpen, setCashOpen] = useState(false);
-  const [cashDigits, setCashDigits] = useState('');
+  /** Parte inteira em reais (ex. "100"). */
+  const [cashInt, setCashInt] = useState('');
+  /** Casas decimais apos a virgula (0-2 digitos). */
+  const [cashDec, setCashDec] = useState('');
+  /** Se true, digitos vao para as casas decimais. */
+  const [cashComma, setCashComma] = useState(false);
+  const [cursorHidden, setCursorHidden] = useState(false);
+  const [online, setOnline] = useState(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+  const [pendingSync, setPendingSync] = useState(() => countOfflineQueue());
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const [soDrinks, setSoDrinks] = useState(
+    () => localStorage.getItem('pdvSoDrinks') === '1'
+  );
+  const [saleFlash, setSaleFlash] = useState(false);
+  const [lastPrint, setLastPrint] = useState<{
+    tickets: import('./printFichas').FichaTicket[];
+    nomeFestival: string;
+    itens: PrintItem[];
+  } | null>(() => {
+    try {
+      const raw = localStorage.getItem('pdvLastPrint');
+      return raw
+        ? (JSON.parse(raw) as {
+            tickets: import('./printFichas').FichaTicket[];
+            nomeFestival: string;
+            itens: PrintItem[];
+          })
+        : null;
+    } catch {
+      return null;
+    }
+  });
   const [printers, setPrinters] = useState<
     Array<{ name: string; displayName: string; isDefault: boolean }>
   >([]);
@@ -86,7 +155,15 @@ export default function App() {
     () => localStorage.getItem('pdvPrinter') || ''
   );
 
-  const produtos = config?.produtos ?? [];
+  const produtosAll = config?.produtos ?? [];
+  const produtos = soDrinks
+    ? produtosAll.filter((p) => p.imprime_ficha && p.ficha_2_vias)
+    : produtosAll;
+  const productById = useRef<Map<string, PdvProduct>>(new Map());
+  useEffect(() => {
+    productById.current = new Map(produtosAll.map((p) => [p.id, p]));
+  }, [produtosAll]);
+
   const total = useMemo(
     () => cart.reduce((s, i) => s + i.preco * i.quantidade, 0),
     [cart]
@@ -95,13 +172,32 @@ export default function App() {
     () => cart.reduce((s, i) => s + i.quantidade, 0),
     [cart]
   );
-  const pendingQty = qtyDigits === '' ? 1 : Math.max(1, parseInt(qtyDigits, 10) || 1);
+  const pendingQty =
+    qtyDigits === '' ? 1 : Math.max(1, parseInt(qtyDigits, 10) || 1);
   const canPay = cart.length > 0 && !pagando;
 
-  const cashCentavos = cashDigits === '' ? 0 : parseInt(cashDigits, 10) || 0;
-  const cashRecebido = cashCentavos / 100;
+  const cashRecebido = useMemo(() => {
+    const reais = cashInt === '' ? 0 : parseInt(cashInt, 10) || 0;
+    if (!cashComma) return reais;
+    const dec = (cashDec + '00').slice(0, 2);
+    return Math.round((reais + Number(`0.${dec}`)) * 100) / 100;
+  }, [cashInt, cashDec, cashComma]);
   const troco = Math.round((cashRecebido - total) * 100) / 100;
   const cashOk = cashRecebido + 0.001 >= total;
+
+  const setCashFromValue = (v: number) => {
+    const fixed = Math.max(0, Math.round(v * 100) / 100);
+    const [i, d] = fixed.toFixed(2).split('.');
+    setCashInt(String(Number(i)));
+    setCashDec(d === '00' ? '' : d);
+    setCashComma(d !== '00');
+  };
+
+  const limparCash = () => {
+    setCashInt('');
+    setCashDec('');
+    setCashComma(false);
+  };
 
   useEffect(() => {
     void window.pdvDesktop?.listPrinters().then((list) => {
@@ -114,24 +210,99 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!toast) return;
-    const id = window.setTimeout(() => setToast(''), 2500);
+    const id = window.setTimeout(() => setToast(''), 2200);
     return () => window.clearTimeout(id);
   }, [toast]);
 
-  const add = useCallback((p: PdvProduct, qtd = pendingQty) => {
-    const n = Math.max(1, qtd);
-    setCart((prev) => {
-      const ex = prev.find((i) => i.id === p.id);
-      if (ex) {
-        return prev.map((i) =>
-          i.id === p.id ? { ...i, quantidade: i.quantidade + n } : i
-        );
+  // Kiosk: esconde cursor apos 5s sem movimento; volta ao mexer
+  useEffect(() => {
+    let timer: number | undefined;
+    const bump = () => {
+      setCursorHidden(false);
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => setCursorHidden(true), 5000);
+    };
+    bump();
+    window.addEventListener('mousemove', bump);
+    window.addEventListener('mousedown', bump);
+    window.addEventListener('keydown', bump);
+    window.addEventListener('touchstart', bump);
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      window.removeEventListener('mousemove', bump);
+      window.removeEventListener('mousedown', bump);
+      window.removeEventListener('keydown', bump);
+      window.removeEventListener('touchstart', bump);
+    };
+  }, []);
+
+  // F11 alterna tela cheia
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'F11') {
+        e.preventDefault();
+        void window.pdvDesktop?.toggleFullscreen?.();
       }
-      return [...prev, { ...p, quantidade: n }];
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const syncPending = useCallback(async () => {
+    if (!config || !navigator.onLine) {
+      setPendingSync(countOfflineQueue());
+      return;
+    }
+    const { synced, remaining } = await flushOfflineQueue(async (sale) => {
+      await criarVenda({
+        codigo: sale.codigo,
+        clientTransactionId: sale.id,
+        items: sale.items,
+        total: sale.total,
+        metodo: sale.metodo,
+      });
     });
-    setQtyDigits('');
-  }, [pendingQty]);
+    setPendingSync(remaining);
+    if (synced > 0) setToast(`${synced} venda(s) sincronizada(s)`);
+  }, [config]);
+
+  useEffect(() => {
+    if (!config || !online) return;
+    void syncPending();
+    const id = window.setInterval(() => void syncPending(), 12000);
+    return () => window.clearInterval(id);
+  }, [config, online, syncPending]);
+
+  const add = useCallback(
+    (p: PdvProduct, qtd = pendingQty) => {
+      const n = Math.max(1, qtd);
+      setFlashId(p.id);
+      window.setTimeout(() => setFlashId((cur) => (cur === p.id ? null : cur)), 120);
+      setCart((prev) => {
+        const ex = prev.find((i) => i.id === p.id);
+        if (ex) {
+          return prev.map((i) =>
+            i.id === p.id ? { ...i, quantidade: i.quantidade + n } : i
+          );
+        }
+        return [...prev, { ...p, quantidade: n }];
+      });
+      setQtyDigits('');
+    },
+    [pendingQty]
+  );
 
   const setQty = (id: string, quantidade: number) => {
     setCart((prev) =>
@@ -155,72 +326,156 @@ export default function App() {
       const cfg = await loadEvento(codigo);
       setConfig(cfg);
       localStorage.setItem('pdvCodigo', cfg.codigo);
+      localStorage.setItem('pdvConfigCache', JSON.stringify(cfg));
       setToast(`Conectado: ${cfg.nomeFestival}`);
     } catch {
+      // Tenta cache local se estiver offline
+      try {
+        const raw = localStorage.getItem('pdvConfigCache');
+        const cached = raw ? (JSON.parse(raw) as PdvConfig) : null;
+        if (
+          cached &&
+          cached.codigo === codigo.trim().toUpperCase().replace(/\s+/g, '')
+        ) {
+          setConfig(cached);
+          setToast(`Offline - usando cache de ${cached.nomeFestival}`);
+          return;
+        }
+      } catch {
+        /* ignore */
+      }
       setConfig(null);
-      setErro('Evento nÃ£o encontrado. Confira o cÃ³digo e a URL da API.');
+      setErro('Evento nao encontrado. Confira o codigo e a URL da API.');
     } finally {
       setLoading(false);
     }
   };
 
-  const imprimirFichas = async (
-    itens: Array<{
-      nome: string;
-      quantidade: number;
-      imprime_ficha?: boolean;
-      ficha_logo_data?: string | null;
-    }>,
-    nomeFestival: string
+  const imprimirFichasBg = (
+    itens: PrintItem[],
+    nomeFestival: string,
+    opts?: { isReprint?: boolean; tickets?: import('./printFichas').FichaTicket[] }
   ) => {
-    const tickets = expandFichas(itens);
-    if (tickets.length === 0) return;
-    const pages: string[] = [];
-    for (const t of tickets) {
-      pages.push(await renderFichaBitmap(t, nomeFestival));
+    void (async () => {
+      try {
+        const tickets = opts?.tickets ?? expandFichas(itens);
+        if (tickets.length === 0) {
+          if (!opts?.isReprint) setToast('Venda sem fichas para imprimir');
+          return;
+        }
+        const dual =
+          tickets.some((t) => t.via === 'barman' || t.via === 'cliente') ||
+          countDualUnits(itens) > 0;
+        if (!opts?.isReprint) {
+          const payload = { tickets, itens, nomeFestival };
+          setLastPrint(payload);
+          try {
+            localStorage.setItem('pdvLastPrint', JSON.stringify(payload));
+          } catch {
+            /* quota */
+          }
+          playSaleBeep(dual);
+          if (dual) {
+            setSaleFlash(true);
+            window.setTimeout(() => setSaleFlash(false), 450);
+          }
+        }
+        const pages: string[] = [];
+        for (const t of tickets) {
+          pages.push(await renderFichaBitmap(t, nomeFestival));
+        }
+        localStorage.setItem('pdvPrinter', printerName);
+        if (window.pdvDesktop?.printFichasSilent) {
+          await window.pdvDesktop.printFichasSilent(pages, printerName);
+        }
+        if (opts?.isReprint) setToast('Reimpressao enviada');
+      } catch {
+        setToast(
+          opts?.isReprint
+            ? 'Falha na reimpressao'
+            : 'Venda ok, mas falhou a impressao - tente de novo'
+        );
+      }
+    })();
+  };
+
+  const reimprimirUltima = () => {
+    if (!lastPrint?.tickets?.length) {
+      setToast('Nenhuma venda para reimprimir');
+      return;
     }
-    localStorage.setItem('pdvPrinter', printerName);
-    if (window.pdvDesktop?.printFichasSilent) {
-      await window.pdvDesktop.printFichasSilent(pages, printerName);
-    }
+    imprimirFichasBg(lastPrint.itens || [], lastPrint.nomeFestival, {
+      isReprint: true,
+      tickets: lastPrint.tickets,
+    });
   };
 
   const finalizarManual = async (metodo: 'dinheiro' | 'cartao_fisico') => {
     if (!config || cart.length === 0) return;
     setPagando(metodo);
     setErro('');
-    try {
+
+    const snapshot = cart.map((i) => ({ ...i }));
+    const saleTotal = Math.round(total * 100) / 100;
+    const clientId = uuid();
+    const printPayload = snapshot.map((i) => ({
+      nome: i.nome,
+      quantidade: i.quantidade,
+      imprime_ficha: i.imprime_ficha,
+      ficha_2_vias: i.ficha_2_vias,
+      ficha_logo_data: i.ficha_logo_data,
+    }));
+
+    // UI libera na hora - operador segue vendendo
+    limpar();
+    setCashOpen(false);
+    limparCash();
+
+    const tryOnline = async () => {
       const sale = await criarVenda({
         codigo: config.codigo,
-        clientTransactionId: uuid(),
-        items: cart.map((i) => ({
+        clientTransactionId: clientId,
+        items: snapshot.map((i) => ({
           productId: i.id,
           quantidade: i.quantidade,
         })),
-        total: Math.round(total * 100) / 100,
+        total: saleTotal,
         metodo,
       });
-      await imprimirFichas(
+      imprimirFichasBg(
         sale.itens.map((i) => ({
           nome: i.nome,
           quantidade: i.quantidade,
           imprime_ficha: i.imprime_ficha,
+          ficha_2_vias: i.ficha_2_vias,
           ficha_logo_data: i.ficha_logo_data ?? null,
         })),
         sale.nomeFestival || config.nomeFestival
       );
-      limpar();
-      setCashOpen(false);
-      setCashDigits('');
       setToast('Venda registrada!');
-    } catch (e: unknown) {
-      const msg =
-        (e as { response?: { data?: { message?: string; error?: string } } })
-          ?.response?.data?.message ||
-        (e as { response?: { data?: { error?: string } } })?.response?.data
-          ?.error ||
-        'Falha ao registrar venda';
-      setErro(String(msg));
+    };
+
+    try {
+      if (!navigator.onLine) throw new Error('offline');
+      await tryOnline();
+    } catch {
+      const queued: QueuedPdvSale = {
+        id: clientId,
+        codigo: config.codigo,
+        items: snapshot.map((i) => ({
+          productId: i.id,
+          quantidade: i.quantidade,
+        })),
+        total: saleTotal,
+        metodo,
+        createdAt: new Date().toISOString(),
+        printItems: printPayload,
+        nomeFestival: config.nomeFestival,
+      };
+      enqueueOfflineSale(queued);
+      setPendingSync(countOfflineQueue());
+      imprimirFichasBg(printPayload, config.nomeFestival);
+      setToast('Sem internet - venda salva e fichas impressas');
     } finally {
       setPagando(null);
     }
@@ -228,22 +483,36 @@ export default function App() {
 
   const abrirDinheiro = () => {
     if (!canPay) return;
-    setCashDigits('');
+    limparCash();
     setCashOpen(true);
     setErro('');
   };
 
-  // Atalhos iguais ao site
   useEffect(() => {
     if (!config) return;
     const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
       if (cashOpen) {
         if (e.key >= '0' && e.key <= '9') {
           e.preventDefault();
-          setCashDigits((d) => (d + e.key).slice(0, 8));
+          if (cashComma) {
+            setCashDec((d) => (d + e.key).slice(0, 2));
+          } else {
+            setCashInt((d) => (d + e.key).replace(/^0+(?=\d)/, '').slice(0, 6));
+          }
+        } else if (e.key === ',' || e.key === '.') {
+          e.preventDefault();
+          setCashComma(true);
         } else if (e.key === 'Backspace') {
           e.preventDefault();
-          setCashDigits((d) => d.slice(0, -1));
+          if (cashComma) {
+            if (cashDec) setCashDec((d) => d.slice(0, -1));
+            else setCashComma(false);
+          } else {
+            setCashInt((d) => d.slice(0, -1));
+          }
         } else if (e.key === 'Enter') {
           e.preventDefault();
           if (cashOk) void finalizarManual('dinheiro');
@@ -274,6 +543,16 @@ export default function App() {
       } else if (e.key.toLowerCase() === 'f') {
         e.preventDefault();
         if (canPay) void finalizarManual('cartao_fisico');
+      } else if (e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        reimprimirUltima();
+      } else if (e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setSoDrinks((v) => {
+          const next = !v;
+          localStorage.setItem('pdvSoDrinks', next ? '1' : '0');
+          return next;
+        });
       } else if (/^F[1-9]$/.test(e.key)) {
         e.preventDefault();
         const idx = Number(e.key.slice(1)) - 1;
@@ -286,15 +565,8 @@ export default function App() {
 
   if (!config) {
     return (
-      <div style={shell}>
-        <div
-          style={{
-            flex: 1,
-            display: 'grid',
-            placeItems: 'center',
-            padding: 24,
-          }}
-        >
+      <div style={{ ...shell, cursor: cursorHidden ? 'none' : 'default' }}>
+        <div style={{ flex: 1, display: 'grid', placeItems: 'center', padding: 24 }}>
           <div
             style={{
               width: 'min(420px, 100%)',
@@ -311,8 +583,8 @@ export default function App() {
               <span style={pdvBadge}>PDV</span>
               <strong>Entrar no evento</strong>
             </div>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#a8a29e' }}>
-              CÃ³digo do evento
+            <label style={labelDark}>
+              Codigo do evento
               <input
                 value={codigo}
                 onChange={(e) => setCodigo(e.target.value.toUpperCase())}
@@ -322,7 +594,7 @@ export default function App() {
                 style={inputDark}
               />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#a8a29e' }}>
+            <label style={labelDark}>
               URL da API
               <input
                 value={apiUrl}
@@ -346,8 +618,12 @@ export default function App() {
                 opacity: loading || !codigo.trim() ? 0.5 : 1,
               }}
             >
-              {loading ? 'Entrandoâ€¦' : 'Entrar'}
+              {loading ? 'Entrando...' : 'Entrar'}
             </button>
+            <p style={{ margin: 0, fontSize: 12, color: '#a8a29e', lineHeight: 1.4 }}>
+              Sem internet: depois de entrar, as vendas continuam (ficam na fila e
+              sincronizam quando a rede voltar).
+            </p>
           </div>
         </div>
       </div>
@@ -355,13 +631,14 @@ export default function App() {
   }
 
   return (
-    <div style={shell}>
+    <div style={{ ...shell, cursor: cursorHidden ? 'none' : 'default' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
         @media (max-width: 800px) {
           .pdv-body { grid-template-columns: 1fr !important; }
           .pdv-sidebar { border-left: none !important; border-top: 2px solid #ea580c !important; }
         }
+        .pdv-product:active { transform: scale(0.97); }
       `}</style>
 
       <header style={header}>
@@ -369,38 +646,67 @@ export default function App() {
           <span style={pdvBadge}>PDV</span>
           <div>
             <div style={{ fontWeight: 800, fontSize: 15, lineHeight: 1.1 }}>
-              VENDA RÃPIDA
+              VENDA RAPIDA
             </div>
             <div style={{ fontSize: 12, opacity: 0.9 }}>{config.nomeFestival}</div>
           </div>
         </div>
         <div style={{ flex: 1 }} />
+        <span
+          style={{
+            ...syncBadge,
+            background: online ? '#dcfce7' : '#fee2e2',
+            color: online ? '#166534' : '#991b1b',
+          }}
+        >
+          {online ? 'Online' : 'Offline'}
+          {pendingSync > 0 ? ` | ${pendingSync} pend.` : ''}
+        </span>
         <select
           value={printerName}
           onChange={(e) => setPrinterName(e.target.value)}
-          style={{
-            ...hdrBtn,
-            maxWidth: 200,
-            appearance: 'auto' as const,
-          }}
+          style={{ ...hdrBtn, maxWidth: 180 }}
           title="Impressora"
         >
-          <option value="">Impressora padrÃ£o</option>
+          <option value="">Impressora padrao</option>
           {printers.map((p) => (
             <option key={p.name} value={p.name}>
               {p.displayName || p.name}
             </option>
           ))}
         </select>
-        <button type="button" onClick={() => setShowHelp((v) => !v)} style={hdrBtn}>
-          Atalhos
+        <button
+          type="button"
+          onClick={() => {
+            setSoDrinks((v) => {
+              const next = !v;
+              localStorage.setItem('pdvSoDrinks', next ? '1' : '0');
+              return next;
+            });
+          }}
+          style={{
+            ...hdrBtn,
+            background: soDrinks ? '#ea580c' : '#fff',
+            color: soDrinks ? '#fff' : '#9a3412',
+            borderColor: soDrinks ? '#c2410c' : '#fed7aa',
+          }}
+          title="Filtrar so drinks 2 vias (B)"
+        >
+          {soDrinks ? 'Drinks' : 'Todos'}
         </button>
         <button
           type="button"
-          onClick={limpar}
+          onClick={reimprimirUltima}
           style={hdrBtn}
-          disabled={cart.length === 0}
+          disabled={!lastPrint}
+          title="Reimprimir ultima venda (R)"
         >
+          Reimprimir
+        </button>
+        <button type="button" onClick={() => setShowHelp((v) => !v)} style={hdrBtn}>
+          Atalhos
+        </button>
+        <button type="button" onClick={limpar} style={hdrBtn} disabled={cart.length === 0}>
           Limpar
         </button>
         <button
@@ -417,13 +723,28 @@ export default function App() {
 
       {showHelp && (
         <div style={helpBar}>
-          <span>0â€“9 quantidade</span>
-          <span>F1â€“F9 produto</span>
+          <span>0-9 quantidade</span>
+          <span>F1-F9 produto</span>
           <span>D/Enter dinheiro</span>
-          <span>F cartÃ£o fÃ­sico</span>
+          <span>F cartao fisico</span>
+          <span>B filtro drinks</span>
+          <span>R reimprimir</span>
+          <span>F11 tela cheia</span>
           <span>Esc limpa</span>
-          <span>CÃ³digo: {config.codigo}</span>
+          <span>Codigo: {config.codigo}</span>
         </div>
+      )}
+
+      {saleFlash && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(234,88,12,0.28)',
+            pointerEvents: 'none',
+            zIndex: 50,
+          }}
+        />
       )}
 
       <div className="pdv-body" style={body}>
@@ -454,7 +775,7 @@ export default function App() {
                   background: pendingQty === n ? '#ea580c' : '#292524',
                 }}
               >
-                Ã—{n}
+                x{n}
               </button>
             ))}
             <button
@@ -462,29 +783,37 @@ export default function App() {
               onClick={() => setQtyDigits('')}
               style={{ ...qtyChip, background: '#44403c' }}
             >
-              Ã—1
+              x1
             </button>
           </div>
 
           {produtos.length === 0 ? (
             <div style={{ color: '#a8a29e', padding: 40, textAlign: 'center' }}>
-              Nenhum produto ativo neste evento.
+              {soDrinks
+                ? 'Nenhum produto 2 vias. Desligue o filtro Drinks ou marque 2 vias no admin.'
+                : 'Nenhum produto ativo neste evento.'}
             </div>
           ) : (
             <div style={productGrid}>
               {produtos.map((p, idx) => {
                 const atalho = idx < 9 ? `F${idx + 1}` : null;
                 const qtd = cart.find((c) => c.id === p.id)?.quantidade ?? 0;
+                const flashed = flashId === p.id;
                 return (
                   <button
                     key={p.id}
                     type="button"
+                    className="pdv-product"
                     onClick={() => add(p)}
                     style={{
                       ...productBtn,
                       borderColor: p.cor,
-                      background:
-                        qtd > 0 ? 'rgba(234,88,12,0.15)' : '#1c1917',
+                      background: flashed
+                        ? 'rgba(234,88,12,0.35)'
+                        : qtd > 0
+                          ? 'rgba(234,88,12,0.15)'
+                          : '#1c1917',
+                      transition: 'background 0.12s, transform 0.08s',
                     }}
                   >
                     {atalho && <span style={keyBadge}>{atalho}</span>}
@@ -505,7 +834,7 @@ export default function App() {
                           letterSpacing: 0.5,
                         }}
                       >
-                        FICHA
+                        {p.ficha_2_vias ? '2 VIAS' : 'FICHA'}
                       </span>
                     )}
                   </button>
@@ -522,7 +851,7 @@ export default function App() {
               <div style={emptyCart}>
                 Toque nos produtos
                 <br />
-                ou use F1â€“F9
+                ou use F1-F9
               </div>
             ) : (
               cart.map((item) => (
@@ -540,7 +869,7 @@ export default function App() {
                     style={qtyBtn}
                     onClick={() => setQty(item.id, item.quantidade - 1)}
                   >
-                    âˆ’
+                    -
                   </button>
                   <strong style={{ minWidth: 32, textAlign: 'center', fontSize: 16 }}>
                     {item.quantidade}
@@ -603,7 +932,7 @@ export default function App() {
               primary
             />
             <PayBtn
-              label="CARTÃƒO FÃSICO"
+              label="CARTAO FISICO"
               hint="F"
               color="#2563eb"
               disabled={!canPay}
@@ -617,19 +946,17 @@ export default function App() {
       {toast && <div style={toastStyle}>{toast}</div>}
 
       {cashOpen && (
-        <div
-          style={modalOverlay}
-          onClick={() => setCashOpen(false)}
-        >
+        <div style={modalOverlay} onClick={() => setCashOpen(false)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontWeight: 800, fontSize: 14, color: '#a8a29e' }}>
               DINHEIRO
             </div>
             <div style={{ marginTop: 4, color: '#d6d3d1', fontSize: 14 }}>
-              Total: <strong style={{ color: '#ea580c' }}>{formatPreco(total)}</strong>
+              Total:{' '}
+              <strong style={{ color: '#ea580c' }}>{formatPreco(total)}</strong>
             </div>
             <div style={{ marginTop: 18, color: '#a8a29e', fontSize: 13 }}>
-              Valor recebido
+              Valor recebido — digite 100 = R$ 100,00 | virgula para centavos
             </div>
             <div
               style={{
@@ -641,6 +968,7 @@ export default function App() {
                 fontSize: 40,
                 color: '#fff',
                 letterSpacing: 1,
+                outline: cashComma ? '2px solid #ea580c' : 'none',
               }}
             >
               {formatPreco(cashRecebido)}
@@ -651,9 +979,7 @@ export default function App() {
                   key={v}
                   type="button"
                   style={cashChip}
-                  onClick={() =>
-                    setCashDigits(String(Math.round(v * 100)))
-                  }
+                  onClick={() => setCashFromValue(v)}
                 >
                   {formatPreco(v)}
                 </button>
@@ -661,7 +987,7 @@ export default function App() {
               <button
                 type="button"
                 style={{ ...cashChip, background: '#44403c' }}
-                onClick={() => setCashDigits('')}
+                onClick={limparCash}
               >
                 Limpar
               </button>
@@ -732,6 +1058,14 @@ export default function App() {
   );
 }
 
+const labelDark: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  fontSize: 13,
+  color: '#a8a29e',
+};
+
 const inputDark: CSSProperties = {
   padding: '12px 14px',
   borderRadius: 10,
@@ -779,6 +1113,13 @@ const hdrBtn: CSSProperties = {
   cursor: 'pointer',
   fontWeight: 700,
   fontSize: 13,
+};
+
+const syncBadge: CSSProperties = {
+  padding: '4px 10px',
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 800,
 };
 
 const helpBar: CSSProperties = {

@@ -29,6 +29,7 @@ const emptyForm: ProductInput = {
   cor: '#FF6B00',
   ativo: true,
   imprime_ficha: false,
+  ficha_2_vias: false,
   ficha_logo_data: null,
 };
 
@@ -122,6 +123,7 @@ export default function Products() {
       cor: p.cor,
       ativo: p.ativo,
       imprime_ficha: Boolean(p.imprime_ficha),
+      ficha_2_vias: Boolean(p.ficha_2_vias),
       ficha_logo_data: p.ficha_logo_data ?? null,
     });
     setFormErro('');
@@ -216,11 +218,28 @@ export default function Products() {
             type="checkbox"
             checked={Boolean(form.imprime_ficha)}
             onChange={(e) =>
-              setForm({ ...form, imprime_ficha: e.target.checked })
+              setForm({
+                ...form,
+                imprime_ficha: e.target.checked,
+                ficha_2_vias: e.target.checked ? form.ficha_2_vias : false,
+              })
             }
           />
-          Imprime ficha (1 unidade = 1 página na térmica 80mm)
+          Imprime ficha (1 unidade = 1 pagina na termica 80mm)
         </label>
+
+        {form.imprime_ficha && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={Boolean(form.ficha_2_vias)}
+              onChange={(e) =>
+                setForm({ ...form, ficha_2_vias: e.target.checked })
+              }
+            />
+            2 vias: barman (sabor) + cliente (sabor + codigo)
+          </label>
+        )}
 
         {form.imprime_ficha && (
           <div
@@ -336,7 +355,11 @@ export default function Products() {
                       <div style={{ fontWeight: 700, fontSize: 16 }}>{p.nome}</div>
                       <div style={{ color: '#78716c', fontSize: 13 }}>
                         {PRODUCT_CATEGORY_LABELS[p.categoria]} · {formatBRL(p.preco)}
-                        {p.imprime_ficha ? ' · Ficha' : ''}
+                        {p.imprime_ficha
+                          ? p.ficha_2_vias
+                            ? ' · 2 vias'
+                            : ' · Ficha'
+                          : ''}
                         {!p.ativo && ' · Inativo'}
                       </div>
                     </div>

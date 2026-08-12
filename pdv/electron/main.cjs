@@ -1,8 +1,11 @@
-﻿const { app, BrowserWindow, ipcMain } = require('electron');
+﻿const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
 
 const isDev = !app.isPackaged;
 let mainWindow = null;
+
+// Remove menu File/Edit/View — visual de caixa/kiosk
+Menu.setApplicationMenu(null);
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -11,6 +14,8 @@ function createWindow() {
     minWidth: 960,
     minHeight: 640,
     title: 'Totem PDV',
+    fullscreen: !isDev,
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -47,9 +52,27 @@ ipcMain.handle('list-printers', async () => {
   }
 });
 
+ipcMain.handle('set-fullscreen', (_event, on) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  mainWindow.setFullScreen(Boolean(on));
+  return mainWindow.isFullScreen();
+});
+
+ipcMain.handle('toggle-fullscreen', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  const next = !mainWindow.isFullScreen();
+  mainWindow.setFullScreen(next);
+  return next;
+});
+
+ipcMain.handle('is-fullscreen', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  return mainWindow.isFullScreen();
+});
+
 /**
- * Imprime cada PNG (data URL) em silÃªncio â€” 1 pÃ¡gina = 1 corte no POS
- * com "Cutting: After one page" e papel 80Ã—35.
+ * Imprime cada PNG (data URL) em silencio — 1 pagina = 1 corte no POS
+ * com "Cutting: After one page" e papel 80x30.
  */
 ipcMain.handle('print-fichas-silent', async (_event, payload) => {
   const pages = Array.isArray(payload?.pages) ? payload.pages : [];
@@ -103,7 +126,6 @@ function printOneBitmap(dataUrl, deviceName) {
             deviceName: deviceName || undefined,
             margins: { marginType: 'none' },
             pageSize: {
-              // mÃ­crons (Electron)
               width: 80 * 1000,
               height: 30 * 1000,
             },
@@ -119,4 +141,3 @@ function printOneBitmap(dataUrl, deviceName) {
     setTimeout(done, 60_000);
   });
 }
-

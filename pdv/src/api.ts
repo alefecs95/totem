@@ -20,6 +20,7 @@ export interface PdvProduct {
   cor: string;
   categoria: string;
   imprime_ficha: boolean;
+  ficha_2_vias?: boolean;
   ficha_logo_data: string | null;
 }
 
@@ -52,6 +53,7 @@ export async function criarVenda(input: {
     nome: string;
     quantidade: number;
     imprime_ficha: boolean;
+    ficha_2_vias?: boolean;
     ficha_logo_data?: string;
   }>;
   total: number;
