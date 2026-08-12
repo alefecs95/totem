@@ -6,6 +6,8 @@ RUN npm ci
 COPY . .
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
+ARG VITE_PWA_URL
+ENV VITE_PWA_URL=$VITE_PWA_URL
 RUN npm run build
 
 # --- Runtime (estático via Nginx + proxy /api/) ---

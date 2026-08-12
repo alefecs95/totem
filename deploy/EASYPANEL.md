@@ -132,13 +132,66 @@ PUBLIC_URL=https://<dominio-da-api>
 ## 7. Primeiro uso
 
 1. Acesse o admin: `https://<dominio-do-admin>`
-   - Login: `admin@totem.com` / `admin123` → **troque a senha depois**.
+   - Login: `admin@totem.com` / senha inicial (veja abaixo).
 2. **Organizadores → + Novo Tenant** — preencha e-mail e **senha do portal** (para o dono).
 3. **Produtos** — cadastre os itens do festival (ou use os 4 padrão criados automaticamente).
 4. **Totens → criar** → exibe o **QR Code**. A URL aponta para
    `https://<dominio-do-pwa>/setup?tenantId=...&totemId=...`.
 5. O dono acessa o **portal**: `https://<dominio-do-portal>` com o e-mail e senha definidos no passo 2.
 6. No tablet, abra a URL do QR (ou escaneie) → o totem se configura e vai para a Home.
+7. **Modo operador (PDV)**: `https://<dominio-do-pwa>/operador/login` — use o **e-mail e senha do portal** (organizador), **não** as credenciais do admin.
+
+### Senha inicial do admin
+
+Na **primeira** subida da API (banco vazio), a senha do admin é **gerada aleatoriamente** e aparece **uma única vez** nos logs do `totem-api`:
+
+```
+⚠️  SENHA INICIAL DO ADMIN — ANOTE E TROQUE IMEDIATAMENTE:
+    E-mail: admin@totem.com
+    Senha:  xxxxxxxxx
+```
+
+Se o banco já existia antes dessa mudança, a senha antiga (`admin123`) pode ainda valer. Troque em **Admin → alterar senha** ou via `PUT /api/admin/change-password`.
+
+---
+
+## 8. Checklist se admin ou PDV não abrem
+
+### API fora do ar (`Service is not reachable` ou `/api/health` falha)
+
+No `totem-api` → **Environment**, confirme **obrigatórias**:
+
+```
+DATABASE_URL=postgres://postgres:SENHA@totem_totem-db:5432/totem-db?sslmode=disable
+ADMIN_JWT_SECRET=<string aleatória com no mínimo 32 caracteres>
+PORT=3001
+```
+
+Sem `ADMIN_JWT_SECRET` a API **não sobe**. Gere uma secret no console do navegador:
+
+```js
+Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2,'0')).join('')
+```
+
+Salve → **Redeploy** do `totem-api` → confira logs: `Migrations aplicadas com sucesso.` e `backend rodando na porta 3001`.
+
+Teste: `https://<dominio-da-api>/api/health` → `{"ok":true}`.
+
+### Admin abre mas login falha (400 / 502)
+
+- **502** no `/api/admin/login`: o nginx do admin não alcança a API. Confirme que `totem-api` está healthy. O proxy usa `API_URL=http://totem_totem-api:3001` (hostname interno Docker — projeto `totem`, serviço `totem-api`).
+- **400 invalid_credentials**: senha errada — veja seção de senha inicial acima.
+- **CORS** (erro no console do navegador): preencha `FRONTEND_URL`, `ADMIN_URL`, `PORTAL_URL` no `totem-api` e redeploy.
+
+### PDV (modo operador) não aparece ou login falha
+
+- URL correta: `https://<dominio-do-pwa>/operador/login` (não é o admin nem o portal).
+- Credenciais: **e-mail + senha do portal** do organizador (cadastrados no admin em Novo Tenant).
+- Após push com modo operador, faça **redeploy do `totem-pwa`** para o bundle incluir as novas rotas.
+
+### Redeploy após push no GitHub
+
+Ordem recomendada: `totem-api` → `totem-pwa` → `totem-admin` → `totem-portal`.
 
 ---
 
