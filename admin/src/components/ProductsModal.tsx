@@ -357,30 +357,6 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
   );
 }
 
-const overlay: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0,0,0,0.45)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 200,
-  padding: 16,
-};
-
-const modal: React.CSSProperties = {
-  background: '#fff',
-  borderRadius: 12,
-  padding: 24,
-  width: 780,
-  maxWidth: '100%',
-  maxHeight: '90vh',
-  overflow: 'auto',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 16,
-};
-
 const logoBox: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',

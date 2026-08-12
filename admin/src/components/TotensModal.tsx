@@ -251,27 +251,6 @@ export default function TotensModal({ tenant, onClose }: TotensModalProps) {
   );
 }
 
-const overlay: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(15,23,42,0.5)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: 16,
-  zIndex: 100,
-};
-
-const modal: React.CSSProperties = {
-  background: '#fff',
-  borderRadius: 16,
-  padding: 24,
-  width: 720,
-  maxWidth: '100%',
-  maxHeight: '90vh',
-  overflowY: 'auto',
-};
-
 const closeBtn: React.CSSProperties = {
   background: 'none',
   border: 'none',
