@@ -30,11 +30,11 @@ export const productSchema = z.object({
     .optional(),
   ordem: z.number().int().nonnegative().optional(),
   ativo: z.boolean().optional(),
-  /** Se true, cada unidade da venda imprime uma ficha (página) na térmica. */
+  /** Se true, cada unidade da venda imprime uma ficha unica (25mm) na termica. */
   imprime_ficha: z.boolean().optional(),
   /**
-   * Se true (com imprime_ficha), cada unidade gera 2 vias:
-   * barman (sabor) + cliente (sabor + código).
+   * Independente de imprime_ficha. Se true, cada unidade gera 2 vias maiores (50mm):
+   * barman (sabor em destaque) + cliente (codigo).
    */
   ficha_2_vias: z.boolean().optional(),
   /** Logo individual da ficha deste produto (data URL). */

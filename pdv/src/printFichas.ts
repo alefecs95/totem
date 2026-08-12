@@ -1,9 +1,14 @@
-/** Bitmap da ficha 80x25 mm (2,5 cm) para impressao silenciosa no Electron. */
+/** Ficha unica 80x25 mm; 2 vias (barman/cliente) 80x50 mm — modelo maior. */
 
 export const FICHA_LARGURA_MM = 80;
-export const FICHA_ALTURA_MM = 25;
+export const FICHA_UNICA_ALTURA_MM = 25;
+export const FICHA_2VIAS_ALTURA_MM = 50;
+/** @deprecated use FICHA_UNICA_ALTURA_MM */
+export const FICHA_ALTURA_MM = FICHA_UNICA_ALTURA_MM;
+
 const PX_W = 576;
-const PX_H = 200; // 8 px/mm x 25mm
+const PX_H_UNICA = 200; // 8 px/mm × 25mm
+const PX_H_2VIAS = 400; // 8 px/mm × 50mm
 
 export type FichaVia = 'unica' | 'barman' | 'cliente';
 
@@ -11,16 +16,28 @@ export type FichaTicket = {
   key: string;
   nome: string;
   logo?: string | null;
-  /** unica = ficha normal; barman/cliente = 2 vias */
   via?: FichaVia;
-  /** Codigo de retirada (mesmo no par barman/cliente), ex. B-K7P2 */
   codigo?: string;
-  /** Contador do dia (#047) — so via barman */
   seqDia?: number;
+};
+
+export type PrintPage = {
+  dataUrl: string;
+  heightMm: number;
 };
 
 const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 const DAY_SEQ_KEY = 'pdvFichaDaySeq';
+
+export function ticketHeightMm(via?: FichaVia): number {
+  return via === 'barman' || via === 'cliente'
+    ? FICHA_2VIAS_ALTURA_MM
+    : FICHA_UNICA_ALTURA_MM;
+}
+
+function ticketPxH(via?: FichaVia): number {
+  return via === 'barman' || via === 'cliente' ? PX_H_2VIAS : PX_H_UNICA;
+}
 
 function todayKey(): string {
   const d = new Date();
@@ -30,7 +47,6 @@ function todayKey(): string {
   return `${y}-${m}-${day}`;
 }
 
-/** Contador diario local (reinicia a cada dia). */
 export function nextDaySeq(): number {
   try {
     const raw = localStorage.getItem(DAY_SEQ_KEY);
@@ -45,7 +61,6 @@ export function nextDaySeq(): number {
   }
 }
 
-/** Codigo curto com prefixo B- (drink / 2 vias). */
 export function generateFichaCodigo(len = 4): string {
   const bytes = new Uint8Array(len);
   crypto.getRandomValues(bytes);
@@ -107,6 +122,40 @@ function drawCover(
   ctx.restore();
 }
 
+/** Quebra o sabor em linhas para caber na largura. */
+function wrapLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines: number
+): string[] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return ['FICHA'];
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    const trial = current ? `${current} ${word}` : word;
+    if (ctx.measureText(trial).width <= maxWidth) {
+      current = trial;
+      continue;
+    }
+    if (current) lines.push(current);
+    current = word;
+    if (lines.length >= maxLines - 1) break;
+  }
+  if (lines.length < maxLines && current) lines.push(current);
+  // Se ainda passou, truncar ultima linha
+  const last = lines[lines.length - 1] ?? text;
+  if (ctx.measureText(last).width > maxWidth) {
+    let cut = last;
+    while (cut.length > 1 && ctx.measureText(`${cut}…`).width > maxWidth) {
+      cut = cut.slice(0, -1);
+    }
+    lines[lines.length - 1] = `${cut}…`;
+  }
+  return lines.slice(0, maxLines);
+}
+
 function drawNomeBar(
   ctx: CanvasRenderingContext2D,
   nome: string,
@@ -124,113 +173,137 @@ function drawNomeBar(
   ctx.fillStyle = '#000';
 }
 
-/** Caixa de codigo com alto contraste (borda dupla + tracking). */
-function drawCodigoBox(
-  ctx: CanvasRenderingContext2D,
-  codigo: string,
-  y: number,
-  h: number
-): void {
-  const x = 28;
-  const w = PX_W - 56;
-  ctx.fillStyle = '#000';
-  ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(x + 5, y + 5, w - 10, h - 10);
-  ctx.fillStyle = '#000';
-  ctx.fillRect(x + 12, y + 12, w - 24, h - 24);
-
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 11px Arial, Helvetica, sans-serif';
-  ctx.fillText('CODIGO', PX_W / 2, y + 26);
-  ctx.font = 'bold 40px Arial, Helvetica, sans-serif';
-  const code = (codigo || 'B----').toUpperCase();
-  ctx.fillText(code, PX_W / 2, y + h / 2 + 8, w - 40);
-  ctx.fillStyle = '#000';
-}
-
 function drawDashedLine(
   ctx: CanvasRenderingContext2D,
-  y: number
+  y: number,
+  width = PX_W
 ): void {
   ctx.strokeStyle = '#000';
   ctx.lineWidth = 2;
   ctx.setLineDash([8, 6]);
   ctx.beginPath();
   ctx.moveTo(16, y);
-  ctx.lineTo(PX_W - 16, y);
+  ctx.lineTo(width - 16, y);
   ctx.stroke();
   ctx.setLineDash([]);
 }
 
-export async function renderFichaBitmap(
+/** Via barman: SABOR em destaque; codigo secundario. */
+function drawBarman(
+  ctx: CanvasRenderingContext2D,
   ticket: FichaTicket,
-  festival: string,
-  printedAt: Date = new Date()
-): Promise<string> {
-  const canvas = document.createElement('canvas');
-  canvas.width = PX_W;
-  canvas.height = PX_H;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) throw new Error('canvas');
-
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, PX_W, PX_H);
-  ctx.fillStyle = '#000';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  const via = ticket.via || 'unica';
-  const when = formatDataHora(printedAt);
+  when: string,
+  pxH: number
+): void {
   const nome = (ticket.nome || 'FICHA').toUpperCase();
   const codigo = (ticket.codigo || 'B----').toUpperCase();
+  const seq =
+    ticket.seqDia != null
+      ? `#${String(ticket.seqDia).padStart(3, '0')}`
+      : '';
 
-  if (via === 'barman') {
-    const seq =
-      ticket.seqDia != null
-        ? `#${String(ticket.seqDia).padStart(3, '0')}`
-        : '';
-    ctx.font = 'bold 14px Arial, Helvetica, sans-serif';
-    ctx.fillText(
-      seq ? `BARMAN  ${seq}` : 'BARMAN',
-      PX_W / 2,
-      14,
-      PX_W - 24
-    );
-    drawDashedLine(ctx, 26);
+  ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
+  ctx.fillText(
+    seq ? `BARMAN  ${seq}` : 'BARMAN',
+    PX_W / 2,
+    22,
+    PX_W - 24
+  );
+  drawDashedLine(ctx, 40);
 
-    ctx.font = 'bold 20px Arial, Helvetica, sans-serif';
-    ctx.fillText(nome.slice(0, 26), PX_W / 2, 44, PX_W - 24);
+  // Bloco do sabor (prioridade visual)
+  const saborTop = 52;
+  const saborH = 250;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(16, saborTop, PX_W - 32, saborH);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 14px Arial, Helvetica, sans-serif';
+  ctx.fillText('SABOR', PX_W / 2, saborTop + 28);
 
-    drawCodigoBox(ctx, codigo, 56, 110);
+  // Fonte grande, ajusta se o nome for longo
+  let fontSize = nome.length <= 12 ? 64 : nome.length <= 20 ? 48 : 40;
+  ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
+  let lines = wrapLines(ctx, nome, PX_W - 64, 3);
+  while (fontSize > 32 && lines.length > 2) {
+    fontSize -= 4;
+    ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
+    lines = wrapLines(ctx, nome, PX_W - 64, 3);
+  }
+  const lineH = fontSize + 10;
+  const blockH = lines.length * lineH;
+  let ty = saborTop + 40 + (saborH - 56 - blockH) / 2 + lineH / 2;
+  for (const line of lines) {
+    ctx.fillText(line, PX_W / 2, ty, PX_W - 64);
+    ty += lineH;
+  }
 
-    ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
-    ctx.fillText(when, PX_W / 2, PX_H - 12, PX_W - 24);
-  } else if (via === 'cliente') {
-    ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
-    ctx.fillText(
-      `CLIENTE - ${(festival || '').slice(0, 28).toUpperCase()}`,
-      PX_W / 2,
-      14,
-      PX_W - 24
-    );
-    drawDashedLine(ctx, 26);
+  // Codigo menor (secundario)
+  ctx.fillStyle = '#000';
+  ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
+  ctx.fillText(`CODIGO  ${codigo}`, PX_W / 2, pxH - 36, PX_W - 24);
+  ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
+  ctx.fillText(when, PX_W / 2, pxH - 14, PX_W - 24);
+}
 
-    ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
-    ctx.fillText(nome.slice(0, 26), PX_W / 2, 44, PX_W - 24);
+/** Via cliente: so o codigo em destaque. */
+function drawCliente(
+  ctx: CanvasRenderingContext2D,
+  ticket: FichaTicket,
+  when: string,
+  pxH: number
+): void {
+  const codigo = (ticket.codigo || 'B----').toUpperCase();
 
-    drawCodigoBox(ctx, codigo, 56, 110);
+  ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
+  ctx.fillText('CLIENTE', PX_W / 2, 24, PX_W - 24);
+  drawDashedLine(ctx, 42);
 
-    ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
-    ctx.fillText(when, PX_W / 2, PX_H - 12, PX_W - 24);
-  } else {
+  ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
+  ctx.fillText('SEU CODIGO', PX_W / 2, 90, PX_W - 24);
+
+  // Caixa do codigo — ocupa o centro
+  const boxY = 120;
+  const boxH = 200;
+  const x = 40;
+  const w = PX_W - 80;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x, boxY, w, boxH);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x + 8, boxY + 8, w - 16, boxH - 16);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x + 18, boxY + 18, w - 36, boxH - 36);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 72px Arial, Helvetica, sans-serif';
+  ctx.fillText(codigo, PX_W / 2, boxY + boxH / 2 + 8, w - 56);
+
+  ctx.fillStyle = '#000';
+  ctx.font = 'bold 14px Arial, Helvetica, sans-serif';
+  ctx.fillText('APRESENTE NO BAR', PX_W / 2, pxH - 36, PX_W - 24);
+  ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
+  ctx.fillText(when, PX_W / 2, pxH - 14, PX_W - 24);
+}
+
+function drawUnica(
+  ctx: CanvasRenderingContext2D,
+  ticket: FichaTicket,
+  festival: string,
+  when: string,
+  pxH: number
+): Promise<void> {
+  return (async () => {
+    const nome = (ticket.nome || 'FICHA').toUpperCase();
     const headerH = 24;
     const footerH = 24;
     const midY = headerH;
-    const midH = PX_H - headerH - footerH;
+    const midH = pxH - headerH - footerH;
 
     ctx.font = 'bold 15px Arial, Helvetica, sans-serif';
-    ctx.fillText(festival.slice(0, 42).toUpperCase(), PX_W / 2, headerH / 2, PX_W - 24);
+    ctx.fillText(
+      festival.slice(0, 42).toUpperCase(),
+      PX_W / 2,
+      headerH / 2,
+      PX_W - 24
+    );
 
     let drewLogo = false;
     if (ticket.logo?.startsWith('data:image/')) {
@@ -249,11 +322,50 @@ export async function renderFichaBitmap(
 
     ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
     ctx.fillStyle = '#000';
-    ctx.fillText(when, PX_W / 2, PX_H - footerH / 2, PX_W - 24);
+    ctx.fillText(when, PX_W / 2, pxH - footerH / 2, PX_W - 24);
+  })();
+}
+
+export async function renderFichaBitmap(
+  ticket: FichaTicket,
+  festival: string,
+  printedAt: Date = new Date()
+): Promise<string> {
+  const via = ticket.via || 'unica';
+  const pxH = ticketPxH(via);
+  const canvas = document.createElement('canvas');
+  canvas.width = PX_W;
+  canvas.height = pxH;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) throw new Error('canvas');
+
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, PX_W, pxH);
+  ctx.fillStyle = '#000';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const when = formatDataHora(printedAt);
+
+  if (via === 'barman') {
+    drawBarman(ctx, ticket, when, pxH);
+  } else if (via === 'cliente') {
+    drawCliente(ctx, ticket, when, pxH);
+  } else {
+    await drawUnica(ctx, ticket, festival, when, pxH);
   }
 
-  toThermalMono(ctx, PX_W, PX_H);
+  toThermalMono(ctx, PX_W, pxH);
   return canvas.toDataURL('image/png');
+}
+
+export async function renderFichaPage(
+  ticket: FichaTicket,
+  festival: string,
+  printedAt: Date = new Date()
+): Promise<PrintPage> {
+  const dataUrl = await renderFichaBitmap(ticket, festival, printedAt);
+  return { dataUrl, heightMm: ticketHeightMm(ticket.via) };
 }
 
 export type PrintItem = {
@@ -264,12 +376,19 @@ export type PrintItem = {
   ficha_logo_data?: string | null;
 };
 
+/**
+ * 2 vias e ficha unica sao independentes:
+ * - ficha_2_vias → barman (sabor) + cliente (codigo)
+ * - imprime_ficha (sem 2 vias) → ficha unica 25mm
+ */
 export function expandFichas(items: PrintItem[]): FichaTicket[] {
   const out: FichaTicket[] = [];
   for (const item of items) {
-    if (!item.imprime_ficha) continue;
     const qtd = Math.max(0, Math.floor(item.quantidade));
     const dual = Boolean(item.ficha_2_vias);
+    const unica = Boolean(item.imprime_ficha) && !dual;
+    if (!dual && !unica) continue;
+
     for (let i = 0; i < qtd; i += 1) {
       const base = `${item.nome}-${i}-${Math.random().toString(36).slice(2, 6)}`;
       if (dual) {
@@ -305,7 +424,7 @@ export function expandFichas(items: PrintItem[]): FichaTicket[] {
 export function countDualUnits(items: PrintItem[]): number {
   let n = 0;
   for (const item of items) {
-    if (!item.imprime_ficha || !item.ficha_2_vias) continue;
+    if (!item.ficha_2_vias) continue;
     n += Math.max(0, Math.floor(item.quantidade));
   }
   return n;

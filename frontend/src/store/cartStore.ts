@@ -36,7 +36,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       const qtd = Math.max(1, Math.floor(quantidade));
       const existing = state.items.find((item) => item.id === product.id);
       const imprime_ficha = Boolean(product.imprime_ficha);
-      const ficha_2_vias = imprime_ficha && Boolean(product.ficha_2_vias);
+      const ficha_2_vias = Boolean(product.ficha_2_vias);
       const ficha_logo_data = product.ficha_logo_data ?? null;
       if (existing) {
         return {

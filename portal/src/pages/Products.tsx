@@ -221,25 +221,22 @@ export default function Products() {
               setForm({
                 ...form,
                 imprime_ficha: e.target.checked,
-                ficha_2_vias: e.target.checked ? form.ficha_2_vias : false,
               })
             }
           />
-          Imprime ficha (1 unidade = 1 pagina na termica 80×25mm)
+          Imprime ficha unica (80×25mm)
         </label>
 
-        {form.imprime_ficha && (
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={Boolean(form.ficha_2_vias)}
-              onChange={(e) =>
-                setForm({ ...form, ficha_2_vias: e.target.checked })
-              }
-            />
-            2 vias: barman (sabor) + cliente (sabor + codigo)
-          </label>
-        )}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="checkbox"
+            checked={Boolean(form.ficha_2_vias)}
+            onChange={(e) =>
+              setForm({ ...form, ficha_2_vias: e.target.checked })
+            }
+          />
+          2 vias 80×50mm: barman (sabor grande) + cliente (so codigo)
+        </label>
 
         {form.imprime_ficha && (
           <div
@@ -355,11 +352,13 @@ export default function Products() {
                       <div style={{ fontWeight: 700, fontSize: 16 }}>{p.nome}</div>
                       <div style={{ color: '#78716c', fontSize: 13 }}>
                         {PRODUCT_CATEGORY_LABELS[p.categoria]} · {formatBRL(p.preco)}
-                        {p.imprime_ficha
-                          ? p.ficha_2_vias
-                            ? ' · 2 vias'
-                            : ' · Ficha'
-                          : ''}
+                        {(p.ficha_2_vias || p.imprime_ficha) &&
+                          ` · ${[
+                            p.ficha_2_vias ? '2 vias' : null,
+                            p.imprime_ficha ? 'Ficha' : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}`}
                         {!p.ativo && ' · Inativo'}
                       </div>
                     </div>

@@ -52,7 +52,7 @@ export function persistTotemConfig(config: TotemConfig): void {
   for (const p of config.produtos ?? []) {
     if (!p.id) continue;
     fichaFlags[p.id] = Boolean(p.imprime_ficha);
-    ficha2Vias[p.id] = Boolean(p.imprime_ficha) && Boolean(p.ficha_2_vias);
+    ficha2Vias[p.id] = Boolean(p.ficha_2_vias);
     if (p.ficha_logo_data && p.ficha_logo_data.startsWith('data:image/')) {
       fichaLogos[p.id] = p.ficha_logo_data;
     }

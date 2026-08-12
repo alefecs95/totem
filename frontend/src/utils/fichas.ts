@@ -107,7 +107,7 @@ export function readProductFichaLogos(): Record<string, string> {
   }
 }
 
-/** Expande itens com imprime_ficha: 1 unidade = 1 ficha, ou 2 vias se ficha_2_vias. */
+/** Expande impressoes: 2 vias e ficha unica sao independentes. */
 export function expandFichaTickets(
   items: Array<{
     id?: string;
@@ -123,13 +123,14 @@ export function expandFichaTickets(
   const logos = readProductFichaLogos();
   const tickets: FichaTicket[] = [];
   for (const item of items) {
-    const fromItem = isImprimeFicha(item.imprime_ficha);
-    const fromConfig = item.id ? Boolean(flags[item.id]) : false;
-    if (!fromItem && !fromConfig) continue;
-
+    const fromItemFicha = isImprimeFicha(item.imprime_ficha);
+    const fromConfigFicha = item.id ? Boolean(flags[item.id]) : false;
     const dual =
       isImprimeFicha(item.ficha_2_vias) ||
       (item.id ? Boolean(dualFlags[item.id]) : false);
+    const unica = (fromItemFicha || fromConfigFicha) && !dual;
+
+    if (!dual && !unica) continue;
 
     const logoFromItem =
       item.ficha_logo_data && item.ficha_logo_data.startsWith('data:image/')

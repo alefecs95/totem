@@ -26,7 +26,7 @@ import {
   flushOfflineQueue,
   type QueuedPdvSale,
 } from './offline';
-import { expandFichas, renderFichaBitmap, countDualUnits, type PrintItem } from './printFichas';
+import { expandFichas, renderFichaPage, countDualUnits, type PrintItem } from './printFichas';
 
 type CartLine = PdvProduct & { quantidade: number };
 
@@ -186,7 +186,7 @@ export default function App() {
 
   const produtosAll = config?.produtos ?? [];
   const produtos = soDrinks
-    ? produtosAll.filter((p) => p.imprime_ficha && p.ficha_2_vias)
+    ? produtosAll.filter((p) => p.ficha_2_vias)
     : produtosAll;
   const productById = useRef<Map<string, PdvProduct>>(new Map());
   useEffect(() => {
@@ -434,9 +434,9 @@ export default function App() {
             window.setTimeout(() => setSaleFlash(false), 450);
           }
         }
-        const pages: string[] = [];
+        const pages: Array<{ dataUrl: string; heightMm: number }> = [];
         for (const t of tickets) {
-          pages.push(await renderFichaBitmap(t, nomeFestival));
+          pages.push(await renderFichaPage(t, nomeFestival));
         }
         localStorage.setItem('pdvPrinter', printerName);
         if (window.pdvDesktop?.printFichasSilent) {
@@ -1096,7 +1096,7 @@ export default function App() {
                     <div style={{ ...productPrice, color: p.cor }}>
                       {formatPreco(p.preco)}
                     </div>
-                    {p.imprime_ficha && (
+                    {(p.imprime_ficha || p.ficha_2_vias) && (
                       <span
                         style={{
                           fontSize: 10,

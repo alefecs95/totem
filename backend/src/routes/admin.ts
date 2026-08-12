@@ -1154,7 +1154,7 @@ router.post('/tenants/:tenantId/produtos', verifyAdmin, async (req, res) => {
         p.ativo ?? true,
         p.categoria,
         p.imprime_ficha ?? false,
-        Boolean(p.imprime_ficha) && Boolean(p.ficha_2_vias),
+        p.ficha_2_vias ?? false,
         p.ficha_logo_data ?? null,
       ]
     );

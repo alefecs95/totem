@@ -9,7 +9,7 @@ declare global {
         Array<{ name: string; displayName: string; isDefault: boolean }>
       >;
       printFichasSilent: (
-        pages: string[],
+        pages: Array<string | { dataUrl: string; heightMm: number }>,
         deviceName?: string
       ) => Promise<{ ok: boolean; count?: number; error?: string }>;
       setFullscreen?: (on: boolean) => Promise<boolean>;

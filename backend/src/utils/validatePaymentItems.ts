@@ -82,8 +82,7 @@ export async function validatePaymentItems(
       nome: product.nome,
       categoria: product.categoria,
       imprime_ficha: Boolean(product.imprime_ficha),
-      ficha_2_vias:
-        Boolean(product.imprime_ficha) && Boolean(product.ficha_2_vias),
+      ficha_2_vias: Boolean(product.ficha_2_vias),
       quantidade: item.quantidade,
       preco,
       subtotal,

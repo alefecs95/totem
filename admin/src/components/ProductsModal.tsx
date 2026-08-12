@@ -90,7 +90,7 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
       cor,
       ativo: true,
       imprime_ficha: imprimeFicha,
-      ficha_2_vias: imprimeFicha && ficha2Vias,
+      ficha_2_vias: ficha2Vias,
       ficha_logo_data: logoData,
     };
     try {
@@ -193,34 +193,28 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
               <input
                 type="checkbox"
                 checked={imprimeFicha}
-                onChange={(e) => {
-                  const on = e.target.checked;
-                  setImprimeFicha(on);
-                  if (!on) setFicha2Vias(false);
-                }}
+                onChange={(e) => setImprimeFicha(e.target.checked)}
               />
-              Imprime ficha
+              Imprime ficha (unica 25mm)
             </label>
-            {imprimeFicha && (
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: '#334155',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={ficha2Vias}
-                  onChange={(e) => setFicha2Vias(e.target.checked)}
-                />
-                2 vias (barman + cliente c/ codigo)
-              </label>
-            )}
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 13,
+                fontWeight: 600,
+                color: '#334155',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={ficha2Vias}
+                onChange={(e) => setFicha2Vias(e.target.checked)}
+              />
+              2 vias 50mm (barman=sabor / cliente=codigo)
+            </label>
           </div>
 
           {imprimeFicha && (
@@ -311,11 +305,12 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
                   <td style={td}>{p.nome}</td>
                   <td style={td}>{formatBRL(p.preco)}</td>
                   <td style={td}>
-                    {p.imprime_ficha
-                      ? p.ficha_2_vias
-                        ? '2 vias'
-                        : 'Sim'
-                      : '—'}
+                    {[
+                      p.ficha_2_vias ? '2 vias' : null,
+                      p.imprime_ficha ? 'Ficha' : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || '—'}
                   </td>
                   <td style={td}>
                     {p.ficha_logo_data ? (

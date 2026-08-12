@@ -71,39 +71,46 @@ ipcMain.handle('is-fullscreen', () => {
 });
 
 /**
- * Imprime cada PNG (data URL) em silencio — 1 pagina = 1 corte no POS
- * com "Cutting: After one page" e papel 80x25 (2,5 cm).
+ * Imprime cada PNG (data URL) em silencio — 1 pagina = 1 corte no POS.
+ * Aceita string[] (legado, 25mm) ou { dataUrl, heightMm }[].
  */
 ipcMain.handle('print-fichas-silent', async (_event, payload) => {
-  const pages = Array.isArray(payload?.pages) ? payload.pages : [];
+  const raw = Array.isArray(payload?.pages) ? payload.pages : [];
   const deviceName = payload?.deviceName || '';
-  if (pages.length === 0) return { ok: false, error: 'no_pages' };
+  if (raw.length === 0) return { ok: false, error: 'no_pages' };
 
-  for (const dataUrl of pages) {
-    await printOneBitmap(dataUrl, deviceName);
+  for (const item of raw) {
+    const dataUrl = typeof item === 'string' ? item : item?.dataUrl;
+    const heightMm =
+      typeof item === 'object' && item && Number(item.heightMm) > 0
+        ? Number(item.heightMm)
+        : 25;
+    if (!dataUrl) continue;
+    await printOneBitmap(dataUrl, deviceName, heightMm);
     await delay(350);
   }
-  return { ok: true, count: pages.length };
+  return { ok: true, count: raw.length };
 });
 
 function delay(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function printOneBitmap(dataUrl, deviceName) {
+function printOneBitmap(dataUrl, deviceName, heightMm = 25) {
   return new Promise((resolve) => {
+    const h = Math.max(20, Math.min(120, Number(heightMm) || 25));
     const win = new BrowserWindow({
       show: false,
       width: 320,
-      height: 140,
+      height: Math.round(h * 4),
       webPreferences: { sandbox: true },
     });
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <style>
-  @page { size: 80mm 25mm; margin: 0; }
-  html, body { margin: 0; padding: 0; width: 80mm; height: 25mm; }
-  img { display: block; width: 80mm; height: 25mm; object-fit: fill; }
+  @page { size: 80mm ${h}mm; margin: 0; }
+  html, body { margin: 0; padding: 0; width: 80mm; height: ${h}mm; }
+  img { display: block; width: 80mm; height: ${h}mm; object-fit: fill; }
 </style></head><body>
 <img src="${dataUrl}" />
 </body></html>`;
@@ -127,7 +134,7 @@ function printOneBitmap(dataUrl, deviceName) {
             margins: { marginType: 'none' },
             pageSize: {
               width: 80 * 1000,
-              height: 25 * 1000,
+              height: h * 1000,
             },
           },
           () => done()
