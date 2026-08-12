@@ -565,6 +565,12 @@ export default function Tenants() {
         <ProductsModal
           tenant={produtosTenant}
           onClose={() => setProdutosTenant(null)}
+          onTenantUpdated={(updated) => {
+            setProdutosTenant(updated);
+            setTenants((prev) =>
+              prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t))
+            );
+          }}
         />
       )}
 

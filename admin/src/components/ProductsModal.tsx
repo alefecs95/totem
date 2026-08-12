@@ -4,6 +4,7 @@ import {
   deleteProduct,
   getProducts,
   updateProduct,
+  updateTenant,
   type Product,
   type ProductInput,
   type Tenant,
@@ -13,9 +14,15 @@ import { formatBRL } from '../utils/format';
 interface ProductsModalProps {
   tenant: Tenant;
   onClose: () => void;
+  /** Atualiza o tenant no pai após salvar a logo. */
+  onTenantUpdated?: (tenant: Tenant) => void;
 }
 
-export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
+export default function ProductsModal({
+  tenant,
+  onClose,
+  onTenantUpdated,
+}: ProductsModalProps) {
   const [produtos, setProdutos] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [nome, setNome] = useState('');
@@ -26,6 +33,11 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
   const [imprimeFicha, setImprimeFicha] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [logoData, setLogoData] = useState<string | null>(
+    tenant.ficha_logo_data ?? null
+  );
+  const [savingLogo, setSavingLogo] = useState(false);
+  const [logoMsg, setLogoMsg] = useState('');
 
   const carregar = () => {
     setLoading(true);
@@ -35,6 +47,10 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
   };
 
   useEffect(carregar, [tenant.id]);
+
+  useEffect(() => {
+    setLogoData(tenant.ficha_logo_data ?? null);
+  }, [tenant.id, tenant.ficha_logo_data]);
 
   const limparForm = () => {
     setNome('');
@@ -87,6 +103,50 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
     carregar();
   };
 
+  const onLogoSelected = (file: File | null) => {
+    if (!file) return;
+    if (
+      !file.type.includes('png') &&
+      !file.type.includes('jpeg') &&
+      !file.type.includes('webp')
+    ) {
+      setLogoMsg('Use PNG (preferencial), JPEG ou WebP.');
+      return;
+    }
+    if (file.size > 700_000) {
+      setLogoMsg('Arquivo grande demais (máx. ~700 KB). Ideal ~300×95 px.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      if (!result.startsWith('data:image/')) {
+        setLogoMsg('Não foi possível ler a imagem.');
+        return;
+      }
+      setLogoData(result);
+      setLogoMsg('Prévia pronta — clique em Salvar logo.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const salvarLogo = async () => {
+    setSavingLogo(true);
+    setLogoMsg('');
+    try {
+      const { tenant: updated } = await updateTenant(tenant.id, {
+        ficha_logo_data: logoData,
+      });
+      onTenantUpdated?.(updated);
+      setLogoData(updated.ficha_logo_data ?? logoData);
+      setLogoMsg(logoData ? 'Logo salva!' : 'Logo removida.');
+    } catch {
+      setLogoMsg('Falha ao salvar a logo. Redeploy da API/admin se a opção for nova.');
+    } finally {
+      setSavingLogo(false);
+    }
+  };
+
   return (
     <div style={overlay} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={modal}>
@@ -95,6 +155,73 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
           <button onClick={onClose} style={closeBtn}>
             ✕
           </button>
+        </div>
+
+        <div style={logoBox}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>
+            Logo da ficha (PNG) — 80 mm × 25 mm
+          </div>
+          <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>
+            Impressa em paisagem na térmica: <b>80 mm na horizontal</b> ×{' '}
+            <b>25 mm na vertical</b>. A logo preenche essa área. Preferência: PNG
+            ~300×95 px.
+          </p>
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={(e) => onLogoSelected(e.target.files?.[0] ?? null)}
+          />
+          {logoData ? (
+            <img
+              src={logoData}
+              alt="Prévia logo ficha"
+              style={{
+                width: 320,
+                height: 100,
+                objectFit: 'contain',
+                background: '#fff',
+                border: '1px solid #cbd5e1',
+                borderRadius: 6,
+              }}
+            />
+          ) : (
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>
+              Nenhuma logo enviada.
+            </span>
+          )}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={salvarLogo}
+              disabled={savingLogo}
+              style={btn}
+            >
+              {savingLogo ? 'Salvando...' : 'Salvar logo'}
+            </button>
+            {logoData && (
+              <button
+                type="button"
+                onClick={() => {
+                  setLogoData(null);
+                  setLogoMsg('Clique em Salvar logo para remover.');
+                }}
+                style={btnSecondary}
+              >
+                Remover
+              </button>
+            )}
+          </div>
+          {logoMsg && (
+            <p
+              style={{
+                margin: 0,
+                fontSize: 13,
+                color: logoMsg.includes('Falha') ? '#dc2626' : '#15803d',
+              }}
+            >
+              {logoMsg}
+            </p>
+          )}
         </div>
 
         <form onSubmit={salvar} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -227,13 +354,23 @@ const modal: React.CSSProperties = {
   background: '#fff',
   borderRadius: 12,
   padding: 24,
-  width: 640,
+  width: 720,
   maxWidth: '100%',
   maxHeight: '90vh',
   overflow: 'auto',
   display: 'flex',
   flexDirection: 'column',
   gap: 16,
+};
+
+const logoBox: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+  padding: 14,
+  borderRadius: 10,
+  border: '1px solid #fcd34d',
+  background: '#fffbeb',
 };
 
 const closeBtn: React.CSSProperties = {
