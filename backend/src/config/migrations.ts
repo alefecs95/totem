@@ -59,6 +59,7 @@ ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sumup_charged_amount NUMERIC(1
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sumup_card_type VARCHAR(10);
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS portal_senha_hash TEXT;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS categoria VARCHAR(50) NOT NULL DEFAULT 'outro';
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS imprime_ficha BOOLEAN NOT NULL DEFAULT false;
 
 -- Categorias para produtos já existentes (antes da coluna categoria).
 UPDATE produtos SET categoria = 'bebida_alcoolica' WHERE categoria = 'outro' AND nome ILIKE '%cerveja%';

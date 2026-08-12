@@ -7,6 +7,8 @@ export interface Product {
   emoji: string;
   cor: string;
   categoria: string;
+  /** Se true, cada unidade imprime uma ficha na térmica. */
+  imprime_ficha?: boolean;
 }
 
 export interface CartItem extends Product {

@@ -28,6 +28,7 @@ const emptyForm: ProductInput = {
   emoji: '🎟️',
   cor: '#FF6B00',
   ativo: true,
+  imprime_ficha: false,
 };
 
 export default function Products() {
@@ -119,6 +120,7 @@ export default function Products() {
       emoji: p.emoji,
       cor: p.cor,
       ativo: p.ativo,
+      imprime_ficha: Boolean(p.imprime_ficha),
     });
     setFormErro('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -210,6 +212,17 @@ export default function Products() {
         <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
             type="checkbox"
+            checked={Boolean(form.imprime_ficha)}
+            onChange={(e) =>
+              setForm({ ...form, imprime_ficha: e.target.checked })
+            }
+          />
+          Imprime ficha (1 unidade = 1 página na térmica 80mm)
+        </label>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="checkbox"
             checked={form.ativo}
             onChange={(e) => setForm({ ...form, ativo: e.target.checked })}
           />
@@ -254,6 +267,7 @@ export default function Products() {
                       <div style={{ fontWeight: 700, fontSize: 16 }}>{p.nome}</div>
                       <div style={{ color: '#78716c', fontSize: 13 }}>
                         {PRODUCT_CATEGORY_LABELS[p.categoria]} · {formatBRL(p.preco)}
+                        {p.imprime_ficha ? ' · Ficha' : ''}
                         {!p.ativo && ' · Inativo'}
                       </div>
                     </div>

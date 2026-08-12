@@ -19,6 +19,7 @@ export interface ValidatedPaymentItem {
   productId: string;
   nome: string;
   categoria: string;
+  imprime_ficha: boolean;
   quantidade: number;
   preco: number;
   subtotal: number;
@@ -46,8 +47,14 @@ export async function validatePaymentItems(
     );
   }
 
-  const result = await query<{ id: string; nome: string; preco: string; categoria: string }>(
-    `SELECT id, nome, preco, categoria FROM produtos
+  const result = await query<{
+    id: string;
+    nome: string;
+    preco: string;
+    categoria: string;
+    imprime_ficha: boolean;
+  }>(
+    `SELECT id, nome, preco, categoria, imprime_ficha FROM produtos
      WHERE tenant_id = $1 AND ativo = true AND id = ANY($2::uuid[])`,
     [tenantId, productIds]
   );
@@ -72,6 +79,7 @@ export async function validatePaymentItems(
       productId: item.productId,
       nome: product.nome,
       categoria: product.categoria,
+      imprime_ficha: Boolean(product.imprime_ficha),
       quantidade: item.quantidade,
       preco,
       subtotal,

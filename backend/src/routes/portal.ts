@@ -303,8 +303,8 @@ router.post('/produtos', verifyPortal, async (req: AuthRequest, res) => {
     }
 
     const result = await query(
-      `INSERT INTO produtos (tenant_id, nome, preco, emoji, cor, ordem, ativo, categoria)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO produtos (tenant_id, nome, preco, emoji, cor, ordem, ativo, categoria, imprime_ficha)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
       [
         tenantId,
@@ -315,6 +315,7 @@ router.post('/produtos', verifyPortal, async (req: AuthRequest, res) => {
         ordem,
         p.ativo ?? true,
         p.categoria,
+        p.imprime_ficha ?? false,
       ]
     );
 
@@ -441,6 +442,7 @@ router.post('/vendas/manual', verifyPortal, async (req: AuthRequest, res) => {
       productId: item.productId,
       nome: item.nome,
       categoria: item.categoria,
+      imprime_ficha: item.imprime_ficha,
       quantidade: item.quantidade,
       preco: item.preco,
       subtotal: item.subtotal,

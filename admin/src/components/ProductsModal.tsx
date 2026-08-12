@@ -23,6 +23,7 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
   const [emoji, setEmoji] = useState('🎟️');
   const [cor, setCor] = useState('#FF6B00');
   const [categoria, setCategoria] = useState('outro');
+  const [imprimeFicha, setImprimeFicha] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -41,6 +42,7 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
     setEmoji('🎟️');
     setCor('#FF6B00');
     setCategoria('outro');
+    setImprimeFicha(false);
     setEditingId(null);
   };
 
@@ -54,6 +56,7 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
       emoji,
       cor,
       ativo: true,
+      imprime_ficha: imprimeFicha,
     };
     try {
       if (editingId) {
@@ -75,6 +78,7 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
     setEmoji(p.emoji);
     setCor(p.cor);
     setCategoria(p.categoria ?? 'outro');
+    setImprimeFicha(Boolean(p.imprime_ficha));
   };
 
   const desativar = async (p: Product) => {
@@ -133,6 +137,24 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
             value={cor}
             onChange={(e) => setCor(e.target.value)}
           />
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 13,
+              fontWeight: 600,
+              color: '#334155',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={imprimeFicha}
+              onChange={(e) => setImprimeFicha(e.target.checked)}
+            />
+            Imprime ficha
+          </label>
           <button type="submit" disabled={saving} style={btn}>
             {saving ? '...' : editingId ? 'Atualizar' : 'Adicionar'}
           </button>
@@ -152,6 +174,7 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
                 <th style={th}></th>
                 <th style={th}>Nome</th>
                 <th style={th}>Preço</th>
+                <th style={th}>Ficha</th>
                 <th style={th}>Status</th>
                 <th style={th}></th>
               </tr>
@@ -164,6 +187,7 @@ export default function ProductsModal({ tenant, onClose }: ProductsModalProps) {
                   </td>
                   <td style={td}>{p.nome}</td>
                   <td style={td}>{formatBRL(p.preco)}</td>
+                  <td style={td}>{p.imprime_ficha ? 'Sim' : '—'}</td>
                   <td style={td}>{p.ativo ? 'Ativo' : 'Inativo'}</td>
                   <td style={{ ...td, textAlign: 'right' }}>
                     <button onClick={() => editar(p)} style={linkBtn}>

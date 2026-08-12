@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import PrintFichas from '../../components/PrintFichas';
 import { createCardPayment, getConfig, persistTotemConfig } from '../../services/api';
 import {
   computeCardSurchargeForCardType,
@@ -8,6 +9,8 @@ import {
   readSumupSurchargeConfig,
   type CardType,
 } from '../../utils/cardSurcharge';
+import { expandFichaTickets, type FichaTicket } from '../../utils/fichas';
+import { printWithMode } from '../../utils/printMode';
 import {
   isOperadorLoggedIn,
   operadorLogout,
@@ -101,6 +104,24 @@ export default function Operator() {
   const [salesLoading, setSalesLoading] = useState(false);
   const [salesErro, setSalesErro] = useState('');
   const [cardPickerOpen, setCardPickerOpen] = useState(false);
+  const [printTickets, setPrintTickets] = useState<FichaTicket[]>([]);
+
+  const imprimirFichasDaVenda = useCallback(
+    (
+      saleItems: Array<{
+        id?: string;
+        nome: string;
+        quantidade: number;
+        imprime_ficha?: boolean;
+      }>
+    ) => {
+      const tickets = expandFichaTickets(saleItems);
+      if (tickets.length === 0) return;
+      setPrintTickets(tickets);
+      window.setTimeout(() => printWithMode('fichas'), 80);
+    },
+    []
+  );
 
   const items = useCartStore((s) => s.items);
   const addItem = useCartStore((s) => s.addItem);
@@ -198,10 +219,12 @@ export default function Operator() {
       setPagando(metodo);
       setErro('');
       try {
-        const { queued } = await submitManualSale(state.items, tot, metodo);
+        const saleItems = [...state.items];
+        const { queued } = await submitManualSale(saleItems, tot, metodo);
         state.clearCart();
         fecharDinheiro();
         if (salesOpen) void carregarVendas();
+        imprimirFichasDaVenda(saleItems);
         if (metodo === 'dinheiro' && recebido != null) {
           const troco = Math.round((recebido - tot) * 100) / 100;
           flash(
@@ -224,7 +247,7 @@ export default function Operator() {
         setPagando(null);
       }
     },
-    [flash, pagando, fecharDinheiro, salesOpen, carregarVendas]
+    [flash, pagando, fecharDinheiro, salesOpen, carregarVendas, imprimirFichasDaVenda]
   );
 
   const confirmarDinheiro = useCallback(() => {
@@ -819,6 +842,36 @@ export default function Operator() {
       </div>
 
       {toast && <div style={toastStyle}>{toast}</div>}
+
+      {printTickets.length > 0 && (
+        <button
+          type="button"
+          onClick={() => printWithMode('fichas')}
+          style={{
+            position: 'fixed',
+            right: 16,
+            bottom: 16,
+            zIndex: 40,
+            padding: '12px 16px',
+            borderRadius: 10,
+            border: 'none',
+            background: '#f59e0b',
+            color: '#111',
+            fontWeight: 800,
+            cursor: 'pointer',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+          }}
+        >
+          🖨️ Reimprimir {printTickets.length} ficha
+          {printTickets.length === 1 ? '' : 's'}
+        </button>
+      )}
+
+      <PrintFichas
+        items={[]}
+        tickets={printTickets}
+        tenantName={nomeFestival || localStorage.getItem('tenantName') || 'Festival'}
+      />
 
       {cashOpen && (
         <div style={modalOverlay} onClick={fecharDinheiro}>

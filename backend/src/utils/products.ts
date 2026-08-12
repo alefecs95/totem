@@ -14,6 +14,8 @@ export const productSchema = z.object({
     .optional(),
   ordem: z.number().int().nonnegative().optional(),
   ativo: z.boolean().optional(),
+  /** Se true, cada unidade da venda imprime uma ficha (página) na térmica. */
+  imprime_ficha: z.boolean().optional(),
 });
 
 export function mapProductRow(row: Record<string, unknown>) {
@@ -27,6 +29,7 @@ export function mapProductRow(row: Record<string, unknown>) {
     cor: row.cor as string,
     ordem: row.ordem as number,
     ativo: row.ativo as boolean,
+    imprime_ficha: Boolean(row.imprime_ficha),
     criado_em: row.criado_em as string,
   };
 }

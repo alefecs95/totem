@@ -1037,8 +1037,8 @@ router.post('/tenants/:tenantId/produtos', verifyAdmin, async (req, res) => {
     }
 
     const result = await query(
-      `INSERT INTO produtos (tenant_id, nome, preco, emoji, cor, ordem, ativo, categoria)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO produtos (tenant_id, nome, preco, emoji, cor, ordem, ativo, categoria, imprime_ficha)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
       [
         tenantId,
@@ -1049,6 +1049,7 @@ router.post('/tenants/:tenantId/produtos', verifyAdmin, async (req, res) => {
         ordem,
         p.ativo ?? true,
         p.categoria,
+        p.imprime_ficha ?? false,
       ]
     );
 

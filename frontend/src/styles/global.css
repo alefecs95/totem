@@ -172,31 +172,59 @@ button {
   animation: popIn 0.5s ease-out both;
 }
 
-/* Comprovante: escondido na tela, visível apenas na impressão */
-.print-receipt {
+/* Comprovante / fichas: escondidos na tela, visíveis só na impressão */
+.print-receipt,
+.print-fichas {
   display: none;
 }
 
 @media print {
+  @page {
+    margin: 4mm;
+  }
+
+  /* Página nomeada: ficha térmica 80mm × 2,5cm (1 unidade = 1 página) */
+  @page ficha {
+    size: 80mm 25mm;
+    margin: 0;
+  }
+
   body * {
     visibility: hidden;
   }
 
-  .print-receipt,
-  .print-receipt * {
+  body.print-mode-receipt .print-receipt,
+  body.print-mode-receipt .print-receipt * {
     visibility: visible;
   }
 
-  .print-receipt {
+  body.print-mode-fichas .print-fichas,
+  body.print-mode-fichas .print-fichas * {
+    visibility: visible;
+  }
+
+  .print-receipt,
+  .print-fichas {
     display: block;
     position: absolute;
     left: 0;
     top: 0;
     width: 80mm;
-    font-family: 'Courier New', monospace;
-    font-size: 11px;
     color: #000;
     background: #fff;
+  }
+
+  body.print-mode-receipt .print-fichas {
+    display: none !important;
+  }
+
+  body.print-mode-fichas .print-receipt {
+    display: none !important;
+  }
+
+  .print-receipt {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
   }
 
   .print-receipt-page {
@@ -209,5 +237,54 @@ button {
 
   .print-receipt-barman pre {
     font-size: 12px !important;
+  }
+
+  .print-ficha-page {
+    page: ficha;
+    width: 80mm;
+    height: 25mm;
+    box-sizing: border-box;
+    page-break-after: always;
+    page-break-inside: avoid;
+    overflow: hidden;
+  }
+
+  .print-ficha-page:last-child {
+    page-break-after: auto;
+  }
+
+  .print-ficha-inner {
+    width: 80mm;
+    height: 25mm;
+    box-sizing: border-box;
+    padding: 1mm 2mm;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .print-ficha-festival {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 7px;
+    line-height: 1;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 1mm;
+    max-width: 76mm;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .print-ficha-nome {
+    font-family: Arial Black, Arial, Helvetica, sans-serif;
+    font-size: 16px;
+    font-weight: 900;
+    line-height: 1.05;
+    letter-spacing: 0.5px;
+    max-width: 76mm;
+    word-break: break-word;
   }
 }

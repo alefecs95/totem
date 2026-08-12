@@ -348,10 +348,14 @@ export interface Product {
   cor: string;
   ordem: number;
   ativo: boolean;
+  imprime_ficha: boolean;
   criado_em: string;
 }
 
-export type ProductInput = Pick<Product, 'nome' | 'preco' | 'categoria' | 'emoji' | 'cor' | 'ativo'> & {
+export type ProductInput = Pick<
+  Product,
+  'nome' | 'preco' | 'categoria' | 'emoji' | 'cor' | 'ativo' | 'imprime_ficha'
+> & {
   ordem?: number;
 };
 

@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import PrintFichas from '../components/PrintFichas';
 import PrintReceipt from '../components/PrintReceipt';
 import { viasComprovante } from '../constants/productCategories';
 import { useCartStore, type CartItem } from '../store/cartStore';
+import { countFichaTickets } from '../utils/fichas';
+import { printWithMode } from '../utils/printMode';
 
 interface SuccessLocationState {
   items?: CartItem[];
@@ -35,6 +38,10 @@ export default function Success() {
   const [secondsLeft, setSecondsLeft] = useState(VOLTAR_EM);
   const tenantName = localStorage.getItem('tenantName') ?? 'Festival';
 
+  const totalFichas = countFichaTickets(items);
+  const vias = viasComprovante(items);
+  const impressaoDupla = vias.length > 1;
+
   const novoPedido = () => {
     clearCart();
     navigate('/');
@@ -54,11 +61,17 @@ export default function Success() {
     }
   }, [secondsLeft, clearCart, navigate]);
 
+  // Auto-imprime fichas uma vez ao confirmar o pagamento.
+  useEffect(() => {
+    if (totalFichas <= 0) return;
+    const id = window.setTimeout(() => printWithMode('fichas'), 400);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só na montagem
+  }, []);
+
   const resetCountdown = () => setSecondsLeft(VOLTAR_EM);
 
   const idCurto = paymentId ? paymentId.slice(0, 8).toUpperCase() : '--------';
-  const vias = viasComprovante(items);
-  const impressaoDupla = vias.length > 1;
 
   return (
     <div
@@ -104,7 +117,9 @@ export default function Success() {
         PAGAMENTO CONFIRMADO!
       </h1>
       <p style={{ fontSize: 18, color: 'var(--text-muted)', textAlign: 'center' }}>
-        Retire suas fichas no balcão
+        {totalFichas > 0
+          ? `${totalFichas} ficha${totalFichas === 1 ? '' : 's'} pronta${totalFichas === 1 ? '' : 's'} para impressão`
+          : 'Retire suas fichas no balcão'}
       </p>
 
       <div className="card" style={{ width: '100%', maxWidth: 380 }}>
@@ -181,10 +196,19 @@ export default function Success() {
           marginTop: 4,
         }}
       >
+        {totalFichas > 0 && (
+          <button
+            className="btn-primary"
+            style={{ background: '#f59e0b' }}
+            onClick={() => printWithMode('fichas')}
+          >
+            🖨️ IMPRIMIR {totalFichas} FICHA{totalFichas === 1 ? '' : 'S'}
+          </button>
+        )}
         <button
           className="btn-primary"
           style={{ background: AZUL }}
-          onClick={() => window.print()}
+          onClick={() => printWithMode('receipt')}
         >
           🖨️ {impressaoDupla ? 'IMPRIMIR 2 VIAS' : 'IMPRIMIR COMPROVANTE'}
         </button>
@@ -197,6 +221,7 @@ export default function Success() {
         Voltando automaticamente em {secondsLeft}s...
       </p>
 
+      <PrintFichas items={items} tenantName={tenantName} />
       <PrintReceipt
         items={items}
         total={total}
