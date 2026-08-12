@@ -178,7 +178,9 @@ async function buildFichasPdf(pagePngs: string[]): Promise<Blob> {
   }
 
   const bytes = await pdf.save();
-  return new Blob([bytes], { type: 'application/pdf' });
+  const copy = new Uint8Array(bytes.length);
+  copy.set(bytes);
+  return new Blob([copy], { type: 'application/pdf' });
 }
 
 function printPdfBlob(blob: Blob): void {
