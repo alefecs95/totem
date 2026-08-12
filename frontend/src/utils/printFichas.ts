@@ -4,6 +4,11 @@ import type { FichaTicket } from './fichas';
 export const FICHA_LARGURA_MM = 80;
 export const FICHA_ALTURA_MM = 25;
 
+/** Área da logo em mm (entre evento e data) — altura fixa evita sumir no print. */
+const LOGO_AREA_H_MM = 16;
+const LOGO_RASTER_W = 576; // ~80mm @ 180dpi (típica térmica)
+const LOGO_RASTER_H = 120; // ~16mm
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -30,8 +35,69 @@ function formatDataHora(date: Date): string {
 }
 
 /**
+ * Rasteriza a logo em PNG opaco (fundo branco).
+ * Drivers térmicos costumam falhar com PNG transparente / flex height 100%.
+ */
+async function rasterizeLogoForThermal(
+  dataUrl: string
+): Promise<string | null> {
+  try {
+    const img = new Image();
+    img.decoding = 'sync';
+    img.src = dataUrl;
+    if (typeof img.decode === 'function') {
+      await img.decode();
+    } else {
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('logo_load_failed'));
+      });
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = LOGO_RASTER_W;
+    canvas.height = LOGO_RASTER_H;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return dataUrl;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, LOGO_RASTER_W, LOGO_RASTER_H);
+
+    const scale = Math.min(
+      LOGO_RASTER_W / img.naturalWidth,
+      LOGO_RASTER_H / img.naturalHeight
+    );
+    const dw = Math.max(1, Math.floor(img.naturalWidth * scale));
+    const dh = Math.max(1, Math.floor(img.naturalHeight * scale));
+    const dx = Math.floor((LOGO_RASTER_W - dw) / 2);
+    const dy = Math.floor((LOGO_RASTER_H - dh) / 2);
+    ctx.drawImage(img, dx, dy, dw, dh);
+
+    return canvas.toDataURL('image/png');
+  } catch {
+    return dataUrl.startsWith('data:image/') ? dataUrl : null;
+  }
+}
+
+async function prepareTicketsForPrint(
+  tickets: FichaTicket[]
+): Promise<FichaTicket[]> {
+  const out: FichaTicket[] = [];
+  for (const ticket of tickets) {
+    const raw = ticket.logo;
+    if (raw && raw.startsWith('data:image/')) {
+      const raster = await rasterizeLogoForThermal(raw);
+      out.push({ ...ticket, logo: raster });
+    } else {
+      out.push({ ...ticket, logo: null });
+    }
+  }
+  return out;
+}
+
+/**
  * Ficha térmica (logo por produto):
- * - Com logo do produto: EVENTO → LOGO → DATA/HORA
+ * - Com logo: EVENTO → LOGO → DATA/HORA
  * - Sem logo: EVENTO → NOME PRODUTO → DATA/HORA
  */
 export function buildFichasHtml(
@@ -44,6 +110,7 @@ export function buildFichasHtml(
   const when = formatDataHora(printedAt);
   const h = Math.max(15, Math.min(80, alturaMm));
   const w = FICHA_LARGURA_MM;
+  const logoH = Math.min(LOGO_AREA_H_MM, h - 6);
 
   const pages = tickets
     .map((ticket, index) => {
@@ -55,24 +122,24 @@ export function buildFichasHtml(
 
       if (hasLogo) {
         return `<section class="page${isLast ? ' last' : ''}">
-  <div class="ticket with-logo">
-    <div class="event">${escapeHtml(festival)}</div>
-    <div class="logo-area">
-      <img class="logo" src="${logo}" alt="${escapeHtml(nome)}" />
-    </div>
-    <div class="when">${escapeHtml(when)}</div>
-  </div>
+  <table class="ticket with-logo" cellpadding="0" cellspacing="0">
+    <tr><td class="event">${escapeHtml(festival)}</td></tr>
+    <tr><td class="logo-cell">
+      <img class="logo" width="${LOGO_RASTER_W}" height="${LOGO_RASTER_H}" src="${logo}" alt="${escapeHtml(nome)}" />
+    </td></tr>
+    <tr><td class="when">${escapeHtml(when)}</td></tr>
+  </table>
 </section>`;
       }
 
       return `<section class="page${isLast ? ' last' : ''}">
-  <div class="ticket no-logo">
-    <div class="event">${escapeHtml(festival)}</div>
-    <div class="nome-block">
-      <span class="nome" style="font-size:${size}">${escapeHtml(nome)}</span>
-    </div>
-    <div class="when">${escapeHtml(when)}</div>
-  </div>
+  <table class="ticket no-logo" cellpadding="0" cellspacing="0">
+    <tr><td class="event">${escapeHtml(festival)}</td></tr>
+    <tr><td class="nome-cell">
+      <div class="nome" style="font-size:${size}">${escapeHtml(nome)}</div>
+    </td></tr>
+    <tr><td class="when">${escapeHtml(when)}</td></tr>
+  </table>
 </section>`;
     })
     .join('\n');
@@ -91,20 +158,19 @@ export function buildFichasHtml(
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   html, body {
-    width: 100% !important;
-    max-width: ${w}mm !important;
-    height: ${h}mm !important;
+    width: ${w}mm !important;
+    height: auto !important;
     margin: 0 !important;
     padding: 0 !important;
-    background: #fff;
-    color: #000;
+    background: #fff !important;
+    color: #000 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    color-adjust: exact !important;
   }
 
   .page {
-    width: 100% !important;
-    max-width: ${w}mm !important;
+    width: ${w}mm !important;
     height: ${h}mm !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -120,71 +186,56 @@ export function buildFichasHtml(
     page-break-after: auto;
   }
 
-  .ticket {
-    width: 100% !important;
+  table.ticket {
+    width: ${w}mm !important;
     height: ${h}mm !important;
-    margin: 0 !important;
-    padding: 1mm 1.5mm;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    justify-content: stretch;
+    border-collapse: collapse;
+    table-layout: fixed;
   }
 
-  .event {
-    flex: 0 0 auto;
+  table.ticket td {
+    padding: 0.6mm 1.5mm;
+    vertical-align: middle;
+    text-align: center;
+  }
+
+  .event, .when {
     font-family: Arial, Helvetica, sans-serif;
     font-size: 8px;
     font-weight: 900;
-    letter-spacing: 0.6px;
+    letter-spacing: 0.4px;
     text-transform: uppercase;
-    text-align: center;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    line-height: 1.15;
+    line-height: 1.2;
+    height: 3.5mm;
   }
 
-  .when {
-    flex: 0 0 auto;
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.2px;
-    text-align: center;
-    line-height: 1.15;
+  .logo-cell {
+    height: ${logoH}mm !important;
+    background: #fff !important;
   }
 
-  .with-logo .logo-area {
-    flex: 1 1 auto;
-    min-height: 0;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0.5mm 0;
-    overflow: hidden;
+  img.logo {
+    display: block !important;
+    width: ${w - 3}mm !important;
+    height: ${logoH - 1}mm !important;
+    max-width: ${w - 3}mm !important;
+    max-height: ${logoH - 1}mm !important;
+    object-fit: contain !important;
+    object-position: center !important;
+    margin: 0 auto !important;
+    background: #fff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  .with-logo .logo {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    object-position: center;
-    display: block;
+  .nome-cell {
+    height: ${logoH}mm !important;
   }
 
-  .no-logo .nome-block {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0.5mm 0;
-    width: 100%;
-  }
-
-  .no-logo .nome {
+  .nome {
     font-family: Impact, Haettenschweiler, 'Arial Black', Arial, sans-serif;
     font-weight: 900;
     letter-spacing: 0.5px;
@@ -193,17 +244,24 @@ export function buildFichasHtml(
     line-height: 1.05;
     word-break: break-word;
     width: 100%;
-    background: #000;
-    color: #fff;
-    padding: 2mm 2mm;
+    background: #000 !important;
+    color: #fff !important;
+    padding: 2mm;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   @media print {
-    html, body, .page, .ticket {
-      width: 100% !important;
-      max-width: ${w}mm !important;
+    html, body, .page, table.ticket {
+      width: ${w}mm !important;
+    }
+    .page, table.ticket {
       height: ${h}mm !important;
-      margin: 0 !important;
+    }
+    img.logo {
+      display: block !important;
+      visibility: visible !important;
+      opacity: 1 !important;
     }
   }
 </style>
@@ -223,56 +281,95 @@ export function printFichasViaIframe(
   if (tickets.length === 0) return;
 
   const h = Math.max(15, Math.min(80, alturaMm));
-  const html = buildFichasHtml(tickets, tenantName, printedAt, h);
-  const iframe = document.createElement('iframe');
-  iframe.setAttribute('aria-hidden', 'true');
-  iframe.style.cssText = `position:fixed;left:0;top:0;width:${FICHA_LARGURA_MM}mm;height:${h}mm;border:0;opacity:0;pointer-events:none;z-index:-1;`;
-  document.body.appendChild(iframe);
 
-  const win = iframe.contentWindow;
-  const doc = iframe.contentDocument || win?.document;
-  if (!win || !doc) {
-    iframe.remove();
-    return;
-  }
+  void (async () => {
+    const prepared = await prepareTicketsForPrint(tickets);
+    const html = buildFichasHtml(prepared, tenantName, printedAt, h);
 
-  doc.open();
-  doc.write(html);
-  doc.close();
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    // NÃO usar opacity:0 — alguns drivers térmicos omitem imagens invisíveis.
+    iframe.style.cssText = [
+      'position:fixed',
+      'left:-10000px',
+      'top:0',
+      `width:${FICHA_LARGURA_MM}mm`,
+      `height:${h}mm`,
+      'border:0',
+      'visibility:hidden',
+      'pointer-events:none',
+      'z-index:-1',
+    ].join(';');
+    document.body.appendChild(iframe);
 
-  const cleanup = () => {
-    window.setTimeout(() => iframe.remove(), 1000);
-  };
-
-  let printed = false;
-  const trigger = () => {
-    if (printed) return;
-    printed = true;
-    try {
-      win.focus();
-      win.print();
-    } finally {
-      cleanup();
+    const win = iframe.contentWindow;
+    const doc = iframe.contentDocument || win?.document;
+    if (!win || !doc) {
+      iframe.remove();
+      return;
     }
-  };
 
-  const imgs = Array.from(doc.images);
-  if (imgs.length === 0) {
-    window.setTimeout(trigger, 150);
-    return;
-  }
+    doc.open();
+    doc.write(html);
+    doc.close();
 
-  let pending = imgs.length;
-  const done = () => {
-    pending -= 1;
-    if (pending <= 0) window.setTimeout(trigger, 100);
-  };
-  for (const img of imgs) {
-    if (img.complete && img.naturalWidth > 0) done();
-    else {
-      img.onload = done;
-      img.onerror = done;
+    const cleanup = () => {
+      window.setTimeout(() => {
+        try {
+          iframe.remove();
+        } catch {
+          /* ignore */
+        }
+      }, 1500);
+    };
+
+    let printed = false;
+    const trigger = () => {
+      if (printed) return;
+      printed = true;
+      try {
+        // Torna visível só no momento do print (ajuda alguns drivers).
+        iframe.style.visibility = 'visible';
+        iframe.style.left = '0';
+        iframe.style.top = '0';
+        win.focus();
+        if (typeof win.addEventListener === 'function') {
+          win.addEventListener('afterprint', cleanup, { once: true });
+        }
+        win.print();
+      } catch {
+        cleanup();
+      } finally {
+        // Fallback se afterprint não disparar
+        window.setTimeout(cleanup, 60_000);
+      }
+    };
+
+    const imgs = Array.from(doc.images);
+    if (imgs.length === 0) {
+      window.setTimeout(trigger, 200);
+      return;
     }
-  }
-  window.setTimeout(trigger, 2500);
+
+    await Promise.all(
+      imgs.map(async (img) => {
+        try {
+          if (!img.complete || img.naturalWidth === 0) {
+            if (typeof img.decode === 'function') await img.decode();
+            else {
+              await new Promise<void>((resolve) => {
+                img.onload = () => resolve();
+                img.onerror = () => resolve();
+              });
+            }
+          }
+        } catch {
+          /* segue mesmo assim */
+        }
+      })
+    );
+
+    // Tempo extra para o motor de print registrar o bitmap
+    window.setTimeout(trigger, 300);
+  })();
 }
