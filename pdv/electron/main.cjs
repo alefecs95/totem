@@ -7,6 +7,19 @@ let mainWindow = null;
 // Remove menu File/Edit/View — visual de caixa/kiosk
 Menu.setApplicationMenu(null);
 
+function focusMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  try {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.focus();
+  } catch {
+    /* ignore */
+  }
+  return true;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -24,9 +37,25 @@ function createWindow() {
     },
   });
 
+  mainWindow.on('blur', () => {
+    // Apos impressao silenciosa o Windows as vezes rouba o foco.
+    setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      const others = BrowserWindow.getAllWindows().filter(
+        (w) => w !== mainWindow && !w.isDestroyed() && w.isVisible()
+      );
+      if (others.length === 0 && !mainWindow.isFocused()) {
+        focusMainWindow();
+      }
+    }, 400);
+  });
+
   if (isDev) {
     mainWindow.loadURL('http://127.0.0.1:5180');
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
+    // DevTools detachado rouba foco — so abre se PDV_DEVTOOLS=1
+    if (process.env.PDV_DEVTOOLS === '1') {
+      mainWindow.webContents.openDevTools({ mode: 'detach' });
+    }
   } else {
     mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
@@ -52,6 +81,8 @@ ipcMain.handle('list-printers', async () => {
   }
 });
 
+ipcMain.handle('focus-main', () => focusMainWindow());
+
 ipcMain.handle('set-fullscreen', (_event, on) => {
   if (!mainWindow || mainWindow.isDestroyed()) return false;
   mainWindow.setFullScreen(Boolean(on));
@@ -62,6 +93,7 @@ ipcMain.handle('toggle-fullscreen', () => {
   if (!mainWindow || mainWindow.isDestroyed()) return false;
   const next = !mainWindow.isFullScreen();
   mainWindow.setFullScreen(next);
+  focusMainWindow();
   return next;
 });
 
@@ -79,17 +111,21 @@ ipcMain.handle('print-fichas-silent', async (_event, payload) => {
   const deviceName = payload?.deviceName || '';
   if (raw.length === 0) return { ok: false, error: 'no_pages' };
 
-  for (const item of raw) {
-    const dataUrl = typeof item === 'string' ? item : item?.dataUrl;
-    const heightMm =
-      typeof item === 'object' && item && Number(item.heightMm) > 0
-        ? Number(item.heightMm)
-        : 25;
-    if (!dataUrl) continue;
-    await printOneBitmap(dataUrl, deviceName, heightMm);
-    await delay(350);
+  try {
+    for (const item of raw) {
+      const dataUrl = typeof item === 'string' ? item : item?.dataUrl;
+      const heightMm =
+        typeof item === 'object' && item && Number(item.heightMm) > 0
+          ? Number(item.heightMm)
+          : 25;
+      if (!dataUrl) continue;
+      await printOneBitmap(dataUrl, deviceName, heightMm);
+      await delay(350);
+    }
+    return { ok: true, count: raw.length };
+  } finally {
+    focusMainWindow();
   }
-  return { ok: true, count: raw.length };
 });
 
 function delay(ms) {
@@ -103,6 +139,10 @@ function printOneBitmap(dataUrl, deviceName, heightMm = 25) {
       show: false,
       width: 320,
       height: Math.round(h * 4),
+      parent: mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined,
+      modal: false,
+      focusable: false,
+      skipTaskbar: true,
       webPreferences: { sandbox: true },
     });
 

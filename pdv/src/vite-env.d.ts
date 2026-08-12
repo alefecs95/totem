@@ -12,6 +12,7 @@ declare global {
         pages: Array<string | { dataUrl: string; heightMm: number }>,
         deviceName?: string
       ) => Promise<{ ok: boolean; count?: number; error?: string }>;
+      focusMainWindow?: () => Promise<boolean>;
       setFullscreen?: (on: boolean) => Promise<boolean>;
       toggleFullscreen?: () => Promise<boolean>;
       isFullscreen?: () => Promise<boolean>;

@@ -584,13 +584,13 @@ router.get('/card-status/:intentId', async (req, res) => {
     }
 
     if (
-      status === 'approved' &&
+      (status === 'approved' || status === 'rejected') &&
       transaction &&
-      transaction.status !== 'approved'
+      transaction.status === 'pending'
     ) {
       await query(
         'UPDATE transactions SET status = $1, atualizado_em = NOW() WHERE id = $2',
-        ['approved', transaction.id]
+        [status === 'approved' ? 'approved' : 'rejected', transaction.id]
       );
     }
 
@@ -606,11 +606,13 @@ router.get('/card-status/:intentId', async (req, res) => {
   }
 });
 
-// POST /api/payment/card-terminate — cancela cobrança pendente no Solo (SumUp)
-router.post('/card-terminate', async (req, res) => {
-  const { tenantId, intentId } = req.body as {
+// POST /api/payment/card-cancel — cancela cobranca na maquininha (SumUp ou MP)
+router.post('/card-cancel', async (req, res) => {
+  const { tenantId, intentId, readerId, deviceId } = req.body as {
     tenantId?: string;
     intentId?: string;
+    readerId?: string;
+    deviceId?: string;
   };
 
   if (!tenantId || !intentId) {
@@ -620,27 +622,54 @@ router.post('/card-terminate', async (req, res) => {
 
   try {
     const tenantResult = await query(
-      `SELECT gateway, sumup_api_key, sumup_merchant_code, sumup_reader_id
+      `SELECT gateway, mp_access_token, mp_device_id,
+              sumup_api_key, sumup_merchant_code, sumup_reader_id,
+              sumup_affiliate_app_id, sumup_affiliate_key, sumup_pay_to_email
        FROM tenants WHERE id = $1`,
       [tenantId]
     );
     const tenant = tenantResult.rows[0];
-    if (!tenant || tenant.gateway !== 'sumup') {
-      res.status(400).json({ error: 'not_sumup_tenant' });
+    if (!tenant) {
+      res.status(404).json({ error: 'tenant_not_found' });
       return;
     }
 
-    const sumup = resolveTenantSumUpConfig(tenant);
-    if (!sumup.apiKey || !sumup.merchantCode || !sumup.readerId) {
-      res.status(400).json({ error: 'missing_sumup_config' });
-      return;
-    }
-
-    await terminateSumUpReaderCheckout(
-      sumup.apiKey,
-      sumup.merchantCode,
-      sumup.readerId
+    const txResult = await query<{ id: string; status: string; gateway: string }>(
+      'SELECT id, status, gateway FROM transactions WHERE payment_id = $1',
+      [intentId]
     );
+    const transaction = txResult.rows[0];
+    const effectiveGateway =
+      transaction?.gateway === 'sumup' || transaction?.gateway === 'mercadopago'
+        ? transaction.gateway
+        : tenant.gateway === 'sumup'
+          ? 'sumup'
+          : 'mercadopago';
+
+    if (effectiveGateway === 'sumup') {
+      const sumup = resolveTenantSumUpConfig({
+        ...tenant,
+        ...(readerId ? { sumup_reader_id: readerId } : {}),
+      });
+      if (!sumup.apiKey || !sumup.merchantCode || !sumup.readerId) {
+        res.status(400).json({ error: 'missing_sumup_config' });
+        return;
+      }
+      await terminateSumUpReaderCheckout(
+        sumup.apiKey,
+        sumup.merchantCode,
+        sumup.readerId
+      );
+    } else {
+      const accessToken = tenant.mp_access_token || env.mercadopago.accessToken;
+      const resolvedDevice =
+        deviceId || tenant.mp_device_id || undefined;
+      if (!accessToken || !resolvedDevice) {
+        res.status(400).json({ error: 'missing_mp_config' });
+        return;
+      }
+      await cancelCardPaymentIntent(accessToken, resolvedDevice, intentId);
+    }
 
     await query(
       `UPDATE transactions SET status = 'cancelled', atualizado_em = NOW()
@@ -648,6 +677,57 @@ router.post('/card-terminate', async (req, res) => {
       [intentId]
     );
 
+    res.json({ ok: true, gateway: effectiveGateway });
+  } catch (err) {
+    console.error('Erro ao cancelar cobranca na maquininha:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    const statusCode = err instanceof SumUpError ? err.statusCode : 500;
+    res.status(statusCode >= 400 && statusCode < 600 ? statusCode : 500).json({
+      error: 'cancel_failed',
+      detalhe: msg,
+    });
+  }
+});
+
+// POST /api/payment/card-terminate — alias legado (SumUp)
+router.post('/card-terminate', async (req, res) => {
+  req.url = '/card-cancel';
+  // Reusa o handler acima via chamada interna simples
+  const { tenantId, intentId, readerId } = req.body as {
+    tenantId?: string;
+    intentId?: string;
+    readerId?: string;
+  };
+  if (!tenantId || !intentId) {
+    res.status(400).json({ error: 'missing_params' });
+    return;
+  }
+  try {
+    const tenantResult = await query(
+      `SELECT gateway, sumup_api_key, sumup_merchant_code, sumup_reader_id,
+              sumup_affiliate_app_id, sumup_affiliate_key, sumup_pay_to_email
+       FROM tenants WHERE id = $1`,
+      [tenantId]
+    );
+    const tenant = tenantResult.rows[0];
+    const sumup = resolveTenantSumUpConfig({
+      ...(tenant || {}),
+      ...(readerId ? { sumup_reader_id: readerId } : {}),
+    });
+    if (!sumup.apiKey || !sumup.merchantCode || !sumup.readerId) {
+      res.status(400).json({ error: 'missing_sumup_config' });
+      return;
+    }
+    await terminateSumUpReaderCheckout(
+      sumup.apiKey,
+      sumup.merchantCode,
+      sumup.readerId
+    );
+    await query(
+      `UPDATE transactions SET status = 'cancelled', atualizado_em = NOW()
+       WHERE payment_id = $1 AND status = 'pending'`,
+      [intentId]
+    );
     res.json({ ok: true });
   } catch (err) {
     console.error('Erro ao cancelar checkout SumUp:', err);

@@ -47,7 +47,7 @@ npm run electron:build
 
 1. Abrir **Totem PDV**
 2. Informar código do evento + URL da API (uma vez)
-3. Escolher impressora POS80 (papel **80 × 30 mm**, cutting after one page)
+3. Escolher impressora POS80 (papel **80 mm**, cutting after one page)
 4. Vender → **Finalizar e imprimir fichas**
 
 ## Offline
@@ -59,15 +59,19 @@ npm run electron:build
 
 ## 2 vias (barman + cliente)
 
-No admin/portal, marque o produto com **Imprime ficha** + **2 vias**.
-Cada unidade imprime (barman primeiro):
-1. **BARMAN** — sabor + codigo `B-XXXX` + contador do dia `#047`
-2. **CLIENTE** — sabor + o **mesmo** codigo
+No admin/portal, marque **2 vias** (independente da ficha unica).
+Cada unidade imprime em **80×50 mm** (barman primeiro):
+1. **BARMAN** — sabor em destaque + codigo `B-XXXX` + `#047`
+2. **CLIENTE** — so o codigo
+
+Ficha unica continua **80×25 mm**.
 
 Extras no PDV:
 - **Historico** (tecla `H`) — ultimas vendas do evento
 - **LEITOR** (tecla `L`) — escolhe **SumUp** ou **Mercado Pago** na hora
 - **Maquininha** — lista/seleciona o leitor SumUp
+- **Cartao em segundo plano** — apos enviar ao leitor, o PDV libera; barra inferior mostra o pendente; ao aprovar notifica + imprime fichas
+- **Cancelar** na barra cancela tambem na maquininha
 - **Drinks / Todos** (tecla `B`) — filtra so produtos 2 vias
 - **Reimprimir** (tecla `R`) — mesma ultima venda (mesmos codigos)
 - Beep + flash laranja ao vender drink 2 vias
@@ -78,3 +82,4 @@ Extras no PDV:
 
 - `GET /api/pdv/:codigo`
 - `POST /api/pdv/:codigo/vendas` (`dinheiro` | `cartao_fisico`)
+- `POST /api/payment/card` / `GET .../card-status` / `POST .../card-cancel`

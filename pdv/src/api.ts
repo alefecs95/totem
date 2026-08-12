@@ -176,3 +176,18 @@ export async function getCardPaymentStatus(
   );
   return data;
 }
+
+/** Cancela cobranca pendente na maquininha (SumUp terminate / MP cancel). */
+export async function cancelCardPayment(input: {
+  tenantId: string;
+  intentId: string;
+  readerId?: string;
+  deviceId?: string;
+}): Promise<void> {
+  await axios.post(`${getApiBase()}/payment/card-cancel`, {
+    tenantId: input.tenantId,
+    intentId: input.intentId,
+    ...(input.readerId ? { readerId: input.readerId } : {}),
+    ...(input.deviceId ? { deviceId: input.deviceId } : {}),
+  });
+}

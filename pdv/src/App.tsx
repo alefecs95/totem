@@ -4,6 +4,7 @@ import {
   createCardPayment,
   getApiBase,
   getCardPaymentStatus,
+  cancelCardPayment,
   getPdvSales,
   listSumupReaders,
   loadEvento,
@@ -29,6 +30,17 @@ import {
 import { expandFichas, renderFichaPage, countDualUnits, type PrintItem } from './printFichas';
 
 type CartLine = PdvProduct & { quantidade: number };
+
+type PendingCard = {
+  localId: string;
+  intentId: string;
+  chargedAmount: number;
+  printItems: PrintItem[];
+  gateway: PayGateway;
+  nomeFestival: string;
+  startedAt: number;
+  summary: string;
+};
 
 function formatPreco(preco: number): string {
   return `R$ ${preco.toFixed(2).replace('.', ',')}`;
@@ -145,11 +157,16 @@ export default function App() {
   const [salesOpen, setSalesOpen] = useState(false);
   const [sales, setSales] = useState<PdvSale[]>([]);
   const [salesLoading, setSalesLoading] = useState(false);
-  const [cardWaiting, setCardWaiting] = useState<{
-    intentId: string;
-    chargedAmount: number;
-    printItems: PrintItem[];
-  } | null>(null);
+  const [pendingCards, setPendingCards] = useState<PendingCard[]>(() => {
+    try {
+      const raw = sessionStorage.getItem('pdvPendingCards');
+      return raw ? (JSON.parse(raw) as PendingCard[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [cardDetailId, setCardDetailId] = useState<string | null>(null);
+  const shellRef = useRef<HTMLDivElement | null>(null);
   const [online, setOnline] = useState(
     typeof navigator !== 'undefined' ? navigator.onLine : true
   );
@@ -203,7 +220,11 @@ export default function App() {
   );
   const pendingQty =
     qtyDigits === '' ? 1 : Math.max(1, parseInt(qtyDigits, 10) || 1);
-  const canPay = cart.length > 0 && !pagando && !cardWaiting;
+  const canPay = cart.length > 0 && !pagando;
+  const hasPendingCard = pendingCards.length > 0;
+  const cardDetail = cardDetailId
+    ? pendingCards.find((p) => p.localId === cardDetailId) ?? null
+    : null;
   const sumupOk = Boolean(config?.pagamentos?.sumup);
   const mpOk = Boolean(config?.pagamentos?.mercadopago);
   const cartaoMaquininha = sumupOk || mpOk || Boolean(config?.pagamentos?.cartao);
@@ -271,10 +292,61 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    try {
+      sessionStorage.setItem('pdvPendingCards', JSON.stringify(pendingCards));
+    } catch {
+      /* ignore */
+    }
+  }, [pendingCards]);
+
+  const reclaimFocus = useCallback(() => {
+    void window.pdvDesktop?.focusMainWindow?.();
+    const el = shellRef.current;
+    if (el) {
+      try {
+        el.focus({ preventScroll: true });
+      } catch {
+        el.focus();
+      }
+    }
+    const active = document.activeElement as HTMLElement | null;
+    if (
+      active &&
+      (active.tagName === 'SELECT' ||
+        active.tagName === 'BUTTON' ||
+        active.tagName === 'A')
+    ) {
+      active.blur();
+    }
+  }, []);
+
+  useEffect(() => {
     if (!toast) return;
-    const id = window.setTimeout(() => setToast(''), 2200);
+    const id = window.setTimeout(() => setToast(''), 3200);
     return () => window.clearTimeout(id);
   }, [toast]);
+
+  // Recupera foco do teclado apos blur / impressao / clique fora
+  useEffect(() => {
+    const onFocus = () => reclaimFocus();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') reclaimFocus();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    const id = window.setInterval(() => {
+      if (!document.hasFocus()) return;
+      const tag = (document.activeElement as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (document.activeElement === shellRef.current) return;
+      if (document.activeElement === document.body) reclaimFocus();
+    }, 2000);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.clearInterval(id);
+    };
+  }, [reclaimFocus]);
 
   // Kiosk: esconde cursor apos 5s sem movimento; volta ao mexer
   useEffect(() => {
@@ -304,11 +376,12 @@ export default function App() {
       if (e.key === 'F11') {
         e.preventDefault();
         void window.pdvDesktop?.toggleFullscreen?.();
+        window.setTimeout(() => reclaimFocus(), 200);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [reclaimFocus]);
 
   const syncPending = useCallback(async () => {
     if (!config || !navigator.onLine) {
@@ -442,6 +515,7 @@ export default function App() {
         if (window.pdvDesktop?.printFichasSilent) {
           await window.pdvDesktop.printFichasSilent(pages, printerName);
         }
+        reclaimFocus();
         if (opts?.isReprint) setToast('Reimpressao enviada');
       } catch {
         setToast(
@@ -449,6 +523,7 @@ export default function App() {
             ? 'Falha na reimpressao'
             : 'Venda ok, mas falhou a impressao - tente de novo'
         );
+        reclaimFocus();
       }
     })();
   };
@@ -590,6 +665,12 @@ export default function App() {
     cardType?: CardType
   ) => {
     if (!config || cart.length === 0) return;
+    if (pendingCards.length > 0) {
+      setErro(
+        'Ja ha cartao aguardando na maquininha. Minimize e continue vendendo em dinheiro, ou cancele o pendente na barra inferior.'
+      );
+      return;
+    }
     setPagando('gateway');
     setErro('');
     setCardPickerOpen(false);
@@ -603,6 +684,10 @@ export default function App() {
       ficha_2_vias: i.ficha_2_vias,
       ficha_logo_data: i.ficha_logo_data,
     }));
+    const summary = snapshot
+      .map((i) => `${i.quantidade}x ${i.nome}`)
+      .join(', ')
+      .slice(0, 80);
     try {
       const payment = await createCardPayment({
         tenantId: config.tenantId,
@@ -623,11 +708,23 @@ export default function App() {
             : undefined,
       });
       limpar();
-      setCardWaiting({
+      const pending: PendingCard = {
+        localId: uuid(),
         intentId: payment.intentId,
         chargedAmount: payment.chargedAmount ?? netTotal,
         printItems: printPayload,
-      });
+        gateway,
+        nomeFestival: config.nomeFestival,
+        startedAt: Date.now(),
+        summary,
+      };
+      setPendingCards((list) => [...list, pending]);
+      // Nao bloqueia o PDV — fica na barra (segundo plano)
+      setCardDetailId(null);
+      setToast(
+        `Cartao ${formatPreco(pending.chargedAmount)} na maquininha — continue vendendo`
+      );
+      reclaimFocus();
     } catch (err: unknown) {
       const data = (
         err as {
@@ -658,6 +755,12 @@ export default function App() {
 
   const iniciarLeitor = () => {
     if (!canPay) return;
+    if (pendingCards.length > 0) {
+      setErro(
+        'Cartao em andamento. Venda em dinheiro/cartao fisico, ou cancele o pendente.'
+      );
+      return;
+    }
     if (sumupOk && mpOk) {
       setGatewayPickerOpen(true);
       return;
@@ -693,36 +796,103 @@ export default function App() {
     }
   };
 
-  const cancelarCartaoEspera = () => {
-    setCardWaiting(null);
-    setToast('Pagamento cancelado — volte ao PDV');
+  const notifyCardApproved = (amount: number) => {
+    playSaleBeep(true);
+    setSaleFlash(true);
+    window.setTimeout(() => setSaleFlash(false), 600);
+    setToast(`Cartao APROVADO ${formatPreco(amount)} — fichas imprimindo`);
+    try {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification('Totem PDV', {
+          body: `Cartao aprovado ${formatPreco(amount)}`,
+        });
+      } else if (
+        typeof Notification !== 'undefined' &&
+        Notification.permission !== 'denied'
+      ) {
+        void Notification.requestPermission();
+      }
+    } catch {
+      /* ignore */
+    }
   };
 
-  // Poll status da maquininha
+  const cancelarCartaoPendente = async (localId: string) => {
+    const item = pendingCards.find((p) => p.localId === localId);
+    if (!item || !config) {
+      setPendingCards((list) => list.filter((p) => p.localId !== localId));
+      setCardDetailId(null);
+      return;
+    }
+    setPendingCards((list) => list.filter((p) => p.localId !== localId));
+    if (cardDetailId === localId) setCardDetailId(null);
+    setToast('Cancelando na maquininha...');
+    try {
+      await cancelCardPayment({
+        tenantId: config.tenantId,
+        intentId: item.intentId,
+        readerId:
+          item.gateway === 'sumup'
+            ? selectedReaderId || config.sumupReaderId || undefined
+            : undefined,
+        deviceId:
+          item.gateway === 'mercadopago'
+            ? config.mpDeviceId || undefined
+            : undefined,
+      });
+      setToast('Pagamento cancelado na maquininha');
+    } catch {
+      setToast(
+        'Cancelado no PDV — se a maquininha continuar cobrando, cancele nela tambem'
+      );
+    }
+    reclaimFocus();
+  };
+
+  const pendingCardsRef = useRef(pendingCards);
+  pendingCardsRef.current = pendingCards;
+
+  // Poll todos os cartoes em segundo plano
   useEffect(() => {
-    if (!cardWaiting || !config) return;
-    const intentId = cardWaiting.intentId;
+    if (!config) return;
+    const tenantId = config.tenantId;
     const id = window.setInterval(async () => {
-      try {
-        const result = await getCardPaymentStatus(intentId, config.tenantId);
-        if (result.status === 'approved') {
-          window.clearInterval(id);
-          const items = cardWaiting.printItems;
-          const festival = config.nomeFestival;
-          setCardWaiting(null);
-          imprimirFichasBg(items, festival);
-          setToast('Cartao aprovado!');
-        } else if (result.status === 'rejected') {
-          window.clearInterval(id);
-          setCardWaiting(null);
-          setToast('Cartao recusado / cancelado na maquininha');
+      const snapshot = [...pendingCardsRef.current];
+      if (snapshot.length === 0) return;
+      for (const pending of snapshot) {
+        try {
+          const result = await getCardPaymentStatus(pending.intentId, tenantId);
+          if (result.status === 'approved') {
+            setPendingCards((list) =>
+              list.filter((p) => p.localId !== pending.localId)
+            );
+            setCardDetailId((cur) =>
+              cur === pending.localId ? null : cur
+            );
+            notifyCardApproved(pending.chargedAmount);
+            imprimirFichasBg(pending.printItems, pending.nomeFestival);
+            reclaimFocus();
+          } else if (
+            result.status === 'rejected' ||
+            result.status === 'cancelled'
+          ) {
+            setPendingCards((list) =>
+              list.filter((p) => p.localId !== pending.localId)
+            );
+            setCardDetailId((cur) =>
+              cur === pending.localId ? null : cur
+            );
+            setToast('Cartao recusado / cancelado na maquininha');
+            reclaimFocus();
+          }
+        } catch {
+          /* keep polling */
         }
-      } catch {
-        /* keep polling */
       }
     }, 3000);
     return () => window.clearInterval(id);
-  }, [cardWaiting, config]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config?.tenantId]);
 
   const abrirDinheiro = () => {
     if (!canPay) return;
@@ -735,7 +905,20 @@ export default function App() {
     if (!config) return;
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (tag === 'SELECT') {
+        (e.target as HTMLElement).blur();
+        reclaimFocus();
+      }
+
+      if (cardDetail) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setCardDetailId(null);
+          reclaimFocus();
+        }
+        return;
+      }
 
       if (cashOpen) {
         if (e.key >= '0' && e.key <= '9') {
@@ -762,6 +945,7 @@ export default function App() {
         } else if (e.key === 'Escape') {
           e.preventDefault();
           setCashOpen(false);
+          reclaimFocus();
         }
         return;
       }
@@ -808,8 +992,8 @@ export default function App() {
         if (produtos[idx]) add(produtos[idx]);
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   });
 
   if (!config) {
@@ -880,7 +1064,17 @@ export default function App() {
   }
 
   return (
-    <div style={{ ...shell, cursor: cursorHidden ? 'none' : 'default' }}>
+    <div
+      ref={shellRef}
+      tabIndex={-1}
+      style={{ ...shell, cursor: cursorHidden ? 'none' : 'default', outline: 'none' }}
+      onMouseDown={(e) => {
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+          window.setTimeout(() => reclaimFocus(), 0);
+        }
+      }}
+    >
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
         @media (max-width: 800px) {
@@ -913,7 +1107,12 @@ export default function App() {
         </span>
         <select
           value={printerName}
-          onChange={(e) => setPrinterName(e.target.value)}
+          onChange={(e) => {
+            setPrinterName(e.target.value);
+            localStorage.setItem('pdvPrinter', e.target.value);
+            e.currentTarget.blur();
+            reclaimFocus();
+          }}
           style={{ ...hdrBtn, maxWidth: 180 }}
           title="Impressora"
         >
@@ -1548,7 +1747,75 @@ export default function App() {
         </div>
       )}
 
-      {cardWaiting && (
+      {hasPendingCard && (
+        <div
+          style={{
+            position: 'fixed',
+            left: 12,
+            right: 12,
+            bottom: 12,
+            zIndex: 90,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+          }}
+        >
+          {pendingCards.map((p) => (
+            <div
+              key={p.localId}
+              style={{
+                background: '#1c1917',
+                border: '2px solid #ea580c',
+                borderRadius: 12,
+                padding: '10px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+              }}
+            >
+              <div style={{ fontSize: 22 }}>💳</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, color: '#fff', fontSize: 14 }}>
+                  Cartao aguardando · {formatPreco(p.chargedAmount)}
+                </div>
+                <div
+                  style={{
+                    color: '#a8a29e',
+                    fontSize: 12,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {p.summary || p.gateway} — passe na maquininha
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCardDetailId(p.localId)}
+                style={{ ...hdrBtn, padding: '8px 10px' }}
+              >
+                Ver
+              </button>
+              <button
+                type="button"
+                onClick={() => void cancelarCartaoPendente(p.localId)}
+                style={{
+                  ...hdrBtn,
+                  padding: '8px 10px',
+                  borderColor: '#7f1d1d',
+                  color: '#fecaca',
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {cardDetail && (
         <div style={modalOverlay}>
           <div style={{ ...modalCard, textAlign: 'center' }}>
             <div style={{ fontSize: 48 }}>💳</div>
@@ -1563,16 +1830,39 @@ export default function App() {
                 marginTop: 8,
               }}
             >
-              {formatPreco(cardWaiting.chargedAmount)}
+              {formatPreco(cardDetail.chargedAmount)}
             </div>
             <p style={{ color: '#a8a29e', marginTop: 8 }}>
-              Aguardando confirmacao...
+              {cardDetail.summary}
+            </p>
+            <p style={{ color: '#a8a29e', marginTop: 4, fontSize: 13 }}>
+              O PDV continua livre — minimize e venda em dinheiro enquanto aguarda.
             </p>
             <button
               type="button"
-              onClick={cancelarCartaoEspera}
+              onClick={() => {
+                setCardDetailId(null);
+                reclaimFocus();
+              }}
               style={{
-                marginTop: 20,
+                marginTop: 16,
+                width: '100%',
+                padding: 14,
+                borderRadius: 10,
+                border: 'none',
+                background: '#ea580c',
+                color: '#fff',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              Minimizar e continuar vendendo
+            </button>
+            <button
+              type="button"
+              onClick={() => void cancelarCartaoPendente(cardDetail.localId)}
+              style={{
+                marginTop: 10,
                 width: '100%',
                 padding: 14,
                 borderRadius: 10,
@@ -1583,7 +1873,7 @@ export default function App() {
                 cursor: 'pointer',
               }}
             >
-              Cancelar e voltar ao PDV
+              Cancelar na maquininha
             </button>
           </div>
         </div>
