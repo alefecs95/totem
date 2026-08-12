@@ -26,6 +26,7 @@ const emptyForm: TenantInput = {
   responsavel: '',
   telefone: '',
   email: '',
+  operador_email: '',
   gateway: 'mercadopago',
   comissao_pct: 5,
   codigo_evento: '',
@@ -337,6 +338,7 @@ export default function Tenants() {
       responsavel: t.responsavel,
       telefone: t.telefone ?? '',
       email: t.email ?? '',
+      operador_email: t.operador_email ?? '',
       gateway: t.gateway,
       comissao_pct: Number(t.comissao_pct),
       mp_access_token: t.mp_access_token ?? '',
@@ -410,6 +412,9 @@ export default function Tenants() {
       if (!payload.operador_senha?.trim()) {
         delete payload.operador_senha;
       }
+      payload.operador_email = payload.operador_email?.trim()
+        ? payload.operador_email.trim()
+        : null;
       if (!editingId && !payload.portal_senha) {
         setAviso('Defina a senha do portal (mínimo 4 caracteres) para o organizador.');
         return;
@@ -698,7 +703,7 @@ export default function Tenants() {
                   onChange={(e) => setField('telefone', e.target.value)}
                 />
               </Field>
-              <Field label="E-mail">
+              <Field label="E-mail do portal (adm do evento)">
                 <input
                   style={input}
                   type="email"
@@ -707,6 +712,19 @@ export default function Tenants() {
                 />
               </Field>
             </div>
+
+            <Field label="E-mail do operador (opcional)">
+              <input
+                style={input}
+                type="email"
+                value={form.operador_email ?? ''}
+                onChange={(e) => setField('operador_email', e.target.value)}
+                placeholder="Se vazio, usa o e-mail do portal"
+              />
+              <span style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                Login separado em /operador. Pode ser outro e-mail + outra senha.
+              </span>
+            </Field>
 
             <Field label="Senha do portal (adm do evento)">
               <input
@@ -743,8 +761,8 @@ export default function Tenants() {
                 autoComplete="new-password"
               />
               <span style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                Login em /operador no PWA. Pode ser diferente da senha do portal.
-                Use <strong>Senha operador</strong> na lista para resetar.
+                Login em /operador no PWA. Use <strong>Senha operador</strong> na
+                lista para resetar.
               </span>
             </Field>
 

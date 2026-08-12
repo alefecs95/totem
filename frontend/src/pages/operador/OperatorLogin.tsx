@@ -27,7 +27,7 @@ export default function OperatorLogin() {
         );
       } else if (status === 401 || code === 'invalid_credentials') {
         setErro(
-          'E-mail ou senha inválidos. Use a senha do operador definida no admin (não a do super admin).'
+          'E-mail ou senha inválidos. Use o e-mail/senha do operador (não o do portal, se forem diferentes).'
         );
       } else {
         setErro('Não foi possível entrar. Verifique a conexão e tente novamente.');
@@ -69,7 +69,7 @@ export default function OperatorLogin() {
         </p>
 
         <label style={labelStyle}>
-          E-mail
+          E-mail do operador
           <input
             type="email"
             value={email}
@@ -80,7 +80,7 @@ export default function OperatorLogin() {
         </label>
 
         <label style={labelStyle}>
-          Senha
+          Senha do operador
           <input
             type="password"
             value={senha}

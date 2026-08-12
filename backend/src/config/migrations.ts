@@ -59,9 +59,13 @@ ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sumup_charged_amount NUMERIC(1
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sumup_card_type VARCHAR(10);
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS portal_senha_hash TEXT;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS operador_senha_hash TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS operador_email VARCHAR(255);
 UPDATE tenants
   SET operador_senha_hash = portal_senha_hash
   WHERE operador_senha_hash IS NULL AND portal_senha_hash IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS tenants_operador_email_uidx
+  ON tenants (LOWER(operador_email))
+  WHERE operador_email IS NOT NULL AND TRIM(operador_email) <> '';
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS ficha_logo_data TEXT;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS categoria VARCHAR(50) NOT NULL DEFAULT 'outro';
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS imprime_ficha BOOLEAN NOT NULL DEFAULT false;

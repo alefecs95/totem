@@ -183,6 +183,10 @@ const tenantSchema = z.object({
     (v) => (v === '' || v === null || v === undefined ? undefined : v),
     z.string().min(4).optional()
   ),
+  operador_email: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? null : v),
+    z.string().trim().email().nullable().optional()
+  ),
   codigo_evento: z.preprocess(
     (v) => (v === '' || v === null || v === undefined ? undefined : v),
     z
@@ -661,6 +665,11 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
   const codigo =
     (codigo_evento && normalizeEventCode(codigo_evento)) ||
     generateEventCode(tenantFields.nome);
+  const operadorEmail =
+    typeof tenantFields.operador_email === 'string' &&
+    tenantFields.operador_email.trim()
+      ? tenantFields.operador_email.trim().toLowerCase()
+      : null;
 
   try {
     const result = await query<TenantRow>(
@@ -672,9 +681,9 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
          sumup_surcharge_enabled, sumup_debit_surcharge_percent,
          sumup_credit_surcharge_percent,
          endereco, numero, bairro, cidade, estado, latitude, longitude,
-         portal_senha_hash, operador_senha_hash, codigo_evento)
+         portal_senha_hash, operador_senha_hash, operador_email, codigo_evento)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-         $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+         $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
        RETURNING *`,
       [
         tenantFields.nome,
@@ -704,6 +713,7 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
         tenantFields.longitude ?? null,
         portalSenhaHash,
         operadorSenhaHash,
+        operadorEmail,
         codigo,
       ]
     );
@@ -743,6 +753,11 @@ router.put('/tenants/:id', verifyAdmin, async (req, res) => {
   if (codigo_evento !== undefined) {
     const normalized = normalizeEventCode(codigo_evento);
     if (normalized) tenantFields.codigo_evento = normalized;
+  }
+  if ('operador_email' in tenantFields) {
+    const v = tenantFields.operador_email;
+    tenantFields.operador_email =
+      typeof v === 'string' && v.trim() ? v.trim().toLowerCase() : null;
   }
   const keys = Object.keys(tenantFields);
   const values: unknown[] = keys.map((key) => tenantFields[key]);

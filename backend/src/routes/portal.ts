@@ -55,13 +55,25 @@ router.post('/login', async (req, res) => {
       id: string;
       nome: string;
       email: string;
+      operador_email: string | null;
       portal_senha_hash: string | null;
       operador_senha_hash: string | null;
       ativo: boolean;
     }>(
-      `SELECT id, nome, email, portal_senha_hash, operador_senha_hash, ativo
-       FROM tenants
-       WHERE LOWER(email) = LOWER($1)`,
+      mode === 'operador'
+        ? `SELECT id, nome, email, operador_email, portal_senha_hash, operador_senha_hash, ativo
+           FROM tenants
+           WHERE ativo = true
+             AND (
+               (operador_email IS NOT NULL AND TRIM(operador_email) <> '' AND LOWER(operador_email) = LOWER($1))
+               OR
+               ((operador_email IS NULL OR TRIM(operador_email) = '') AND LOWER(email) = LOWER($1))
+             )
+           LIMIT 1`
+        : `SELECT id, nome, email, operador_email, portal_senha_hash, operador_senha_hash, ativo
+           FROM tenants
+           WHERE LOWER(email) = LOWER($1)
+           LIMIT 1`,
       [email]
     );
 
@@ -87,10 +99,15 @@ router.post('/login', async (req, res) => {
       return;
     }
 
+    const loginEmail =
+      mode === 'operador'
+        ? (tenant.operador_email && tenant.operador_email.trim()) || tenant.email
+        : tenant.email;
+
     const token = jwt.sign(
       {
         tenantId: tenant.id,
-        email: tenant.email,
+        email: loginEmail,
         nome: tenant.nome,
         role: mode === 'operador' ? 'operador' : 'portal',
       },
@@ -100,7 +117,11 @@ router.post('/login', async (req, res) => {
 
     res.json({
       token,
-      tenant: { id: tenant.id, nome: tenant.nome, email: tenant.email },
+      tenant: {
+        id: tenant.id,
+        nome: tenant.nome,
+        email: loginEmail,
+      },
     });
   } catch (err) {
     console.error('Erro no login portal:', err);

@@ -51,6 +51,7 @@ export default function Login() {
         </h1>
         <p style={{ margin: 0, color: '#78716c', fontSize: 14 }}>
           Acompanhe vendas, produtos e totens do seu festival.
+          Use o e-mail e a senha do <strong>portal</strong> (adm do evento).
         </p>
 
         <label style={{ fontSize: 13, color: '#44403c', fontWeight: 600 }}>

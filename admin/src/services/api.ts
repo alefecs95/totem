@@ -35,6 +35,7 @@ export interface Tenant {
   responsavel: string;
   telefone: string | null;
   email: string | null;
+  operador_email?: string | null;
   gateway: 'mercadopago' | 'sumup';
   comissao_pct: string | number;
   mp_access_token: string | null;
@@ -99,6 +100,7 @@ export type TenantInput = Partial<
   longitude?: number;
   portal_senha?: string;
   operador_senha?: string;
+  operador_email?: string | null;
   codigo_evento?: string | null;
   sumup_surcharge_enabled?: boolean;
   sumup_debit_surcharge_percent?: number;
