@@ -1,5 +1,6 @@
 import axios from 'axios';
 
+import { portalLoginPath } from '../eventCode';
 import type { ProductCategory } from '../utils/productCategories';
 
 export const api = axios.create({
@@ -18,8 +19,9 @@ api.interceptors.response.use(
     if (error?.response?.status === 401) {
       sessionStorage.removeItem('portalToken');
       sessionStorage.removeItem('portalTenant');
-      if (window.location.pathname !== '/') {
-        window.location.href = '/';
+      const loginPath = portalLoginPath();
+      if (window.location.pathname !== loginPath && window.location.pathname !== '/') {
+        window.location.href = loginPath;
       }
     }
     return Promise.reject(error);
@@ -111,10 +113,21 @@ export interface DashboardData {
   }>;
 }
 
-export async function login(email: string, senha: string): Promise<TenantInfo> {
+export async function getEventoPublico(codigo: string): Promise<{ nome: string }> {
+  const { data } = await api.get<{ nome: string }>(
+    `/portal/evento/${encodeURIComponent(codigo)}`
+  );
+  return data;
+}
+
+export async function login(
+  email: string,
+  senha: string,
+  codigo: string
+): Promise<TenantInfo> {
   const { data } = await api.post<{ token: string; tenant: TenantInfo }>(
     '/portal/login',
-    { email, senha, mode: 'portal' }
+    { email, senha, mode: 'portal', codigo }
   );
   sessionStorage.setItem('portalToken', data.token);
   sessionStorage.setItem('portalTenant', JSON.stringify(data.tenant));

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { env } from '../config/env';
 import {
   PRODUCT_CATEGORIES,
 } from './productCategories';
@@ -63,10 +64,16 @@ export function mapProductRow(row: Record<string, unknown>) {
 
 export function stripTenantSecrets(row: Record<string, unknown>) {
   const { portal_senha_hash, operador_senha_hash, ...rest } = row;
+  const codigo = (rest.codigo_evento as string | null) || null;
+  const portalBase = env.portalUrl.replace(/\/$/, '');
   return {
     ...rest,
     portal_ativo: Boolean(portal_senha_hash),
     operador_ativo: Boolean(operador_senha_hash),
     ficha_logo_set: Boolean(rest.ficha_logo_data),
+    portal_url:
+      portalBase && codigo
+        ? `${portalBase}/e/${encodeURIComponent(codigo)}`
+        : null,
   };
 }

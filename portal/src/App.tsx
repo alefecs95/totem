@@ -11,10 +11,11 @@ import Sales from './pages/Sales';
 import Totens from './pages/Totens';
 import Operadores from './pages/Operadores';
 import PortalLayout from './components/PortalLayout';
+import { portalLoginPath } from './eventCode';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = sessionStorage.getItem('portalToken');
-  if (!token) return <Navigate to="/" replace />;
+  if (!token) return <Navigate to={portalLoginPath()} replace />;
   return <PortalLayout>{children}</PortalLayout>;
 }
 
@@ -23,6 +24,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Login />} />
+        <Route path="/e/:codigo" element={<Login />} />
         <Route
           path="/dashboard"
           element={

@@ -380,12 +380,27 @@ export default function Tenants() {
       const result = await resetTenantSenha(t.id, 'portal', senha || undefined);
       carregar();
       window.alert(
-        `Senha do adm do evento redefinida.\n\nE-mail: ${t.email || '—'}\nSenha: ${result.senha}\n\nAnote e envie ao organizador. Operadores ele cadastra no portal.`
+        `Senha do adm do evento redefinida.\n\nLink do portal:\n${t.portal_url || '(configure PORTAL_URL na API)'}\nE-mail: ${t.email || '—'}\nSenha: ${result.senha}\n\nEnvie só o link + e-mail + senha. O código do evento não aparece no portal.`
       );
     } catch {
       window.alert('Falha ao resetar senha. Tente novamente.');
     } finally {
       setResetandoSenha(null);
+    }
+  };
+
+  const copiarLinkPortal = async (t: Tenant) => {
+    if (!t.portal_url) {
+      window.alert(
+        'Sem link: o evento precisa de código e a API precisa de PORTAL_URL (domínio do totem-portal).'
+      );
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(t.portal_url);
+      setAviso(`Link do portal copiado para ${t.nome}.`);
+    } catch {
+      window.prompt('Copie o link do portal:', t.portal_url);
     }
   };
 
@@ -499,7 +514,7 @@ export default function Tenants() {
       <div className="admin-page-head">
         <div>
           <h1>Organizadores</h1>
-          <p>Festivais, códigos PDV, maquininhas e comissões.</p>
+          <p>Festivais, link do portal do evento, maquininhas e comissões.</p>
         </div>
         <button type="button" onClick={abrirNovo} className="btn btn-primary">
           + Novo organizador
@@ -514,7 +529,7 @@ export default function Tenants() {
             <thead>
               <tr>
                 <th>Nome</th>
-                <th>Código PDV</th>
+                <th>Portal do evento</th>
                 <th>Responsável</th>
                 <th>Gateway</th>
                 <th>Comissão</th>
@@ -527,7 +542,26 @@ export default function Tenants() {
                 <tr key={t.id}>
                   <td style={{ fontWeight: 700 }}>{t.nome}</td>
                   <td>
-                    <span className="code-pill">{t.codigo_evento || '—'}</span>
+                    {t.portal_url ? (
+                      <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn-link"
+                          onClick={() => window.open(t.portal_url!, '_blank', 'noopener')}
+                        >
+                          Abrir adm
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-link"
+                          onClick={() => void copiarLinkPortal(t)}
+                        >
+                          Copiar link
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="muted">Sem código</span>
+                    )}
                   </td>
                   <td>{t.responsavel}</td>
                   <td>
@@ -651,8 +685,8 @@ export default function Tenants() {
                 maxLength={32}
               />
               <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
-                O app PDV usa só este código para carregar o evento e vender/imprimir
-                fichas.
+                Usado só internamente (PDV e link do portal). Não aparece para o
+                organizador. O super admin envia o botão &quot;Copiar link&quot; + e-mail/senha.
               </p>
             </Field>
 

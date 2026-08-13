@@ -6,6 +6,7 @@ import { query } from '../config/database';
 import { env } from '../config/env';
 import { verifyPortal, verifyEventAdmin, type AuthRequest } from '../middleware/auth';
 import { productSchema, mapProductRow } from '../utils/products';
+import { normalizeEventCode } from '../utils/eventCode';
 import {
   PaymentValidationError,
   validatePaymentItems,
@@ -35,6 +36,8 @@ const loginSchema = z.object({
   senha: z.string().min(1),
   /** portal = adm do evento; operador = modo operador web */
   mode: z.enum(['portal', 'operador']).optional().default('portal'),
+  /** Codigo do evento (vindo do link /e/:codigo, salvo no localStorage). */
+  codigo: z.string().trim().min(3).max(32).optional(),
 });
 
 // POST /api/portal/login
@@ -48,8 +51,9 @@ router.post('/login', async (req, res) => {
     return;
   }
 
-  const { email, senha, mode } = parsed.data;
+  const { email, senha, mode, codigo } = parsed.data;
   const emailNorm = email.trim().toLowerCase().replace(/\s+/g, '');
+  const codigoNorm = codigo ? normalizeEventCode(codigo) : '';
 
   try {
     if (mode === 'operador') {
@@ -110,14 +114,24 @@ router.post('/login', async (req, res) => {
       return;
     }
 
+    if (!codigoNorm) {
+      res.status(401).json({
+        error: 'invalid_credentials',
+        detalhe:
+          'Abra o link do seu evento (enviado pelo Totem). O endereco raiz do portal nao identifica o festival.',
+      });
+      return;
+    }
+
     const result = await query<{
       id: string;
       nome: string;
       email: string | null;
       portal_senha_hash: string | null;
+      codigo_evento: string | null;
       ativo: boolean;
     }>(
-      `SELECT id, nome, email, portal_senha_hash, ativo
+      `SELECT id, nome, email, portal_senha_hash, codigo_evento, ativo
        FROM tenants
        WHERE LOWER(REPLACE(TRIM(COALESCE(email, '')), ' ', '')) = $1
        LIMIT 1`,
@@ -136,6 +150,17 @@ router.post('/login', async (req, res) => {
       res.status(401).json({
         error: 'invalid_credentials',
         detalhe: 'Senha do portal nao configurada. Peca ao super admin para redefinir.',
+      });
+      return;
+    }
+    const tenantCodigo = tenant.codigo_evento
+      ? normalizeEventCode(tenant.codigo_evento)
+      : '';
+    if (!tenantCodigo || tenantCodigo !== codigoNorm) {
+      res.status(401).json({
+        error: 'invalid_credentials',
+        detalhe:
+          'Este link nao corresponde a este e-mail. Use o link do portal do seu evento.',
       });
       return;
     }
@@ -172,6 +197,32 @@ router.post('/login', async (req, res) => {
   } catch (err) {
     console.error('Erro no login portal:', err);
     res.status(500).json({ error: 'login_failed' });
+  }
+});
+
+// GET /api/portal/evento/:codigo — publico: so o nome, para a tela de login.
+router.get('/evento/:codigo', async (req, res) => {
+  const codigo = normalizeEventCode(String(req.params.codigo ?? ''));
+  if (!codigo) {
+    res.status(404).json({ error: 'evento_nao_encontrado' });
+    return;
+  }
+  try {
+    const result = await query<{ nome: string }>(
+      `SELECT nome FROM tenants
+       WHERE UPPER(codigo_evento) = $1 AND ativo = true
+       LIMIT 1`,
+      [codigo]
+    );
+    const row = result.rows[0];
+    if (!row) {
+      res.status(404).json({ error: 'evento_nao_encontrado' });
+      return;
+    }
+    res.json({ nome: row.nome });
+  } catch (err) {
+    console.error('Erro ao buscar evento do portal:', err);
+    res.status(500).json({ error: 'evento_failed' });
   }
 });
 

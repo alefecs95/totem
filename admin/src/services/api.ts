@@ -52,6 +52,7 @@ export interface Tenant {
   ficha_logo_data?: string | null;
   ficha_logo_set?: boolean;
   codigo_evento?: string | null;
+  portal_url?: string | null;
   sumup_surcharge_enabled?: boolean;
   sumup_debit_surcharge_percent?: string | number;
   sumup_credit_surcharge_percent?: string | number;
