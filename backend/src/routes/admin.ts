@@ -833,18 +833,45 @@ router.post('/tenants/:id/reset-senha', verifyAdmin, async (req, res) => {
 
   const generated = !parsed.data.senha;
   const senha = parsed.data.senha || generateTenantPassword(10);
-  const column =
-    parsed.data.tipo === 'operador' ? 'operador_senha_hash' : 'portal_senha_hash';
   const hash = bcrypt.hashSync(senha, 10);
 
   try {
-    const result = await query(
-      `UPDATE tenants
-       SET ${column} = $1, atualizado_em = NOW()
-       WHERE id = $2
-       RETURNING id`,
-      [hash, req.params.id]
+    const tenantRes = await query<{
+      email: string | null;
+      operador_email: string | null;
+    }>(
+      `SELECT email, operador_email FROM tenants WHERE id = $1`,
+      [req.params.id]
     );
+    if (tenantRes.rows.length === 0) {
+      res.status(404).json({ error: 'tenant_not_found' });
+      return;
+    }
+    const t = tenantRes.rows[0];
+    const mesmoPerfil =
+      !t.operador_email?.trim() ||
+      t.operador_email.trim().toLowerCase() === (t.email || '').trim().toLowerCase();
+
+    // Um e-mail so: as duas senhas ficam iguais para portal e operador funcionarem.
+    const result = mesmoPerfil
+      ? await query(
+          `UPDATE tenants
+           SET portal_senha_hash = $1, operador_senha_hash = $1, atualizado_em = NOW()
+           WHERE id = $2
+           RETURNING id`,
+          [hash, req.params.id]
+        )
+      : await query(
+          `UPDATE tenants
+           SET ${
+             parsed.data.tipo === 'operador'
+               ? 'operador_senha_hash'
+               : 'portal_senha_hash'
+           } = $1, atualizado_em = NOW()
+           WHERE id = $2
+           RETURNING id`,
+          [hash, req.params.id]
+        );
     if (result.rows.length === 0) {
       res.status(404).json({ error: 'tenant_not_found' });
       return;

@@ -49,66 +49,92 @@ router.post('/login', async (req, res) => {
   }
 
   const { email, senha, mode } = parsed.data;
-  const emailNorm = email.trim().toLowerCase();
+  const emailNorm = email.trim().toLowerCase().replace(/\s+/g, '');
 
   try {
-    // Aceita e-mail do portal OU do operador para achar o tenant.
-    const result = await query<{
+    type TenantLoginRow = {
       id: string;
       nome: string;
-      email: string;
-      operador_email: string | null;
+      email: string | null;
+      operador_email?: string | null;
       portal_senha_hash: string | null;
       operador_senha_hash: string | null;
       ativo: boolean;
-    }>(
-      `SELECT id, nome, email, operador_email, portal_senha_hash, operador_senha_hash, ativo
-       FROM tenants
-       WHERE LOWER(TRIM(email)) = $1
-          OR (operador_email IS NOT NULL AND TRIM(operador_email) <> '' AND LOWER(TRIM(operador_email)) = $1)
-       LIMIT 1`,
-      [emailNorm]
-    );
+    };
 
-    const tenant = result.rows[0];
-    if (!tenant?.ativo) {
-      res.status(401).json({ error: 'invalid_credentials' });
-      return;
+    let tenant: TenantLoginRow | undefined;
+    try {
+      const result = await query<TenantLoginRow>(
+        `SELECT id, nome, email, operador_email, portal_senha_hash, operador_senha_hash, ativo
+         FROM tenants
+         WHERE LOWER(REPLACE(TRIM(COALESCE(email, '')), ' ', '')) = $1
+            OR LOWER(REPLACE(TRIM(COALESCE(operador_email, '')), ' ', '')) = $1
+         LIMIT 1`,
+        [emailNorm]
+      );
+      tenant = result.rows[0];
+    } catch (err) {
+      console.error('Login com operador_email falhou, tentando so email:', err);
+      const result = await query<TenantLoginRow>(
+        `SELECT id, nome, email, portal_senha_hash, operador_senha_hash, ativo
+         FROM tenants
+         WHERE LOWER(REPLACE(TRIM(COALESCE(email, '')), ' ', '')) = $1
+         LIMIT 1`,
+        [emailNorm]
+      );
+      tenant = result.rows[0];
     }
 
-    // Portal exige senha do portal; operador usa senha de operador (fallback portal).
-    const hash =
-      mode === 'operador'
-        ? tenant.operador_senha_hash || tenant.portal_senha_hash
-        : tenant.portal_senha_hash;
-
-    if (!hash) {
+    if (!tenant?.ativo) {
       res.status(401).json({
         error: 'invalid_credentials',
         detalhe:
-          mode === 'operador'
-            ? 'Senha do operador nao configurada. Redefina no super admin.'
-            : 'Senha do portal nao configurada. Redefina no super admin.',
+          'E-mail nao encontrado ou organizador inativo. Use o e-mail cadastrado no super admin (campo E-mail do portal).',
       });
       return;
     }
 
-    const ok = await bcrypt.compare(senha, hash);
+    const opEmail = (tenant.operador_email || '').trim().toLowerCase();
+    const portalEmail = (tenant.email || '').trim().toLowerCase();
+    const mesmoPerfil = !opEmail || opEmail === portalEmail;
+
+    const hashes = (
+      mesmoPerfil
+        ? [tenant.portal_senha_hash, tenant.operador_senha_hash]
+        : mode === 'operador'
+          ? [tenant.operador_senha_hash, tenant.portal_senha_hash]
+          : [tenant.portal_senha_hash]
+    ).filter((h): h is string => Boolean(h));
+
+    if (hashes.length === 0) {
+      res.status(401).json({
+        error: 'invalid_credentials',
+        detalhe:
+          'Nenhuma senha configurada. No super admin, clique em Senha portal (e Senha operador se quiser outra).',
+      });
+      return;
+    }
+
+    let ok = false;
+    for (const hash of hashes) {
+      if (await bcrypt.compare(senha, hash)) {
+        ok = true;
+        break;
+      }
+    }
     if (!ok) {
       res.status(401).json({
         error: 'invalid_credentials',
         detalhe:
-          mode === 'operador'
-            ? 'Senha incorreta para o perfil OPERADOR.'
-            : 'Senha incorreta para o perfil PORTAL (adm do evento).',
+          'Senha nao confere. No super admin use Senha portal / Senha operador, anote a senha do alerta e tente de novo.',
       });
       return;
     }
 
     const loginEmail =
-      mode === 'operador'
+      (mode === 'operador'
         ? (tenant.operador_email && tenant.operador_email.trim()) || tenant.email
-        : tenant.email;
+        : tenant.email) || emailNorm;
 
     const token = jwt.sign(
       {

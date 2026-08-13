@@ -391,7 +391,7 @@ export default function Tenants() {
       );
       carregar();
       window.alert(
-        `Senha do ${label} redefinida.\n\nSenha: ${result.senha}\n\nAnote e envie ao responsável. Ela não será mostrada de novo.`
+        `Senha redefinida para portal e operador (mesmo e-mail).\n\nSenha: ${result.senha}\n\nAnote agora. Use este e-mail + esta senha no portal e no /operador.`
       );
     } catch {
       window.alert('Falha ao resetar senha. Tente novamente.');
