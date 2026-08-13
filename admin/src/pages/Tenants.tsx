@@ -26,7 +26,6 @@ const emptyForm: TenantInput = {
   responsavel: '',
   telefone: '',
   email: '',
-  operador_email: '',
   gateway: 'mercadopago',
   comissao_pct: 5,
   codigo_evento: '',
@@ -338,7 +337,6 @@ export default function Tenants() {
       responsavel: t.responsavel,
       telefone: t.telefone ?? '',
       email: t.email ?? '',
-      operador_email: t.operador_email ?? '',
       gateway: t.gateway,
       comissao_pct: Number(t.comissao_pct),
       mp_access_token: t.mp_access_token ?? '',
@@ -367,14 +365,9 @@ export default function Tenants() {
     setModalOpen(true);
   };
 
-  const resetarSenha = async (
-    t: Tenant,
-    tipo: 'portal' | 'operador'
-  ) => {
-    const label =
-      tipo === 'portal' ? 'adm do evento (portal)' : 'operador web';
+  const resetarSenha = async (t: Tenant) => {
     const custom = window.prompt(
-      `Nova senha do ${label} para "${t.nome}".\n\nDigite a senha (mín. 4) ou deixe em branco para GERAR automaticamente:`
+      `Nova senha do ADM DO EVENTO (portal) para "${t.nome}".\n\nDigite a senha (mín. 4) ou deixe em branco para GERAR:`
     );
     if (custom === null) return;
     const senha = custom.trim();
@@ -382,16 +375,12 @@ export default function Tenants() {
       window.alert('Senha muito curta (mínimo 4 caracteres).');
       return;
     }
-    setResetandoSenha(`${t.id}-${tipo}`);
+    setResetandoSenha(t.id);
     try {
-      const result = await resetTenantSenha(
-        t.id,
-        tipo,
-        senha || undefined
-      );
+      const result = await resetTenantSenha(t.id, 'portal', senha || undefined);
       carregar();
       window.alert(
-        `Senha redefinida para portal e operador (mesmo e-mail).\n\nSenha: ${result.senha}\n\nAnote agora. Use este e-mail + esta senha no portal e no /operador.`
+        `Senha do adm do evento redefinida.\n\nE-mail: ${t.email || '—'}\nSenha: ${result.senha}\n\nAnote e envie ao organizador. Operadores ele cadastra no portal.`
       );
     } catch {
       window.alert('Falha ao resetar senha. Tente novamente.');
@@ -409,12 +398,8 @@ export default function Tenants() {
       if (!payload.portal_senha?.trim()) {
         delete payload.portal_senha;
       }
-      if (!payload.operador_senha?.trim()) {
-        delete payload.operador_senha;
-      }
-      payload.operador_email = payload.operador_email?.trim()
-        ? payload.operador_email.trim()
-        : null;
+      delete payload.operador_senha;
+      delete payload.operador_email;
       if (!editingId && !payload.portal_senha) {
         setAviso('Defina a senha do portal (mínimo 4 caracteres) para o organizador.');
         return;
@@ -583,27 +568,12 @@ export default function Tenants() {
                     {t.ativo && (
                       <button
                         type="button"
-                        onClick={() => void resetarSenha(t, 'portal')}
+                        onClick={() => void resetarSenha(t)}
                         className="btn-link"
-                        disabled={resetandoSenha === `${t.id}-portal`}
-                        title="Resetar senha do portal (adm do evento)"
+                        disabled={resetandoSenha === t.id}
+                        title="Resetar senha do adm do evento"
                       >
-                        {resetandoSenha === `${t.id}-portal`
-                          ? '...'
-                          : 'Senha portal'}
-                      </button>
-                    )}
-                    {t.ativo && (
-                      <button
-                        type="button"
-                        onClick={() => void resetarSenha(t, 'operador')}
-                        className="btn-link"
-                        disabled={resetandoSenha === `${t.id}-operador`}
-                        title="Resetar senha do modo operador"
-                      >
-                        {resetandoSenha === `${t.id}-operador`
-                          ? '...'
-                          : 'Senha operador'}
+                        {resetandoSenha === t.id ? '...' : 'Senha do evento'}
                       </button>
                     )}
                     {t.ativo && (
@@ -713,20 +683,7 @@ export default function Tenants() {
               </Field>
             </div>
 
-            <Field label="E-mail do operador (opcional)">
-              <input
-                style={input}
-                type="email"
-                value={form.operador_email ?? ''}
-                onChange={(e) => setField('operador_email', e.target.value)}
-                placeholder="Se vazio, usa o e-mail do portal"
-              />
-              <span style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                Login separado em /operador. Pode ser outro e-mail + outra senha.
-              </span>
-            </Field>
-
-            <Field label="Senha do portal (adm do evento)">
+            <Field label="Senha do adm do evento (portal)">
               <input
                 style={input}
                 type="password"
@@ -735,34 +692,14 @@ export default function Tenants() {
                 placeholder={
                   editingId
                     ? 'Nova senha do portal (opcional ao salvar)'
-                    : 'Mínimo 4 caracteres — login do portal'
+                    : 'Mínimo 4 caracteres — login do organizador'
                 }
                 minLength={4}
                 autoComplete="new-password"
               />
               <span style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                Acesso ao painel do organizador (totem-portal). Para resetar sem
-                editar tudo, use o botão <strong>Senha portal</strong> na lista.
-              </span>
-            </Field>
-
-            <Field label="Senha do operador (modo operador web)">
-              <input
-                style={input}
-                type="password"
-                value={form.operador_senha ?? ''}
-                onChange={(e) => setField('operador_senha', e.target.value)}
-                placeholder={
-                  editingId
-                    ? 'Nova senha do operador (opcional ao salvar)'
-                    : 'Opcional — se vazio, usa a mesma do portal'
-                }
-                minLength={4}
-                autoComplete="new-password"
-              />
-              <span style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                Login em /operador no PWA. Use <strong>Senha operador</strong> na
-                lista para resetar.
+                O organizador entra no portal com este e-mail e senha. Lá ele
+                cadastra os operadores (e-mails diferentes).
               </span>
             </Field>
 

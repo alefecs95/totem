@@ -30,7 +30,7 @@ export default function OperatorLogin() {
       } else if (status === 401 || code === 'invalid_credentials') {
         setErro(
           detalhe ||
-            'E-mail ou senha inválidos. Perfil OPERADOR: use a senha do operador (botão Senha operador no super admin).'
+            'E-mail ou senha inválidos. Peça ao adm do evento para cadastrar seu usuário no portal.'
         );
       } else {
         setErro('Não foi possível entrar. Verifique a conexão e tente novamente.');
@@ -68,7 +68,8 @@ export default function OperatorLogin() {
           Modo Operador
         </h1>
         <p style={{ margin: 0, color: '#78716c', fontSize: 14 }}>
-          Use o e-mail do evento e a senha do operador (definida no super admin).
+          Use o e-mail e a senha que o <strong>adm do evento</strong> cadastrou
+          no portal (menu Operadores). Nao e o login do organizador.
         </p>
 
         <label style={labelStyle}>

@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import Products from './pages/Products';
 import Sales from './pages/Sales';
 import Totens from './pages/Totens';
+import Operadores from './pages/Operadores';
 import PortalLayout from './components/PortalLayout';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -51,6 +52,14 @@ export default function App() {
           element={
             <RequireAuth>
               <Totens />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/operadores"
+          element={
+            <RequireAuth>
+              <Operadores />
             </RequireAuth>
           }
         />

@@ -22,7 +22,7 @@ export default function Login() {
       )?.response?.data?.detalhe;
       setErro(
         detalhe ||
-          'E-mail ou senha inválidos. Use a senha do PORTAL (adm do evento), não a do operador.'
+          'E-mail ou senha inválidos. Use o e-mail/senha do ADM DO EVENTO (cadastrado no super admin).'
       );
     } finally {
       setLoading(false);

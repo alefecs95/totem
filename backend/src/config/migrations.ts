@@ -66,6 +66,33 @@ UPDATE tenants
 CREATE UNIQUE INDEX IF NOT EXISTS tenants_operador_email_uidx
   ON tenants (LOWER(operador_email))
   WHERE operador_email IS NOT NULL AND operador_email <> '';
+
+CREATE TABLE IF NOT EXISTS operadores (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  nome VARCHAR(200) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  senha_hash TEXT NOT NULL,
+  ativo BOOLEAN NOT NULL DEFAULT true,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS operadores_email_uidx ON operadores (LOWER(email));
+
+INSERT INTO operadores (tenant_id, nome, email, senha_hash, ativo)
+SELECT t.id,
+       COALESCE(NULLIF(TRIM(t.responsavel), ''), t.nome),
+       LOWER(TRIM(t.operador_email)),
+       COALESCE(t.operador_senha_hash, t.portal_senha_hash),
+       true
+FROM tenants t
+WHERE t.operador_email IS NOT NULL
+  AND TRIM(t.operador_email) <> ''
+  AND LOWER(TRIM(t.operador_email)) <> LOWER(TRIM(COALESCE(t.email, '')))
+  AND COALESCE(t.operador_senha_hash, t.portal_senha_hash) IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM operadores o WHERE LOWER(o.email) = LOWER(TRIM(t.operador_email))
+  );
+
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS ficha_logo_data TEXT;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS categoria VARCHAR(50) NOT NULL DEFAULT 'outro';
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS imprime_ficha BOOLEAN NOT NULL DEFAULT false;

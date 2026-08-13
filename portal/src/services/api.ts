@@ -30,6 +30,7 @@ export interface TenantInfo {
   id: string;
   nome: string;
   email: string;
+  role?: 'portal' | 'operador';
 }
 
 export interface Product {
@@ -185,4 +186,42 @@ export async function getTransactions(
     params: filters,
   });
   return data;
+}
+
+export interface Operador {
+  id: string;
+  tenant_id: string;
+  nome: string;
+  email: string;
+  ativo: boolean;
+  criado_em: string;
+}
+
+export async function getOperadores(): Promise<Operador[]> {
+  const { data } = await api.get<{ operadores: Operador[] }>('/portal/operadores');
+  return data.operadores;
+}
+
+export async function createOperador(input: {
+  nome: string;
+  email: string;
+  senha: string;
+}): Promise<Operador> {
+  const { data } = await api.post<{ operador: Operador }>('/portal/operadores', input);
+  return data.operador;
+}
+
+export async function updateOperador(
+  id: string,
+  input: { nome?: string; email?: string; senha?: string; ativo?: boolean }
+): Promise<Operador> {
+  const { data } = await api.put<{ operador: Operador }>(
+    `/portal/operadores/${id}`,
+    input
+  );
+  return data.operador;
+}
+
+export async function deleteOperador(id: string): Promise<void> {
+  await api.delete(`/portal/operadores/${id}`);
 }

@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { query } from '../config/database';
 import { env } from '../config/env';
-import { verifyPortal, type AuthRequest } from '../middleware/auth';
+import { verifyPortal, verifyEventAdmin, type AuthRequest } from '../middleware/auth';
 import { productSchema, mapProductRow } from '../utils/products';
 import {
   PaymentValidationError,
@@ -52,96 +52,109 @@ router.post('/login', async (req, res) => {
   const emailNorm = email.trim().toLowerCase().replace(/\s+/g, '');
 
   try {
-    type TenantLoginRow = {
+    if (mode === 'operador') {
+      const opRes = await query<{
+        id: string;
+        tenant_id: string;
+        nome: string;
+        email: string;
+        senha_hash: string;
+        tenant_nome: string;
+        tenant_ativo: boolean;
+      }>(
+        `SELECT o.id, o.tenant_id, o.nome, o.email, o.senha_hash,
+                t.nome AS tenant_nome, t.ativo AS tenant_ativo
+         FROM operadores o
+         JOIN tenants t ON t.id = o.tenant_id
+         WHERE LOWER(TRIM(o.email)) = $1 AND o.ativo = true
+         LIMIT 1`,
+        [emailNorm]
+      );
+      const op = opRes.rows[0];
+      if (!op?.tenant_ativo) {
+        res.status(401).json({
+          error: 'invalid_credentials',
+          detalhe:
+            'Operador nao encontrado. O adm do evento cadastra operadores no portal (menu Operadores).',
+        });
+        return;
+      }
+      const ok = await bcrypt.compare(senha, op.senha_hash);
+      if (!ok) {
+        res.status(401).json({
+          error: 'invalid_credentials',
+          detalhe: 'Senha do operador incorreta.',
+        });
+        return;
+      }
+      const token = jwt.sign(
+        {
+          tenantId: op.tenant_id,
+          email: op.email,
+          nome: op.tenant_nome,
+          role: 'operador',
+          operatorId: op.id,
+        },
+        env.jwt.secret,
+        { expiresIn: '12h' }
+      );
+      res.json({
+        token,
+        tenant: {
+          id: op.tenant_id,
+          nome: op.tenant_nome,
+          email: op.email,
+          role: 'operador',
+        },
+      });
+      return;
+    }
+
+    const result = await query<{
       id: string;
       nome: string;
       email: string | null;
-      operador_email?: string | null;
       portal_senha_hash: string | null;
-      operador_senha_hash: string | null;
       ativo: boolean;
-    };
-
-    let tenant: TenantLoginRow | undefined;
-    try {
-      const result = await query<TenantLoginRow>(
-        `SELECT id, nome, email, operador_email, portal_senha_hash, operador_senha_hash, ativo
-         FROM tenants
-         WHERE LOWER(REPLACE(TRIM(COALESCE(email, '')), ' ', '')) = $1
-            OR LOWER(REPLACE(TRIM(COALESCE(operador_email, '')), ' ', '')) = $1
-         LIMIT 1`,
-        [emailNorm]
-      );
-      tenant = result.rows[0];
-    } catch (err) {
-      console.error('Login com operador_email falhou, tentando so email:', err);
-      const result = await query<TenantLoginRow>(
-        `SELECT id, nome, email, portal_senha_hash, operador_senha_hash, ativo
-         FROM tenants
-         WHERE LOWER(REPLACE(TRIM(COALESCE(email, '')), ' ', '')) = $1
-         LIMIT 1`,
-        [emailNorm]
-      );
-      tenant = result.rows[0];
-    }
-
+    }>(
+      `SELECT id, nome, email, portal_senha_hash, ativo
+       FROM tenants
+       WHERE LOWER(REPLACE(TRIM(COALESCE(email, '')), ' ', '')) = $1
+       LIMIT 1`,
+      [emailNorm]
+    );
+    const tenant = result.rows[0];
     if (!tenant?.ativo) {
       res.status(401).json({
         error: 'invalid_credentials',
         detalhe:
-          'E-mail nao encontrado ou organizador inativo. Use o e-mail cadastrado no super admin (campo E-mail do portal).',
+          'E-mail do adm do evento nao encontrado. Use o e-mail cadastrado pelo super admin.',
       });
       return;
     }
-
-    const opEmail = (tenant.operador_email || '').trim().toLowerCase();
-    const portalEmail = (tenant.email || '').trim().toLowerCase();
-    const mesmoPerfil = !opEmail || opEmail === portalEmail;
-
-    const hashes = (
-      mesmoPerfil
-        ? [tenant.portal_senha_hash, tenant.operador_senha_hash]
-        : mode === 'operador'
-          ? [tenant.operador_senha_hash, tenant.portal_senha_hash]
-          : [tenant.portal_senha_hash]
-    ).filter((h): h is string => Boolean(h));
-
-    if (hashes.length === 0) {
+    if (!tenant.portal_senha_hash) {
       res.status(401).json({
         error: 'invalid_credentials',
-        detalhe:
-          'Nenhuma senha configurada. No super admin, clique em Senha portal (e Senha operador se quiser outra).',
+        detalhe: 'Senha do portal nao configurada. Peca ao super admin para redefinir.',
       });
       return;
     }
-
-    let ok = false;
-    for (const hash of hashes) {
-      if (await bcrypt.compare(senha, hash)) {
-        ok = true;
-        break;
-      }
-    }
+    const ok = await bcrypt.compare(senha, tenant.portal_senha_hash);
     if (!ok) {
       res.status(401).json({
         error: 'invalid_credentials',
-        detalhe:
-          'Senha nao confere. No super admin use Senha portal / Senha operador, anote a senha do alerta e tente de novo.',
+        detalhe: 'Senha do adm do evento incorreta.',
       });
       return;
     }
 
-    const loginEmail =
-      (mode === 'operador'
-        ? (tenant.operador_email && tenant.operador_email.trim()) || tenant.email
-        : tenant.email) || emailNorm;
-
+    const loginEmail = tenant.email || emailNorm;
     const token = jwt.sign(
       {
         tenantId: tenant.id,
         email: loginEmail,
         nome: tenant.nome,
-        role: mode === 'operador' ? 'operador' : 'portal',
+        role: 'portal',
       },
       env.jwt.secret,
       { expiresIn: '12h' }
@@ -153,6 +166,7 @@ router.post('/login', async (req, res) => {
         id: tenant.id,
         nome: tenant.nome,
         email: loginEmail,
+        role: 'portal',
       },
     });
   } catch (err) {
@@ -164,6 +178,169 @@ router.post('/login', async (req, res) => {
 // GET /api/portal/me
 router.get('/me', verifyPortal, async (req: AuthRequest, res) => {
   res.json({ tenant: req.portal });
+});
+
+const operadorSchema = z.object({
+  nome: z.string().trim().min(1).max(200),
+  email: z.string().trim().email(),
+  senha: z.string().min(4).optional(),
+  ativo: z.boolean().optional(),
+});
+
+function mapOperadorRow(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    tenant_id: row.tenant_id,
+    nome: row.nome,
+    email: row.email,
+    ativo: row.ativo,
+    criado_em: row.criado_em,
+  };
+}
+
+// GET /api/portal/operadores
+router.get('/operadores', verifyEventAdmin, async (req: AuthRequest, res) => {
+  try {
+    const result = await query(
+      `SELECT id, tenant_id, nome, email, ativo, criado_em
+       FROM operadores
+       WHERE tenant_id = $1
+       ORDER BY criado_em DESC`,
+      [req.portal!.tenantId]
+    );
+    res.json({ operadores: result.rows.map(mapOperadorRow) });
+  } catch (err) {
+    console.error('Erro ao listar operadores:', err);
+    res.status(500).json({ error: 'list_operadores_failed' });
+  }
+});
+
+// POST /api/portal/operadores
+router.post('/operadores', verifyEventAdmin, async (req: AuthRequest, res) => {
+  const parsed = operadorSchema.safeParse(req.body);
+  if (!parsed.success || !parsed.data.senha) {
+    res.status(400).json({
+      error: 'invalid_body',
+      detalhe: 'Informe nome, e-mail e senha (minimo 4 caracteres).',
+    });
+    return;
+  }
+  const { nome, email, senha } = parsed.data;
+  const emailNorm = email.trim().toLowerCase();
+  const tenantId = req.portal!.tenantId;
+
+  try {
+    const clash = await query(
+      `SELECT 1 FROM tenants WHERE LOWER(TRIM(email)) = $1
+       UNION ALL
+       SELECT 1 FROM operadores WHERE LOWER(email) = $1`,
+      [emailNorm]
+    );
+    if (clash.rows.length > 0) {
+      res.status(409).json({
+        error: 'email_in_use',
+        detalhe: 'Este e-mail ja esta em uso. Use outro para o operador.',
+      });
+      return;
+    }
+
+    const result = await query(
+      `INSERT INTO operadores (tenant_id, nome, email, senha_hash, ativo)
+       VALUES ($1, $2, $3, $4, true)
+       RETURNING id, tenant_id, nome, email, ativo, criado_em`,
+      [tenantId, nome.trim(), emailNorm, bcrypt.hashSync(senha, 10)]
+    );
+    res.status(201).json({ operador: mapOperadorRow(result.rows[0]) });
+  } catch (err) {
+    console.error('Erro ao criar operador:', err);
+    res.status(500).json({ error: 'create_operador_failed' });
+  }
+});
+
+// PUT /api/portal/operadores/:id
+router.put('/operadores/:id', verifyEventAdmin, async (req: AuthRequest, res) => {
+  const parsed = operadorSchema.partial().safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid_body' });
+    return;
+  }
+  const fields = parsed.data;
+  const tenantId = req.portal!.tenantId;
+  const sets: string[] = [];
+  const values: unknown[] = [];
+
+  if (fields.nome !== undefined) {
+    sets.push(`nome = $${sets.length + 1}`);
+    values.push(fields.nome.trim());
+  }
+  if (fields.email !== undefined) {
+    const emailNorm = fields.email.trim().toLowerCase();
+    const clash = await query(
+      `SELECT 1 FROM tenants WHERE LOWER(TRIM(email)) = $1
+       UNION ALL
+       SELECT 1 FROM operadores WHERE LOWER(email) = $1 AND id <> $2`,
+      [emailNorm, req.params.id]
+    );
+    if (clash.rows.length > 0) {
+      res.status(409).json({
+        error: 'email_in_use',
+        detalhe: 'Este e-mail ja esta em uso.',
+      });
+      return;
+    }
+    sets.push(`email = $${sets.length + 1}`);
+    values.push(emailNorm);
+  }
+  if (fields.senha) {
+    sets.push(`senha_hash = $${sets.length + 1}`);
+    values.push(bcrypt.hashSync(fields.senha, 10));
+  }
+  if (fields.ativo !== undefined) {
+    sets.push(`ativo = $${sets.length + 1}`);
+    values.push(fields.ativo);
+  }
+  if (sets.length === 0) {
+    res.status(400).json({ error: 'no_fields' });
+    return;
+  }
+
+  try {
+    values.push(req.params.id, tenantId);
+    const result = await query(
+      `UPDATE operadores SET ${sets.join(', ')}
+       WHERE id = $${values.length - 1} AND tenant_id = $${values.length}
+       RETURNING id, tenant_id, nome, email, ativo, criado_em`,
+      values
+    );
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'operador_not_found' });
+      return;
+    }
+    res.json({ operador: mapOperadorRow(result.rows[0]) });
+  } catch (err) {
+    console.error('Erro ao atualizar operador:', err);
+    res.status(500).json({ error: 'update_operador_failed' });
+  }
+});
+
+// DELETE /api/portal/operadores/:id
+router.delete('/operadores/:id', verifyEventAdmin, async (req: AuthRequest, res) => {
+  try {
+    const result = await query(
+      `UPDATE operadores SET ativo = false
+       WHERE id = $1 AND tenant_id = $2
+       RETURNING id`,
+      [req.params.id, req.portal!.tenantId]
+    );
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'operador_not_found' });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Erro ao desativar operador:', err);
+    res.status(500).json({ error: 'delete_operador_failed' });
+  }
 });
 
 // GET /api/portal/dashboard
@@ -348,7 +525,7 @@ router.get('/produtos', verifyPortal, async (req: AuthRequest, res) => {
 });
 
 // POST /api/portal/produtos
-router.post('/produtos', verifyPortal, async (req: AuthRequest, res) => {
+router.post('/produtos', verifyEventAdmin, async (req: AuthRequest, res) => {
   const parsed = productSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
@@ -395,7 +572,7 @@ router.post('/produtos', verifyPortal, async (req: AuthRequest, res) => {
 });
 
 // PUT /api/portal/produtos/:id
-router.put('/produtos/:id', verifyPortal, async (req: AuthRequest, res) => {
+router.put('/produtos/:id', verifyEventAdmin, async (req: AuthRequest, res) => {
   const parsed = productSchema.partial().safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
@@ -434,7 +611,7 @@ router.put('/produtos/:id', verifyPortal, async (req: AuthRequest, res) => {
 });
 
 // DELETE /api/portal/produtos/:id (desativa)
-router.delete('/produtos/:id', verifyPortal, async (req: AuthRequest, res) => {
+router.delete('/produtos/:id', verifyEventAdmin, async (req: AuthRequest, res) => {
   try {
     const result = await query(
       `UPDATE produtos SET ativo = false

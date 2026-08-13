@@ -13,6 +13,7 @@ export interface PortalPayload {
   email: string;
   nome: string;
   role: 'portal' | 'operador';
+  operatorId?: string;
 }
 
 type JwtPayload = AdminPayload | PortalPayload | (Record<string, unknown> & { role?: string });
@@ -80,9 +81,28 @@ export function verifyPortal(
       email: portal.email,
       nome: portal.nome,
       role: payload.role === 'operador' ? 'operador' : 'portal',
+      operatorId: portal.operatorId,
     };
     next();
   } catch {
     res.status(401).json({ error: 'invalid_token' });
   }
+}
+
+/** So o adm do evento (portal), nao o operador de caixa. */
+export function verifyEventAdmin(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): void {
+  verifyPortal(req, res, () => {
+    if (req.portal?.role !== 'portal') {
+      res.status(403).json({
+        error: 'forbidden',
+        detalhe: 'Apenas o administrador do evento pode fazer isso.',
+      });
+      return;
+    }
+    next();
+  });
 }

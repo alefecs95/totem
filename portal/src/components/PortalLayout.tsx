@@ -66,6 +66,9 @@ export default function PortalLayout({
           <NavLink to="/totens" style={navStyle}>
             Totens
           </NavLink>
+          <NavLink to="/operadores" style={navStyle}>
+            Operadores
+          </NavLink>
         </nav>
         <button
           onClick={logout}
