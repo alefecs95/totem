@@ -33,7 +33,7 @@ Na tela de login:
 Gerado em:
 
 ```text
-pdv/release/Totem PDV Setup 1.2.1.exe
+pdv/release/Totem PDV Setup 1.2.2.exe
 ```
 
 Para regenerar:
@@ -69,6 +69,7 @@ Ficha unica continua **80×25 mm**.
 Extras no PDV:
 - **Historico** (tecla `H`) — ultimas vendas do evento
 - **PIX** (tecla `P`) — operadora padrao do admin; aba na barra inferior; minimize e continue vendendo; ao pagar notifica e imprime
+- Produto com logo da ficha aparece no grid/carrinho (fundo branco); sem logo, usa o emoji
 - **LEITOR** (tecla `L`) — escolhe **SumUp** ou **Mercado Pago** na hora
 - **Maquininha** — lista/seleciona o leitor SumUp
 - **Cartao / PIX em segundo plano** — o PDV libera; barra inferior mostra o pendente; ao aprovar notifica + imprime fichas

@@ -63,6 +63,54 @@ function formatPreco(preco: number): string {
   return `R$ ${preco.toFixed(2).replace('.', ',')}`;
 }
 
+function isProductLogo(src?: string | null): src is string {
+  return Boolean(src && src.startsWith('data:image/'));
+}
+
+function ProductThumb({
+  emoji,
+  logo,
+  size = 56,
+}: {
+  emoji: string;
+  logo?: string | null;
+  size?: number;
+}) {
+  if (isProductLogo(logo)) {
+    return (
+      <div
+        style={{
+          width: size,
+          height: size,
+          borderRadius: 10,
+          background: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 5,
+          flexShrink: 0,
+          boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.06)',
+        }}
+      >
+        <img
+          src={logo}
+          alt=""
+          draggable={false}
+          style={{
+            maxWidth: '100%',
+            maxHeight: '100%',
+            objectFit: 'contain',
+            display: 'block',
+          }}
+        />
+      </div>
+    );
+  }
+  return (
+    <div style={{ fontSize: Math.round(size * 0.72), lineHeight: 1 }}>{emoji}</div>
+  );
+}
+
 function uuid(): string {
   return crypto.randomUUID();
 }
@@ -1469,7 +1517,11 @@ export default function App() {
                     {qtd > 0 && (
                       <span style={{ ...qtyBadge, background: p.cor }}>{qtd}</span>
                     )}
-                    <div style={{ fontSize: 42, lineHeight: 1 }}>{p.emoji}</div>
+                    <ProductThumb
+                      emoji={p.emoji}
+                      logo={p.ficha_logo_data}
+                      size={64}
+                    />
                     <div style={productName}>{p.nome}</div>
                     <div style={{ ...productPrice, color: p.cor }}>
                       {formatPreco(p.preco)}
@@ -1505,9 +1557,14 @@ export default function App() {
             ) : (
               cart.map((item) => (
                 <div key={item.id} style={cartRow}>
+                  <ProductThumb
+                    emoji={item.emoji}
+                    logo={item.ficha_logo_data}
+                    size={36}
+                  />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 14 }}>
-                      {item.emoji} {item.nome}
+                      {item.nome}
                     </div>
                     <div style={{ color: '#a8a29e', fontSize: 12 }}>
                       {formatPreco(item.preco)}
