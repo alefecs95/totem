@@ -20,6 +20,7 @@ import TotensModal from '../components/TotensModal';
 import ProductsModal from '../components/ProductsModal';
 import MapPicker from '../components/MapPicker';
 import { getCidades, getEstados, type UF } from '../services/ibge';
+import { portalEventUrl } from '../portalUrl';
 
 const emptyForm: TenantInput = {
   nome: '',
@@ -380,7 +381,7 @@ export default function Tenants() {
       const result = await resetTenantSenha(t.id, 'portal', senha || undefined);
       carregar();
       window.alert(
-        `Senha do adm do evento redefinida.\n\nLink do portal:\n${t.portal_url || '(configure PORTAL_URL na API)'}\nE-mail: ${t.email || '—'}\nSenha: ${result.senha}\n\nEnvie só o link + e-mail + senha. O código do evento não aparece no portal.`
+        `Senha do adm do evento redefinida.\n\nLink do portal:\n${portalEventUrl(t.codigo_evento) || '—'}\nE-mail: ${t.email || '—'}\nSenha: ${result.senha}\n\nEnvie o link + e-mail + senha.`
       );
     } catch {
       window.alert('Falha ao resetar senha. Tente novamente.');
@@ -390,17 +391,16 @@ export default function Tenants() {
   };
 
   const copiarLinkPortal = async (t: Tenant) => {
-    if (!t.portal_url) {
-      window.alert(
-        'Sem link: o evento precisa de código e a API precisa de PORTAL_URL (domínio do totem-portal).'
-      );
+    const url = portalEventUrl(t.codigo_evento);
+    if (!url) {
+      window.alert('Sem código do evento. Salve o organizador para gerar o código.');
       return;
     }
     try {
-      await navigator.clipboard.writeText(t.portal_url);
-      setAviso(`Link do portal copiado para ${t.nome}.`);
+      await navigator.clipboard.writeText(url);
+      setAviso(`Link copiado: ${url}`);
     } catch {
-      window.prompt('Copie o link do portal:', t.portal_url);
+      window.prompt('Copie o link do portal:', url);
     }
   };
 
@@ -514,7 +514,7 @@ export default function Tenants() {
       <div className="admin-page-head">
         <div>
           <h1>Organizadores</h1>
-          <p>Festivais, link do portal do evento, maquininhas e comissões.</p>
+          <p>Festivais, código do evento, link do portal, maquininhas e comissões.</p>
         </div>
         <button type="button" onClick={abrirNovo} className="btn btn-primary">
           + Novo organizador
@@ -529,6 +529,7 @@ export default function Tenants() {
             <thead>
               <tr>
                 <th>Nome</th>
+                <th>Código</th>
                 <th>Portal do evento</th>
                 <th>Responsável</th>
                 <th>Gateway</th>
@@ -542,12 +543,21 @@ export default function Tenants() {
                 <tr key={t.id}>
                   <td style={{ fontWeight: 700 }}>{t.nome}</td>
                   <td>
-                    {t.portal_url ? (
+                    <span className="code-pill">{t.codigo_evento || '—'}</span>
+                  </td>
+                  <td>
+                    {portalEventUrl(t.codigo_evento) ? (
                       <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                         <button
                           type="button"
                           className="btn-link"
-                          onClick={() => window.open(t.portal_url!, '_blank', 'noopener')}
+                          onClick={() =>
+                            window.open(
+                              portalEventUrl(t.codigo_evento)!,
+                              '_blank',
+                              'noopener'
+                            )
+                          }
                         >
                           Abrir adm
                         </button>
@@ -624,7 +634,7 @@ export default function Tenants() {
               ))}
               {tenants.length === 0 && (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <div className="empty-state">
                       Nenhum organizador cadastrado.
                     </div>
@@ -685,8 +695,8 @@ export default function Tenants() {
                 maxLength={32}
               />
               <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
-                Usado só internamente (PDV e link do portal). Não aparece para o
-                organizador. O super admin envia o botão &quot;Copiar link&quot; + e-mail/senha.
+                Aparece na lista e no link do portal (`/e/CODIGO`). O PDV Electron
+                também usa este código.
               </p>
             </Field>
 

@@ -1,14 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getPortalEventCode, savePortalEventCode } from '../eventCode';
+import { normalizePortalCode, rememberPortalCode } from '../eventCode';
 import { getEventoPublico, login } from '../services/api';
 
 export default function Login() {
   const navigate = useNavigate();
   const { codigo: codigoParam } = useParams<{ codigo: string }>();
-  if (codigoParam) savePortalEventCode(codigoParam);
-
-  const codigo = getPortalEventCode();
+  const codigo = codigoParam ? normalizePortalCode(codigoParam) : '';
+  if (codigo) rememberPortalCode(codigo);
   const [eventoNome, setEventoNome] = useState('');
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
@@ -79,8 +78,8 @@ export default function Login() {
           </p>
         ) : (
           <p style={{ margin: 0, color: '#78716c', fontSize: 14 }}>
-            Abra o <strong>link do seu evento</strong> (enviado pelo Totem).
-            Depois informe so o e-mail e a senha do adm.
+            Abra o <strong>link do seu evento</strong> (com o codigo na URL).
+            Depois informe o e-mail e a senha do adm.
           </p>
         )}
 

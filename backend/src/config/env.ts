@@ -15,12 +15,29 @@ function requireJwtSecret(): string {
   return secret;
 }
 
+function isLocalHostUrl(url: string): boolean {
+  return /localhost|127\.0\.0\.1/i.test(url);
+}
+
+function siblingAppUrl(from: string, find: string, replace: string): string {
+  const base = from.replace(/\/$/, '');
+  if (!base || isLocalHostUrl(base) || !base.includes(find)) return '';
+  return base.replace(find, replace);
+}
+
 // Domínio do PWA do totem (usado também na URL de setup do QR Code).
-const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+const frontendUrl = (process.env.FRONTEND_URL ?? 'http://localhost:5173').replace(/\/$/, '');
 // Domínio do painel admin.
-const adminUrl = process.env.ADMIN_URL ?? 'http://localhost:5174';
-// Portal do organizador (dono do totem locado).
-const portalUrl = process.env.PORTAL_URL ?? 'http://localhost:5175';
+const adminUrl = (process.env.ADMIN_URL ?? 'http://localhost:5174').replace(/\/$/, '');
+// Portal do organizador. Se PORTAL_URL estiver vazio/localhost, deriva do admin ou do PWA
+// (EasyPanel: totem-totem-admin.* → totem-totem-portal.*).
+const portalUrlExplicit = (process.env.PORTAL_URL ?? '').replace(/\/$/, '');
+const portalUrl =
+  (portalUrlExplicit && !isLocalHostUrl(portalUrlExplicit) ? portalUrlExplicit : '') ||
+  siblingAppUrl(adminUrl, '-admin', '-portal') ||
+  siblingAppUrl(frontendUrl, '-pwa', '-portal') ||
+  portalUrlExplicit ||
+  'http://localhost:5175';
 
 // Origens permitidas no CORS: PWA + admin + portal + extras (CORS_ORIGINS separados por vírgula).
 const corsOrigins = [

@@ -1,15 +1,18 @@
-const STORAGE_KEY = 'portalEventCode';
-
-export function savePortalEventCode(codigo: string) {
-  const normalized = codigo.trim().toUpperCase().replace(/\s+/g, '');
-  if (normalized) localStorage.setItem(STORAGE_KEY, normalized);
+export function normalizePortalCode(codigo: string): string {
+  return codigo.trim().toUpperCase().replace(/\s+/g, '');
 }
 
-export function getPortalEventCode(): string {
-  return (localStorage.getItem(STORAGE_KEY) ?? '').trim().toUpperCase();
+const SESSION_KEY = 'portalEventCode';
+
+export function rememberPortalCode(codigo: string) {
+  const normalized = normalizePortalCode(codigo);
+  if (normalized) sessionStorage.setItem(SESSION_KEY, normalized);
 }
 
 export function portalLoginPath(): string {
-  const codigo = getPortalEventCode();
-  return codigo ? `/e/${encodeURIComponent(codigo)}` : '/';
+  const match = window.location.pathname.match(/^\/e\/([^/]+)/i);
+  if (match?.[1]) return `/e/${match[1]}`;
+  const stored = sessionStorage.getItem(SESSION_KEY);
+  if (stored) return `/e/${encodeURIComponent(stored)}`;
+  return '/';
 }
