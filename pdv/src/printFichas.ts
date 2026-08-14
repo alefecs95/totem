@@ -1,14 +1,16 @@
-/** Ficha unica 80x25 mm; 2 vias (barman/cliente) 80x50 mm — modelo maior. */
+/** Ficha unica 80x28 mm; 2 vias 80x54 mm — margem inferior extra. */
 
 export const FICHA_LARGURA_MM = 80;
-export const FICHA_UNICA_ALTURA_MM = 25;
-export const FICHA_2VIAS_ALTURA_MM = 50;
+export const FICHA_UNICA_ALTURA_MM = 28;
+export const FICHA_2VIAS_ALTURA_MM = 54;
 /** @deprecated use FICHA_UNICA_ALTURA_MM */
 export const FICHA_ALTURA_MM = FICHA_UNICA_ALTURA_MM;
 
 const PX_W = 576;
-const PX_H_UNICA = 200; // 8 px/mm × 25mm
-const PX_H_2VIAS = 400; // 8 px/mm × 50mm
+const PX_H_UNICA = 224; // 8 px/mm × 28mm
+const PX_H_2VIAS = 432; // 8 px/mm × 54mm
+const MARGIN_X = 32;
+const MARGIN_BOTTOM = 48;
 
 export type FichaVia = 'unica' | 'barman' | 'cliente';
 
@@ -101,7 +103,7 @@ function toThermalMono(ctx: CanvasRenderingContext2D, w: number, h: number): voi
   ctx.putImageData(data, 0, 0);
 }
 
-function drawCover(
+function drawContain(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
   x: number,
@@ -109,17 +111,15 @@ function drawCover(
   boxW: number,
   boxH: number
 ): void {
-  const scale = Math.max(boxW / img.naturalWidth, boxH / img.naturalHeight);
-  const dw = Math.floor(img.naturalWidth * scale);
-  const dh = Math.floor(img.naturalHeight * scale);
+  const iw = img.naturalWidth || img.width;
+  const ih = img.naturalHeight || img.height;
+  if (!iw || !ih || boxW <= 0 || boxH <= 0) return;
+  const scale = Math.min(boxW / iw, boxH / ih);
+  const dw = Math.max(1, Math.floor(iw * scale));
+  const dh = Math.max(1, Math.floor(ih * scale));
   const dx = x + Math.floor((boxW - dw) / 2);
   const dy = y + Math.floor((boxH - dh) / 2);
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, boxW, boxH);
-  ctx.clip();
   ctx.drawImage(img, dx, dy, dw, dh);
-  ctx.restore();
 }
 
 /** Quebra o sabor em linhas para caber na largura. */
@@ -164,12 +164,12 @@ function drawNomeBar(
 ): void {
   const text = (nome || 'FICHA').toUpperCase();
   ctx.fillStyle = '#000';
-  ctx.fillRect(12, y + 6, PX_W - 24, h - 12);
+  ctx.fillRect(MARGIN_X, y + 6, PX_W - MARGIN_X * 2, h - 12);
   ctx.fillStyle = '#fff';
   const len = text.length;
   const fontSize = len <= 10 ? 30 : len <= 16 ? 24 : 18;
   ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
-  ctx.fillText(text, PX_W / 2, y + h / 2, PX_W - 48);
+  ctx.fillText(text, PX_W / 2, y + h / 2, PX_W - MARGIN_X * 4);
   ctx.fillStyle = '#000';
 }
 
@@ -240,9 +240,9 @@ function drawBarman(
   // Codigo menor (secundario)
   ctx.fillStyle = '#000';
   ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
-  ctx.fillText(`CODIGO  ${codigo}`, PX_W / 2, pxH - 36, PX_W - 24);
+  ctx.fillText(`CODIGO  ${codigo}`, PX_W / 2, pxH - MARGIN_BOTTOM - 22, PX_W - 24);
   ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
-  ctx.fillText(when, PX_W / 2, pxH - 14, PX_W - 24);
+  ctx.fillText(when, PX_W / 2, pxH - MARGIN_BOTTOM - 4, PX_W - 24);
 }
 
 /** Via cliente: so o codigo em destaque. */
@@ -278,9 +278,9 @@ function drawCliente(
 
   ctx.fillStyle = '#000';
   ctx.font = 'bold 14px Arial, Helvetica, sans-serif';
-  ctx.fillText('APRESENTE NO BAR', PX_W / 2, pxH - 36, PX_W - 24);
+  ctx.fillText('APRESENTE NO BAR', PX_W / 2, pxH - MARGIN_BOTTOM - 22, PX_W - 24);
   ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
-  ctx.fillText(when, PX_W / 2, pxH - 14, PX_W - 24);
+  ctx.fillText(when, PX_W / 2, pxH - MARGIN_BOTTOM - 4, PX_W - 24);
 }
 
 function drawUnica(
@@ -293,23 +293,25 @@ function drawUnica(
   return (async () => {
     const nome = (ticket.nome || 'FICHA').toUpperCase();
     const headerH = 24;
-    const footerH = 24;
-    const midY = headerH;
-    const midH = pxH - headerH - footerH;
+    const dateH = 22;
+    const logoX = MARGIN_X;
+    const logoY = headerH;
+    const logoW = PX_W - MARGIN_X * 2;
+    const logoH = pxH - headerH - dateH - MARGIN_BOTTOM;
 
     ctx.font = 'bold 15px Arial, Helvetica, sans-serif';
     ctx.fillText(
       festival.slice(0, 42).toUpperCase(),
       PX_W / 2,
       headerH / 2,
-      PX_W - 24
+      PX_W - MARGIN_X * 2
     );
 
     let drewLogo = false;
     if (ticket.logo?.startsWith('data:image/')) {
       try {
         const img = await loadImage(ticket.logo);
-        drawCover(ctx, img, 0, midY, PX_W, midH);
+        drawContain(ctx, img, logoX, logoY, logoW, logoH);
         drewLogo = true;
       } catch {
         drewLogo = false;
@@ -317,12 +319,17 @@ function drawUnica(
     }
 
     if (!drewLogo) {
-      drawNomeBar(ctx, nome, midY, midH);
+      drawNomeBar(ctx, nome, logoY, logoH);
     }
 
     ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
     ctx.fillStyle = '#000';
-    ctx.fillText(when, PX_W / 2, pxH - footerH / 2, PX_W - 24);
+    ctx.fillText(
+      when,
+      PX_W / 2,
+      pxH - MARGIN_BOTTOM - dateH / 2,
+      PX_W - MARGIN_X * 2
+    );
   })();
 }
 
@@ -379,7 +386,7 @@ export type PrintItem = {
 /**
  * 2 vias e ficha unica sao independentes:
  * - ficha_2_vias → barman (sabor) + cliente (codigo)
- * - imprime_ficha (sem 2 vias) → ficha unica 25mm
+ * - imprime_ficha (sem 2 vias) → ficha unica 28mm
  */
 export function expandFichas(items: PrintItem[]): FichaTicket[] {
   const out: FichaTicket[] = [];

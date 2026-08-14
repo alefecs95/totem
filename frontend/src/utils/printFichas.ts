@@ -3,14 +3,16 @@ import { readProductFichaLogos } from './fichas';
 
 /** Largura = 100% do rolo 80mm. */
 export const FICHA_LARGURA_MM = 80;
-export const FICHA_UNICA_ALTURA_MM = 25;
-export const FICHA_2VIAS_ALTURA_MM = 50;
+export const FICHA_UNICA_ALTURA_MM = 28;
+export const FICHA_2VIAS_ALTURA_MM = 54;
 /** @deprecated — use FICHA_UNICA_ALTURA_MM */
 export const FICHA_ALTURA_MM = FICHA_UNICA_ALTURA_MM;
 
 const PX_W = 576;
-const PX_H_UNICA = 200;
-const PX_H_2VIAS = 400;
+const PX_H_UNICA = 224;
+const PX_H_2VIAS = 432;
+const MARGIN_X = 32;
+const MARGIN_BOTTOM = 48;
 
 export function ticketHeightMm(via?: FichaVia): number {
   return via === 'barman' || via === 'cliente'
@@ -63,7 +65,7 @@ function toThermalMono(ctx: CanvasRenderingContext2D, w: number, h: number): voi
   ctx.putImageData(data, 0, 0);
 }
 
-function drawCoverImage(
+function drawContainImage(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
   x: number,
@@ -71,17 +73,15 @@ function drawCoverImage(
   boxW: number,
   boxH: number
 ): void {
-  const scale = Math.max(boxW / img.naturalWidth, boxH / img.naturalHeight);
-  const dw = Math.max(1, Math.floor(img.naturalWidth * scale));
-  const dh = Math.max(1, Math.floor(img.naturalHeight * scale));
+  const iw = img.naturalWidth || img.width;
+  const ih = img.naturalHeight || img.height;
+  if (!iw || !ih || boxW <= 0 || boxH <= 0) return;
+  const scale = Math.min(boxW / iw, boxH / ih);
+  const dw = Math.max(1, Math.floor(iw * scale));
+  const dh = Math.max(1, Math.floor(ih * scale));
   const dx = x + Math.floor((boxW - dw) / 2);
   const dy = y + Math.floor((boxH - dh) / 2);
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, boxW, boxH);
-  ctx.clip();
   ctx.drawImage(img, dx, dy, dw, dh);
-  ctx.restore();
 }
 
 function resolveLogo(ticket: FichaTicket): string | null {
@@ -201,9 +201,9 @@ async function renderFichaBitmap(
 
     ctx.fillStyle = '#000';
     ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
-    ctx.fillText(`CODIGO  ${codigo}`, PX_W / 2, pxH - 36, PX_W - 24);
+    ctx.fillText(`CODIGO  ${codigo}`, PX_W / 2, pxH - MARGIN_BOTTOM - 22, PX_W - 24);
     ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
-    ctx.fillText(when, PX_W / 2, pxH - 14, PX_W - 24);
+    ctx.fillText(when, PX_W / 2, pxH - MARGIN_BOTTOM - 4, PX_W - 24);
   } else if (via === 'cliente') {
     ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
     ctx.fillText('CLIENTE', PX_W / 2, 24, PX_W - 24);
@@ -228,25 +228,26 @@ async function renderFichaBitmap(
 
     ctx.fillStyle = '#000';
     ctx.font = 'bold 14px Arial, Helvetica, sans-serif';
-    ctx.fillText('APRESENTE NO BAR', PX_W / 2, pxH - 36, PX_W - 24);
+    ctx.fillText('APRESENTE NO BAR', PX_W / 2, pxH - MARGIN_BOTTOM - 22, PX_W - 24);
     ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
-    ctx.fillText(when, PX_W / 2, pxH - 14, PX_W - 24);
+    ctx.fillText(when, PX_W / 2, pxH - MARGIN_BOTTOM - 4, PX_W - 24);
   } else {
     const headerH = 24;
-    const footerH = 24;
-    const midY = headerH;
-    const midH = pxH - headerH - footerH;
-    const padX = 12;
+    const dateH = 22;
+    const logoX = MARGIN_X;
+    const logoY = headerH;
+    const logoW = PX_W - MARGIN_X * 2;
+    const logoH = pxH - headerH - dateH - MARGIN_BOTTOM;
 
     ctx.font = 'bold 15px Arial, Helvetica, sans-serif';
-    ctx.fillText(festival.slice(0, 42), PX_W / 2, headerH / 2, PX_W - padX * 2);
+    ctx.fillText(festival.slice(0, 42), PX_W / 2, headerH / 2, PX_W - MARGIN_X * 2);
 
     const logoSrc = resolveLogo(ticket);
     let drewLogo = false;
     if (logoSrc) {
       try {
         const img = await loadImage(logoSrc);
-        drawCoverImage(ctx, img, 0, midY, PX_W, midH);
+        drawContainImage(ctx, img, logoX, logoY, logoW, logoH);
         drewLogo = true;
       } catch {
         drewLogo = false;
@@ -256,18 +257,23 @@ async function renderFichaBitmap(
     if (!drewLogo) {
       ctx.fillStyle = '#000000';
       const barPad = 6;
-      ctx.fillRect(padX, midY + barPad, PX_W - padX * 2, midH - barPad * 2);
+      ctx.fillRect(logoX, logoY + barPad, logoW, logoH - barPad * 2);
       ctx.fillStyle = '#ffffff';
       const len = nome.length;
       const fontSize = len <= 10 ? 30 : len <= 16 ? 24 : len <= 22 ? 18 : 16;
       ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
-      ctx.fillText(nome, PX_W / 2, midY + midH / 2, PX_W - padX * 4);
+      ctx.fillText(nome, PX_W / 2, logoY + logoH / 2, logoW - 16);
       ctx.fillStyle = '#000000';
     }
 
     ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
     ctx.fillStyle = '#000000';
-    ctx.fillText(when, PX_W / 2, pxH - footerH / 2, PX_W - padX * 2);
+    ctx.fillText(
+      when,
+      PX_W / 2,
+      pxH - MARGIN_BOTTOM - dateH / 2,
+      PX_W - MARGIN_X * 2
+    );
   }
 
   toThermalMono(ctx, PX_W, pxH);
@@ -482,7 +488,7 @@ export function buildFichasHtml(
 }
 
 /**
- * Imprime fichas via iframe. Agrupa por altura (25mm unica / 50mm 2 vias).
+ * Imprime fichas via iframe. Agrupa por altura (unica / 2 vias).
  */
 export function printFichasViaIframe(
   tickets: FichaTicket[],
