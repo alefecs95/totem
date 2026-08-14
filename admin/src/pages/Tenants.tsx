@@ -1223,8 +1223,9 @@ export default function Tenants() {
                     placeholder="email@conta.sumup.com"
                   />
                   <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
-                    E-mail da conta SumUp que recebe Pix online. Obrigatório para
-                    Pix quando o gateway é SumUp.
+                    Opcional. Se vazio, usamos o e-mail da conta SumUp da API Key
+                    (a mesma da Solo) + Merchant Code.
+                  </p>
                   </p>
                 </Field>
 

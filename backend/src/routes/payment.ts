@@ -18,6 +18,7 @@ import {
   getSumUpPaymentStatus,
   getSumUpReaderStatus,
   resolveTenantSumUpConfig,
+  resolveSumUpPayToEmail,
   terminateSumUpReaderCheckout,
   SumUpError,
 } from '../services/sumup';
@@ -125,10 +126,16 @@ router.post('/pix', async (req, res) => {
         });
         return;
       }
-      if (!sumup.payToEmail) {
+      const payToEmail = await resolveSumUpPayToEmail({
+        apiKey: sumup.apiKey,
+        payToEmail: sumup.payToEmail,
+        fallbackEmail: (tenant.email as string | null) ?? null,
+      });
+      if (!payToEmail && !sumup.merchantCode) {
         res.status(400).json({
-          error: 'missing_pay_to_email',
-          detalhe: 'Configure o Pay To Email SumUp no admin do organizador.',
+          error: 'missing_sumup_config',
+          detalhe:
+            'Use as mesmas credenciais da Solo (API Key + Merchant Code). O e-mail da conta SumUp e preenchido automaticamente.',
         });
         return;
       }
@@ -139,8 +146,10 @@ router.post('/pix', async (req, res) => {
         apiKey: sumup.apiKey,
         total,
         tenantId,
-        payToEmail: sumup.payToEmail,
+        payToEmail,
+        merchantCode: sumup.merchantCode,
         returnUrl,
+        redirectUrl: env.frontendUrl || undefined,
       });
       paymentId = pixResult.checkoutId;
       pixCode = pixResult.pixCode;
@@ -207,6 +216,8 @@ router.post('/pix', async (req, res) => {
       paymentId,
       expiresIn,
       transactionId: insert.rows[0].id,
+      gateway,
+      checkoutId: gateway === 'sumup' ? paymentId : null,
     });
   } catch (err) {
     console.error('Erro ao criar pagamento Pix:', err);

@@ -108,6 +108,31 @@ export function resolveTenantSumUpConfig(tenant: TenantSumUpFields) {
   };
 }
 
+/** E-mail da conta SumUp (API Key da Solo). Usado no checkout Pix se Pay To Email estiver vazio. */
+export async function fetchSumUpAccountEmail(
+  apiKey: string
+): Promise<string | null> {
+  const response = await fetch(`${SUMUP_API_BASE}/me`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  const body = await parseSumUpResponse(response);
+  if (!response.ok) return null;
+  const email = trimField((body as { email?: string }).email);
+  return email || null;
+}
+
+export async function resolveSumUpPayToEmail(input: {
+  apiKey: string;
+  payToEmail?: string | null;
+  fallbackEmail?: string | null;
+}): Promise<string | null> {
+  if (input.payToEmail) return input.payToEmail;
+  const fromAccount = await fetchSumUpAccountEmail(input.apiKey);
+  if (fromAccount) return fromAccount;
+  const fallback = trimField(input.fallbackEmail);
+  return fallback || null;
+}
+
 export function getTenantCardSurchargeConfig(
   tenant: TenantSumUpFields
 ): CardSurchargeConfig {
@@ -126,8 +151,10 @@ interface CreateSumUpPixParams {
   apiKey: string;
   total: number;
   tenantId: string;
-  payToEmail: string;
+  payToEmail?: string | null;
+  merchantCode?: string | null;
   returnUrl?: string;
+  redirectUrl?: string;
 }
 
 export interface SumUpPixResult {
@@ -141,10 +168,12 @@ export async function createSumUpPixPayment({
   total,
   tenantId,
   payToEmail,
+  merchantCode,
   returnUrl,
+  redirectUrl,
 }: CreateSumUpPixParams): Promise<SumUpPixResult> {
-  if (!payToEmail?.trim()) {
-    throw new Error('Pay To Email não configurado para este organizador');
+  if (!payToEmail?.trim() && !merchantCode?.trim()) {
+    throw new Error('Conta SumUp incompleta: informe Merchant Code (Solo) ou Pay To Email');
   }
   const response = await fetch(`${SUMUP_API_BASE}/checkouts`, {
     method: 'POST',
@@ -157,9 +186,11 @@ export async function createSumUpPixPayment({
       amount: total,
       currency: 'BRL',
       description: 'Fichas Festival',
-      pay_to_email: payToEmail,
       payment_types: ['card', 'pix'],
+      ...(payToEmail ? { pay_to_email: payToEmail } : {}),
+      ...(merchantCode ? { merchant_code: merchantCode } : {}),
       ...(returnUrl ? { return_url: returnUrl } : {}),
+      ...(redirectUrl ? { redirect_url: redirectUrl } : {}),
     }),
   });
 

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { login } from '../eventPortal/services/api';
+import '../eventPortal/evento.css';
 
 export default function EventLogin() {
   const navigate = useNavigate();
@@ -31,89 +32,59 @@ export default function EventLogin() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'linear-gradient(135deg, #9a3412 0%, #ea580c 100%)',
-      }}
-    >
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          background: '#fff',
-          padding: 32,
-          borderRadius: 16,
-          width: 380,
-          boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}
-      >
-        <h1 style={{ margin: 0, fontSize: 22, color: '#9a3412' }}>
-          Adm do evento
-        </h1>
-        <p style={{ margin: 0, color: '#78716c', fontSize: 14 }}>
-          Entre com o e-mail e a senha do organizador. Você vai para o painel
-          do seu festival.
-        </p>
+    <div className="login-shell">
+      <section className="login-hero">
+        <div className="login-hero-inner">
+          <div className="evento-login-mark">TF</div>
+          <h1>O painel do seu festival</h1>
+          <p>
+            Vendas, produtos, totens e equipe em um só lugar — feito para o ritmo
+            do evento, não para planilha.
+          </p>
+        </div>
+      </section>
 
-        <label style={{ fontSize: 13, color: '#44403c', fontWeight: 600 }}>
-          E-mail
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoFocus
-            style={inputStyle}
-          />
-        </label>
+      <section className="login-panel">
+        <form className="login-card" onSubmit={handleSubmit}>
+          <h2>Adm do evento</h2>
+          <p className="sub">
+            Entre com o e-mail e a senha que você recebeu. Vamos abrir o painel
+            do seu festival.
+          </p>
 
-        <label style={{ fontSize: 13, color: '#44403c', fontWeight: 600 }}>
-          Senha
-          <input
-            type="password"
-            value={senha}
-            onChange={(e) => setSenha(e.target.value)}
-            required
-            style={inputStyle}
-          />
-        </label>
+          <label className="field">
+            <span>E-mail</span>
+            <input
+              className="input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoFocus
+            />
+          </label>
 
-        {erro && <div style={{ color: '#dc2626', fontSize: 13 }}>{erro}</div>}
+          <label className="field">
+            <span>Senha</span>
+            <input
+              className="input"
+              type="password"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              required
+            />
+          </label>
 
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            padding: '12px',
-            borderRadius: 8,
-            border: 'none',
-            background: '#ea580c',
-            color: '#fff',
-            fontWeight: 700,
-            cursor: loading ? 'default' : 'pointer',
-            opacity: loading ? 0.6 : 1,
-          }}
-        >
-          {loading ? 'Entrando...' : 'Entrar no meu evento'}
-        </button>
-      </form>
+          {erro && <div className="login-error">{erro}</div>}
+
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? 'Entrando...' : 'Entrar no meu evento'}
+          </button>
+          <p className="sub" style={{ marginTop: 16, marginBottom: 0 }}>
+            <Link to="/">Sou super admin</Link>
+          </p>
+        </form>
+      </section>
     </div>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  marginTop: 6,
-  padding: '10px 12px',
-  borderRadius: 8,
-  border: '1px solid #d6d3d1',
-  fontSize: 14,
-  fontWeight: 400,
-  boxSizing: 'border-box',
-};

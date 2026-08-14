@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Sans:wght@400;600;700;800&display=swap');
+
 html, body, #root {
   margin: 0;
   min-height: 100%;
@@ -8,6 +10,142 @@ html, body, #root {
   box-sizing: border-box;
 }
 
+body {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  background: #0c0a09;
+  color: #fff;
+  -webkit-font-smoothing: antialiased;
+}
+
 button, input, select {
   font-family: inherit;
+}
+
+.pdv-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 320;
+  padding: 16px;
+  backdrop-filter: blur(4px);
+}
+
+.pdv-pix-card {
+  background: #1c1917;
+  border-radius: 18px;
+  padding: 22px;
+  width: min(520px, 100%);
+  max-height: 92vh;
+  overflow: auto;
+  border: 2px solid #22c55e;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+.pdv-pix-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.pdv-pix-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #4ade80;
+}
+
+.pdv-pix-head h2 {
+  margin: 4px 0 0;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 36px;
+  letter-spacing: 1px;
+}
+
+.pdv-pix-total {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 40px;
+  color: #ea580c;
+  line-height: 1;
+}
+
+.pdv-pix-hint {
+  color: #a8a29e;
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+.pdv-pix-error {
+  color: #fecaca;
+  background: #7f1d1d;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pdv-pix-widget {
+  background: #fff;
+  color: #1c1917;
+  border-radius: 12px;
+  padding: 12px;
+  min-height: 280px;
+}
+
+.pdv-pix-widget .pdv-pix-hint {
+  color: #57534e;
+}
+
+.pdv-pix-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.pdv-pix-wait {
+  text-align: center;
+  color: #a8a29e;
+  font-size: 13px;
+  margin: 14px 0 8px;
+}
+
+.pdv-sumup-host {
+  min-height: 240px;
+}
+
+.pdv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.pdv-btn-primary {
+  background: #ea580c;
+  color: #fff;
+  border-color: #c2410c;
+}
+
+.pdv-btn-ghost {
+  background: transparent;
+  color: #fff;
+  border-color: #57534e;
+}
+
+.pdv-product:hover {
+  filter: brightness(1.08);
 }

@@ -14,71 +14,45 @@ export default function Totens() {
 
   return (
     <div>
-      <h1 style={{ marginTop: 0, color: '#9a3412' }}>Totens</h1>
-      <p style={{ color: '#78716c', marginTop: 0 }}>
-        Acompanhe o status e a última atividade de cada totem locado.
-      </p>
+      <div className="evento-page-head">
+        <div>
+          <div className="evento-kicker">Pontos de venda</div>
+          <h1>Totens</h1>
+          <p>Status e último acesso de cada totem locado para o seu festival.</p>
+        </div>
+      </div>
 
       {loading ? (
-        <p>Carregando...</p>
+        <div className="evento-totem-grid">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="evento-skel" />
+          ))}
+        </div>
+      ) : totens.length === 0 ? (
+        <div className="empty-state">
+          Nenhum totem cadastrado. Peça ao super admin para criar.
+        </div>
       ) : (
-        <table style={tableStyle}>
-          <thead>
-            <tr>
-              <th style={th}>Nome</th>
-              <th style={th}>Local</th>
-              <th style={th}>Status</th>
-              <th style={th}>Último acesso</th>
-            </tr>
-          </thead>
-          <tbody>
-            {totens.map((t) => (
-              <tr key={t.id}>
-                <td style={td}>{t.nome}</td>
-                <td style={td}>{t.local ?? '—'}</td>
-                <td style={td}>
-                  <span style={{ color: t.ativo ? '#16a34a' : '#dc2626' }}>
-                    {t.ativo ? 'Ativo' : 'Inativo'}
-                  </span>
-                </td>
-                <td style={td}>
-                  {t.ultimo_acesso
-                    ? formatDateTime(t.ultimo_acesso)
-                    : 'Nunca acessou'}
-                </td>
-              </tr>
-            ))}
-            {totens.length === 0 && (
-              <tr>
-                <td colSpan={4} style={td}>
-                  Nenhum totem cadastrado. Peça ao administrador para criar.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <div className="evento-totem-grid">
+          {totens.map((t) => (
+            <article key={t.id} className="evento-totem">
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <h3>{t.nome}</h3>
+                <span className={t.ativo ? 'badge badge-ok' : 'badge badge-off'}>
+                  {t.ativo ? 'Ativo' : 'Inativo'}
+                </span>
+              </div>
+              <p className="evento-muted" style={{ margin: '8px 0 12px' }}>
+                {t.local || 'Local não informado'}
+              </p>
+              <div className="evento-muted">
+                Último acesso:{' '}
+                {t.ultimo_acesso ? formatDateTime(t.ultimo_acesso) : 'nunca'}
+              </div>
+            </article>
+          ))}
+        </div>
       )}
     </div>
   );
 }
-
-const tableStyle: React.CSSProperties = {
-  width: '100%',
-  background: '#fff',
-  borderRadius: 12,
-  borderCollapse: 'collapse',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-};
-
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  padding: 12,
-  borderBottom: '1px solid #e7e5e4',
-  color: '#78716c',
-  fontSize: 13,
-};
-
-const td: React.CSSProperties = {
-  padding: 12,
-  borderBottom: '1px solid #f5f5f4',
-};

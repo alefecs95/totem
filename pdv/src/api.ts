@@ -191,3 +191,31 @@ export async function cancelCardPayment(input: {
     ...(input.deviceId ? { deviceId: input.deviceId } : {}),
   });
 }
+
+export async function createPixPayment(input: {
+  tenantId: string;
+  items: Array<{ productId: string; quantidade: number }>;
+  total: number;
+}): Promise<{
+  paymentId: string;
+  pixCode: string;
+  qrCodeBase64: string;
+  gateway?: 'sumup' | 'mercadopago';
+  checkoutId?: string | null;
+}> {
+  const { data } = await axios.post(`${getApiBase()}/payment/pix`, {
+    tenantId: input.tenantId,
+    items: input.items,
+    total: input.total,
+  });
+  return data;
+}
+
+export async function getPaymentStatus(
+  paymentId: string
+): Promise<{ status: string }> {
+  const { data } = await axios.get(
+    `${getApiBase()}/payment/status/${encodeURIComponent(paymentId)}`
+  );
+  return data;
+}

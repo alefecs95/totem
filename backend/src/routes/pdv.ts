@@ -96,7 +96,10 @@ router.get('/:codigo', async (req, res) => {
       tenant.mp_access_token &&
         isValidMpDeviceId(tenant.mp_device_id as string)
     );
-    const sumupPix = Boolean(tenant.sumup_api_key && tenant.sumup_pay_to_email);
+    const sumupPix = Boolean(
+      tenant.sumup_api_key &&
+        (tenant.sumup_pay_to_email || tenant.sumup_merchant_code)
+    );
     const mpPix = Boolean(tenant.mp_access_token);
 
     res.json({

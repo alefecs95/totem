@@ -1,6 +1,6 @@
 {
   "name": "totem-pdv",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "PDV Electron — venda e impressão de fichas por código do evento",
   "main": "electron/main.cjs",

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+﻿import { useEffect, useState, type FormEvent } from 'react';
 import {
   createProduct,
   deleteProduct,
@@ -15,17 +15,17 @@ import {
 import { formatBRL } from '../utils/format';
 
 const EMOJI_POR_CATEGORIA: Record<ProductCategory, string> = {
-  bebida_alcoolica: '🍺',
-  bebida_nao_alcoolica: '🥤',
-  comida: '🍔',
-  outro: '🎟️',
+  bebida_alcoolica: 'ðŸº',
+  bebida_nao_alcoolica: 'ðŸ¥¤',
+  comida: 'ðŸ”',
+  outro: 'ðŸŽŸï¸',
 };
 
 const emptyForm: ProductInput = {
   nome: '',
   preco: 0,
   categoria: 'outro',
-  emoji: '🎟️',
+  emoji: 'ðŸŽŸï¸',
   cor: '#FF6B00',
   ativo: true,
   imprime_ficha: false,
@@ -77,7 +77,7 @@ export default function Products() {
       return false;
     }
     if (!form.preco || form.preco <= 0) {
-      setFormErro('O preço deve ser maior que zero.');
+      setFormErro('O preÃ§o deve ser maior que zero.');
       return false;
     }
     setFormErro('');
@@ -152,33 +152,37 @@ export default function Products() {
 
   return (
     <div>
-      <h1 style={{ marginTop: 0, color: '#9a3412' }}>Produtos</h1>
-      <p style={{ color: '#78716c', marginTop: 0 }}>
-        Cadastro rápido — preencha e salve. Itens aparecem no totem na hora.
-      </p>
+      <div className="evento-page-head">
+        <div>
+          <div className="evento-kicker">CardÃ¡pio</div>
+          <h1>Produtos</h1>
+          <p>
+            Cadastre e publique na hora. O que estiver ativo aparece no totem e
+            no PDV.
+          </p>
+        </div>
+      </div>
 
-      {toast && <div style={toastStyle}>{toast}</div>}
+      {toast && <div className="evento-toast">{toast}</div>}
 
-      <form onSubmit={salvar} style={formCard}>
-        <h2 style={{ margin: '0 0 12px', fontSize: 18 }}>
-          {editingId ? 'Editar produto' : 'Novo produto'}
-        </h2>
+      <form onSubmit={salvar} className="evento-card" style={{ marginBottom: 20 }}>
+        <h2>{editingId ? 'Editar produto' : 'Novo produto'}</h2>
 
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
-          <label style={label}>
-            Nome *
+          <label className="field">
+            <span>Nome</span>
             <input
-              style={input}
+              className="input"
               value={form.nome}
               onChange={(e) => setForm({ ...form, nome: e.target.value })}
               placeholder="Ex.: Ficha de Cerveja"
               autoFocus
             />
           </label>
-          <label style={label}>
-            Preço (R$) *
+          <label className="field">
+            <span>PreÃ§o (R$)</span>
             <input
-              style={input}
+              className="input"
               type="number"
               step="0.01"
               min="0.01"
@@ -191,10 +195,10 @@ export default function Products() {
           </label>
         </div>
 
-        <label style={label}>
-          Categoria *
+        <label className="field" style={{ marginTop: 12 }}>
+          <span>Categoria</span>
           <select
-            style={input}
+            className="input"
             value={form.categoria}
             onChange={(e) => {
               const categoria = e.target.value as ProductCategory;
@@ -213,30 +217,39 @@ export default function Products() {
           </select>
         </label>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input
-            type="checkbox"
-            checked={Boolean(form.imprime_ficha)}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                imprime_ficha: e.target.checked,
-              })
-            }
-          />
-          Imprime ficha unica (80×25mm)
-        </label>
-
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input
-            type="checkbox"
-            checked={Boolean(form.ficha_2_vias)}
-            onChange={(e) =>
-              setForm({ ...form, ficha_2_vias: e.target.checked })
-            }
-          />
-          2 vias 80×50mm: barman (sabor grande) + cliente (so codigo)
-        </label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
+          <label className="evento-check">
+            <input
+              type="checkbox"
+              checked={Boolean(form.imprime_ficha)}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  imprime_ficha: e.target.checked,
+                })
+              }
+            />
+            Imprime ficha Ãºnica (80Ã—25mm)
+          </label>
+          <label className="evento-check">
+            <input
+              type="checkbox"
+              checked={Boolean(form.ficha_2_vias)}
+              onChange={(e) =>
+                setForm({ ...form, ficha_2_vias: e.target.checked })
+              }
+            />
+            2 vias 80Ã—50mm: barman (sabor) + cliente (cÃ³digo)
+          </label>
+          <label className="evento-check">
+            <input
+              type="checkbox"
+              checked={form.ativo}
+              onChange={(e) => setForm({ ...form, ativo: e.target.checked })}
+            />
+            Ativo no totem
+          </label>
+        </div>
 
         {form.imprime_ficha && (
           <div
@@ -248,11 +261,12 @@ export default function Products() {
               borderRadius: 10,
               border: '1px solid #fcd34d',
               background: '#fffbeb',
+              marginTop: 14,
             }}
           >
             <strong style={{ fontSize: 13 }}>Logo deste produto na ficha</strong>
-            <span style={{ fontSize: 12, color: '#78716c' }}>
-              Individual por produto. Sem logo, imprime o nome do produto.
+            <span className="evento-muted">
+              Individual por produto. Sem logo, imprime o nome.
             </span>
             <input
               type="file"
@@ -261,14 +275,14 @@ export default function Products() {
                 const file = e.target.files?.[0];
                 if (!file) return;
                 if (file.size > 700_000) {
-                  setFormErro('Logo muito grande (máx. ~700 KB).');
+                  setFormErro('Logo muito grande (mÃ¡x. ~700 KB).');
                   return;
                 }
                 const reader = new FileReader();
                 reader.onload = () => {
                   const result = String(reader.result || '');
                   if (!result.startsWith('data:image/')) {
-                    setFormErro('Não foi possível ler a imagem.');
+                    setFormErro('NÃ£o foi possÃ­vel ler a imagem.');
                     return;
                   }
                   setForm((prev) => ({ ...prev, ficha_logo_data: result }));
@@ -281,7 +295,7 @@ export default function Products() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <img
                   src={form.ficha_logo_data}
-                  alt="Prévia"
+                  alt="PrÃ©via"
                   style={{
                     width: 200,
                     height: 62,
@@ -296,7 +310,7 @@ export default function Products() {
                   onClick={() =>
                     setForm((prev) => ({ ...prev, ficha_logo_data: null }))
                   }
-                  style={btnSecondary}
+                  className="btn btn-secondary"
                 >
                   Remover logo
                 </button>
@@ -305,170 +319,76 @@ export default function Products() {
           </div>
         )}
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input
-            type="checkbox"
-            checked={form.ativo}
-            onChange={(e) => setForm({ ...form, ativo: e.target.checked })}
-          />
-          Ativo no totem
-        </label>
+        {formErro && <div className="evento-error" style={{ marginTop: 10 }}>{formErro}</div>}
 
-        {formErro && <div style={erroStyle}>{formErro}</div>}
-
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button type="submit" disabled={saving} style={btnPrimary}>
-            {saving ? 'Salvando...' : editingId ? 'Salvar alterações' : 'Cadastrar produto'}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
+          <button type="submit" disabled={saving} className="btn btn-primary">
+            {saving ? 'Salvando...' : editingId ? 'Salvar alteraÃ§Ãµes' : 'Cadastrar produto'}
           </button>
           {editingId && (
-            <button type="button" onClick={resetForm} style={btnSecondary}>
-              Cancelar edição
+            <button type="button" onClick={resetForm} className="btn btn-secondary">
+              Cancelar
             </button>
           )}
         </div>
       </form>
 
       {loading ? (
-        <p>Carregando...</p>
+        <div className="evento-skel" />
+      ) : produtos.length === 0 ? (
+        <div className="empty-state">Nenhum produto ainda. Cadastre o primeiro acima.</div>
       ) : (
-        <div style={{ marginTop: 20 }}>
-          <h2 style={{ fontSize: 18, marginBottom: 12 }}>Seus produtos</h2>
-          {produtos.length === 0 ? (
-            <p style={{ color: '#78716c' }}>Nenhum produto cadastrado ainda.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {produtos.map((p) => (
-                <div
-                  key={p.id}
-                  style={{
-                    ...listItem,
-                    opacity: p.ativo ? 1 : 0.65,
-                    borderLeft: `4px solid ${p.cor}`,
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
-                    <span style={{ fontSize: 28 }}>{p.emoji}</span>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 16 }}>{p.nome}</div>
-                      <div style={{ color: '#78716c', fontSize: 13 }}>
-                        {PRODUCT_CATEGORY_LABELS[p.categoria]} · {formatBRL(p.preco)}
-                        {(p.ficha_2_vias || p.imprime_ficha) &&
-                          ` · ${[
-                            p.ficha_2_vias ? '2 vias' : null,
-                            p.imprime_ficha ? 'Ficha' : null,
-                          ]
-                            .filter(Boolean)
-                            .join(' · ')}`}
-                        {!p.ativo && ' · Inativo'}
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button onClick={() => iniciarEdicao(p)} style={btnSmall}>
-                      Editar
-                    </button>
-                    {p.ativo ? (
-                      <button
-                        onClick={() => desativar(p)}
-                        style={{ ...btnSmall, color: '#dc2626' }}
-                      >
-                        Desativar
-                      </button>
-                    ) : (
-                      <button onClick={() => reativar(p)} style={btnSmall}>
-                        Reativar
-                      </button>
-                    )}
+        <div className="evento-product-list">
+          {produtos.map((p) => (
+            <div
+              key={p.id}
+              className="evento-product"
+              style={{
+                opacity: p.ativo ? 1 : 0.6,
+                borderLeftColor: p.cor,
+              }}
+            >
+              <div className="evento-product-main">
+                <div className="evento-product-emoji">{p.emoji}</div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>{p.nome}</div>
+                  <div className="evento-muted">
+                    {PRODUCT_CATEGORY_LABELS[p.categoria]} Â· {formatBRL(p.preco)}
+                    {(p.ficha_2_vias || p.imprime_ficha) &&
+                      ` Â· ${[
+                        p.ficha_2_vias ? '2 vias' : null,
+                        p.imprime_ficha ? 'Ficha' : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' Â· ')}`}
                   </div>
                 </div>
-              ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span className={p.ativo ? 'badge badge-ok' : 'badge badge-off'}>
+                  {p.ativo ? 'Ativo' : 'Inativo'}
+                </span>
+                <button type="button" onClick={() => iniciarEdicao(p)} className="btn-link">
+                  Editar
+                </button>
+                {p.ativo ? (
+                  <button
+                    type="button"
+                    onClick={() => desativar(p)}
+                    className="btn-danger-text"
+                  >
+                    Desativar
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => reativar(p)} className="btn-link">
+                    Reativar
+                  </button>
+                )}
+              </div>
             </div>
-          )}
+          ))}
         </div>
       )}
     </div>
   );
 }
-
-const formCard: React.CSSProperties = {
-  background: '#fff',
-  borderRadius: 12,
-  padding: 20,
-  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 12,
-};
-
-const listItem: React.CSSProperties = {
-  background: '#fff',
-  borderRadius: 10,
-  padding: '14px 16px',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 12,
-  boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-  flexWrap: 'wrap',
-};
-
-const label: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  fontSize: 13,
-  fontWeight: 600,
-  color: '#44403c',
-};
-
-const input: React.CSSProperties = {
-  marginTop: 6,
-  padding: '10px 12px',
-  borderRadius: 8,
-  border: '1px solid #d6d3d1',
-  fontSize: 15,
-};
-
-const btnPrimary: React.CSSProperties = {
-  padding: '12px 18px',
-  borderRadius: 8,
-  border: 'none',
-  background: '#ea580c',
-  color: '#fff',
-  fontWeight: 700,
-  cursor: 'pointer',
-  fontSize: 15,
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: '12px 18px',
-  borderRadius: 8,
-  border: '1px solid #d6d3d1',
-  background: '#fff',
-  cursor: 'pointer',
-  fontSize: 15,
-};
-
-const btnSmall: React.CSSProperties = {
-  padding: '8px 12px',
-  borderRadius: 8,
-  border: '1px solid #fed7aa',
-  background: '#fff',
-  color: '#9a3412',
-  fontWeight: 600,
-  cursor: 'pointer',
-  fontSize: 13,
-};
-
-const toastStyle: React.CSSProperties = {
-  background: '#166534',
-  color: '#fff',
-  padding: '12px 16px',
-  borderRadius: 8,
-  marginBottom: 16,
-  fontWeight: 600,
-};
-
-const erroStyle: React.CSSProperties = {
-  color: '#dc2626',
-  fontSize: 14,
-};

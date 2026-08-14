@@ -7,6 +7,25 @@ import {
 } from '../services/api';
 import { formatBRL, formatDateTime } from '../utils/format';
 
+function statusClass(status: string) {
+  if (status === 'approved') return 'badge badge-ok';
+  if (status === 'pending') return 'badge badge-soft';
+  return 'badge badge-off';
+}
+
+function statusLabel(status: string) {
+  switch (status) {
+    case 'approved':
+      return 'Aprovada';
+    case 'pending':
+      return 'Pendente';
+    case 'rejected':
+      return 'Recusada';
+    default:
+      return status;
+  }
+}
+
 export default function Sales() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [totens, setTotens] = useState<Totem[]>([]);
@@ -39,36 +58,21 @@ export default function Sales() {
 
   useEffect(carregar, [totemId, dataInicio, dataFim, page]);
 
-  const statusLabel = (status: string) => {
-    switch (status) {
-      case 'approved':
-        return 'Aprovada';
-      case 'pending':
-        return 'Pendente';
-      case 'rejected':
-        return 'Recusada';
-      default:
-        return status;
-    }
-  };
-
   return (
     <div>
-      <h1 style={{ marginTop: 0, color: '#9a3412' }}>Vendas</h1>
+      <div className="evento-page-head">
+        <div>
+          <div className="evento-kicker">Caixa</div>
+          <h1>Vendas</h1>
+          <p>Filtre por totem e período para conferir cada transação e o repasse.</p>
+        </div>
+      </div>
 
-      <div
-        style={{
-          display: 'flex',
-          gap: 12,
-          flexWrap: 'wrap',
-          marginBottom: 16,
-          alignItems: 'flex-end',
-        }}
-      >
-        <label style={filtroLabel}>
-          Totem
+      <div className="filters">
+        <label className="field">
+          <span>Totem</span>
           <select
-            style={filtroInput}
+            className="input"
             value={totemId}
             onChange={(e) => {
               setPage(1);
@@ -83,11 +87,11 @@ export default function Sales() {
             ))}
           </select>
         </label>
-        <label style={filtroLabel}>
-          De
+        <label className="field">
+          <span>De</span>
           <input
+            className="input"
             type="date"
-            style={filtroInput}
             value={dataInicio}
             onChange={(e) => {
               setPage(1);
@@ -95,11 +99,11 @@ export default function Sales() {
             }}
           />
         </label>
-        <label style={filtroLabel}>
-          Até
+        <label className="field">
+          <span>Até</span>
           <input
+            className="input"
             type="date"
-            style={filtroInput}
             value={dataFim}
             onChange={(e) => {
               setPage(1);
@@ -110,67 +114,83 @@ export default function Sales() {
       </div>
 
       {loading ? (
-        <p>Carregando...</p>
+        <div className="evento-skel" style={{ height: 280 }} />
       ) : (
         <>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={th}>Data</th>
-                <th style={th}>Totem</th>
-                <th style={th}>Itens</th>
-                <th style={th}>Método</th>
-                <th style={th}>Valor</th>
-                <th style={th}>Status</th>
-                <th style={th}>Repasse</th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.map((t) => (
-                <tr key={t.id}>
-                  <td style={td}>{formatDateTime(t.criado_em)}</td>
-                  <td style={td}>{t.totem_nome ?? '—'}</td>
-                  <td style={td}>
-                    {(t.itens ?? []).map((item, i) => (
-                      <div key={i} style={{ fontSize: 13 }}>
-                        {item.quantidade}x {item.nome}
-                      </div>
-                    ))}
-                  </td>
-                  <td style={td}>{t.metodo}</td>
-                  <td style={td}>{formatBRL(t.valor_bruto)}</td>
-                  <td style={td}>{statusLabel(t.status)}</td>
-                  <td style={td}>
-                    {t.repasse_status === 'repassado' ? 'Repassado' : 'Pendente'}
-                  </td>
-                </tr>
-              ))}
-              {transactions.length === 0 && (
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
                 <tr>
-                  <td colSpan={7} style={td}>
-                    Nenhuma venda encontrada.
-                  </td>
+                  <th>Data</th>
+                  <th>Totem</th>
+                  <th>Itens</th>
+                  <th>Método</th>
+                  <th>Valor</th>
+                  <th>Status</th>
+                  <th>Repasse</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {transactions.map((t) => (
+                  <tr key={t.id}>
+                    <td>{formatDateTime(t.criado_em)}</td>
+                    <td>{t.totem_nome ?? '—'}</td>
+                    <td>
+                      {(t.itens ?? []).map((item, i) => (
+                        <div key={i} className="evento-muted">
+                          {item.quantidade}× {item.nome}
+                        </div>
+                      ))}
+                    </td>
+                    <td>{t.metodo}</td>
+                    <td style={{ fontWeight: 700 }}>{formatBRL(t.valor_bruto)}</td>
+                    <td>
+                      <span className={statusClass(t.status)}>
+                        {statusLabel(t.status)}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        className={
+                          t.repasse_status === 'repassado'
+                            ? 'badge badge-ok'
+                            : 'badge badge-soft'
+                        }
+                      >
+                        {t.repasse_status === 'repassado' ? 'Repassado' : 'Pendente'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {transactions.length === 0 && (
+                  <tr>
+                    <td colSpan={7}>
+                      <div className="empty-state">Nenhuma venda neste filtro.</div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
 
           {totalPaginas > 1 && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, alignItems: 'center' }}>
               <button
+                type="button"
+                className="btn btn-secondary"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
-                style={pageBtn}
               >
                 Anterior
               </button>
-              <span style={{ alignSelf: 'center', color: '#78716c' }}>
+              <span className="evento-muted">
                 Página {page} de {totalPaginas}
               </span>
               <button
+                type="button"
+                className="btn btn-secondary"
                 disabled={page >= totalPaginas}
                 onClick={() => setPage((p) => p + 1)}
-                style={pageBtn}
               >
                 Próxima
               </button>
@@ -181,49 +201,3 @@ export default function Sales() {
     </div>
   );
 }
-
-const tableStyle: React.CSSProperties = {
-  width: '100%',
-  background: '#fff',
-  borderRadius: 12,
-  borderCollapse: 'collapse',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-  fontSize: 14,
-};
-
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  padding: 12,
-  borderBottom: '1px solid #e7e5e4',
-  color: '#78716c',
-};
-
-const td: React.CSSProperties = {
-  padding: 12,
-  borderBottom: '1px solid #f5f5f4',
-  verticalAlign: 'top',
-};
-
-const filtroLabel: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  fontSize: 13,
-  fontWeight: 600,
-  color: '#44403c',
-};
-
-const filtroInput: React.CSSProperties = {
-  marginTop: 4,
-  padding: '8px 10px',
-  borderRadius: 8,
-  border: '1px solid #d6d3d1',
-  minWidth: 140,
-};
-
-const pageBtn: React.CSSProperties = {
-  padding: '8px 14px',
-  borderRadius: 8,
-  border: '1px solid #d6d3d1',
-  background: '#fff',
-  cursor: 'pointer',
-};

@@ -28,6 +28,7 @@ import {
   type QueuedPdvSale,
 } from './offline';
 import { expandFichas, renderFichaPage, countDualUnits, type PrintItem } from './printFichas';
+import { PixModal } from './PixModal';
 
 type CartLine = PdvProduct & { quantidade: number };
 
@@ -112,6 +113,8 @@ function PayBtn({
         fontSize: primary ? 17 : 14,
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.35 : 1,
+        boxShadow: primary ? '0 8px 20px rgba(0,0,0,0.28)' : 'none',
+        letterSpacing: 0.4,
         gridColumn: primary ? '1 / -1' : undefined,
         display: 'flex',
         flexDirection: 'column',
@@ -154,6 +157,11 @@ export default function App() {
   );
   const [cardPickerOpen, setCardPickerOpen] = useState(false);
   const [gatewayPickerOpen, setGatewayPickerOpen] = useState(false);
+  const [pixJob, setPixJob] = useState<{
+    items: Array<{ productId: string; quantidade: number }>;
+    printItems: PrintItem[];
+    total: number;
+  } | null>(null);
   const [salesOpen, setSalesOpen] = useState(false);
   const [sales, setSales] = useState<PdvSale[]>([]);
   const [salesLoading, setSalesLoading] = useState(false);
@@ -220,7 +228,8 @@ export default function App() {
   );
   const pendingQty =
     qtyDigits === '' ? 1 : Math.max(1, parseInt(qtyDigits, 10) || 1);
-  const canPay = cart.length > 0 && !pagando;
+  const canPay = cart.length > 0 && !pagando && !pixJob;
+  const pixOk = Boolean(config?.pagamentos?.pix);
   const hasPendingCard = pendingCards.length > 0;
   const cardDetail = cardDetailId
     ? pendingCards.find((p) => p.localId === cardDetailId) ?? null
@@ -901,6 +910,35 @@ export default function App() {
     setErro('');
   };
 
+  const abrirPix = () => {
+    if (!canPay || !config) return;
+    setPixJob({
+      items: cart.map((i) => ({ productId: i.id, quantidade: i.quantidade })),
+      printItems: cart.map((i) => ({
+        nome: i.nome,
+        quantidade: i.quantidade,
+        imprime_ficha: i.imprime_ficha,
+        ficha_2_vias: i.ficha_2_vias,
+        ficha_logo_data: i.ficha_logo_data,
+      })),
+      total: Math.round(total * 100) / 100,
+    });
+    setErro('');
+  };
+
+  const pixJobRef = useRef(pixJob);
+  pixJobRef.current = pixJob;
+
+  const onPixPaid = useCallback(() => {
+    const job = pixJobRef.current;
+    const nome = config?.nomeFestival;
+    setPixJob(null);
+    if (job && nome) imprimirFichasBg(job.printItems, nome);
+    limpar();
+    setToast('PIX aprovado!');
+    reclaimFocus();
+  }, [config?.nomeFestival]);
+
   useEffect(() => {
     if (!config) return;
     const onKey = (e: KeyboardEvent) => {
@@ -909,6 +947,15 @@ export default function App() {
       if (tag === 'SELECT') {
         (e.target as HTMLElement).blur();
         reclaimFocus();
+      }
+
+      if (pixJob) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setPixJob(null);
+          reclaimFocus();
+        }
+        return;
       }
 
       if (cardDetail) {
@@ -967,6 +1014,9 @@ export default function App() {
       } else if (e.key === 'Enter' || e.key.toLowerCase() === 'd') {
         e.preventDefault();
         abrirDinheiro();
+      } else if (e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        if (pixOk) abrirPix();
       } else if (e.key.toLowerCase() === 'f') {
         e.preventDefault();
         if (canPay) void finalizarManual('cartao_fisico');
@@ -1014,8 +1064,16 @@ export default function App() {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={pdvBadge}>PDV</span>
-              <strong>Entrar no evento</strong>
+              <div>
+                <strong style={{ fontSize: 18 }}>Totem Festival</strong>
+                <div style={{ fontSize: 13, color: '#a8a29e', marginTop: 2 }}>
+                  Caixa do evento
+                </div>
+              </div>
             </div>
+            <p style={{ margin: '4px 0 0', color: '#a8a29e', fontSize: 13, lineHeight: 1.45 }}>
+              Digite o codigo do festival para carregar produtos e maquininhas.
+            </p>
             <label style={labelDark}>
               Codigo do evento
               <input
@@ -1194,6 +1252,7 @@ export default function App() {
           <span>0-9 quantidade</span>
           <span>F1-F9 produto</span>
           <span>D/Enter dinheiro</span>
+          <span>P PIX SumUp</span>
           <span>F cartao fisico</span>
           <span>L leitor (SumUp/MP)</span>
           <span>H historico</span>
@@ -1392,6 +1451,16 @@ export default function App() {
           {erro && <div style={erroBox}>{erro}</div>}
 
           <div style={payGrid}>
+            {pixOk && (
+              <PayBtn
+                label="PIX"
+                hint="P · widget SumUp"
+                color="#0f766e"
+                disabled={!canPay}
+                onClick={abrirPix}
+                primary
+              />
+            )}
             <PayBtn
               label="DINHEIRO"
               hint="D / Enter"
@@ -1399,7 +1468,7 @@ export default function App() {
               disabled={!canPay}
               loading={pagando === 'dinheiro'}
               onClick={abrirDinheiro}
-              primary
+              primary={!pixOk}
             />
             <PayBtn
               label="CARTAO FISICO"
@@ -1422,6 +1491,19 @@ export default function App() {
           </div>
         </aside>
       </div>
+
+      {pixJob && config && (
+        <PixModal
+          tenantId={config.tenantId}
+          total={pixJob.total}
+          items={pixJob.items}
+          onClose={() => {
+            setPixJob(null);
+            reclaimFocus();
+          }}
+          onPaid={onPixPaid}
+        />
+      )}
 
       {toast && <div style={toastStyle}>{toast}</div>}
 
@@ -2020,11 +2102,12 @@ const shell: CSSProperties = {
 };
 
 const header: CSSProperties = {
-  background: 'linear-gradient(90deg, #c2410c, #ea580c)',
-  padding: '10px 14px',
   display: 'flex',
   alignItems: 'center',
   gap: 8,
+  padding: '10px 14px',
+  background: 'linear-gradient(90deg, #c2410c, #ea580c)',
+  flexWrap: 'wrap',
   flexShrink: 0,
 };
 

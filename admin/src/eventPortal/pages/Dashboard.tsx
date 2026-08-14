@@ -1,8 +1,16 @@
 import { useEffect, useState } from 'react';
-import { getDashboard, type DashboardData } from '../services/api';
+import { getDashboard, getStoredTenant, type DashboardData } from '../services/api';
 import { formatBRL } from '../utils/format';
 
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Bom dia';
+  if (h < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
 export default function Dashboard() {
+  const tenant = getStoredTenant();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
@@ -10,146 +18,138 @@ export default function Dashboard() {
   useEffect(() => {
     getDashboard()
       .then(setData)
-      .catch(() => setErro('Falha ao carregar o resumo.'))
+      .catch(() => setErro('Não foi possível carregar o resumo agora.'))
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <p>Carregando...</p>;
-  if (erro) return <p style={{ color: '#dc2626' }}>{erro}</p>;
+  if (loading) {
+    return (
+      <div className="evento-kpi-grid">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="evento-skel" />
+        ))}
+      </div>
+    );
+  }
+  if (erro) return <p className="evento-error">{erro}</p>;
   if (!data) return null;
 
+  const ticket =
+    data.totalTransacoes > 0 ? data.totalVendas / data.totalTransacoes : 0;
+
   const cards = [
-    { label: 'Total vendido', value: formatBRL(data.totalVendas), accent: '#ea580c' },
-    { label: 'Seu líquido', value: formatBRL(data.totalLiquido), accent: '#16a34a' },
-    { label: 'Vendas hoje', value: String(data.vendasHoje), accent: '#0ea5e9' },
-    { label: 'Transações aprovadas', value: String(data.totalTransacoes), accent: '#8b5cf6' },
-    { label: 'Aguardando repasse', value: String(data.repassePendente), accent: '#f59e0b' },
+    {
+      label: 'Total vendido',
+      value: formatBRL(data.totalVendas),
+      kpi: '#ea580c',
+    },
+    {
+      label: 'Seu líquido',
+      value: formatBRL(data.totalLiquido),
+      kpi: '#16a34a',
+    },
+    {
+      label: 'Vendas hoje',
+      value: String(data.vendasHoje),
+      kpi: '#0284c7',
+    },
+    {
+      label: 'Aprovadas',
+      value: String(data.totalTransacoes),
+      kpi: '#7c3aed',
+    },
+    {
+      label: 'Ticket médio',
+      value: formatBRL(ticket),
+      kpi: '#d97706',
+    },
   ];
+
+  const maxProduto = Math.max(...data.vendasPorProduto.map((p) => p.total), 1);
+  const maxTotem = Math.max(...data.vendasPorTotem.map((t) => t.total), 1);
 
   return (
     <div>
-      <h1 style={{ marginTop: 0, color: '#9a3412' }}>Resumo</h1>
+      <div className="evento-page-head">
+        <div>
+          <div className="evento-kicker">{greeting()}</div>
+          <h1>{tenant?.nome || 'Resumo'}</h1>
+          <p>
+            Acompanhe o caixa do festival em tempo real. O líquido já desconta a
+            comissão da plataforma.
+          </p>
+        </div>
+      </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-          gap: 16,
-          marginBottom: 24,
-        }}
-      >
+      <div className="evento-kpi-grid">
         {cards.map((card) => (
-          <div
-            key={card.label}
-            style={{
-              background: '#fff',
-              borderRadius: 12,
-              padding: 20,
-              borderLeft: `4px solid ${card.accent}`,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-            }}
-          >
-            <div style={{ fontSize: 13, color: '#78716c' }}>{card.label}</div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: '#292524', marginTop: 8 }}>
-              {card.value}
-            </div>
+          <div key={card.label} className="evento-kpi" style={{ ['--kpi' as string]: card.kpi }}>
+            <div className="evento-kpi-label">{card.label}</div>
+            <div className="evento-kpi-value">{card.value}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <Section title="Vendas por produto">
-          {data.vendasPorProduto.length === 0 ? (
-            <p style={{ color: '#78716c', margin: 0 }}>Nenhuma venda ainda.</p>
-          ) : (
-            <table style={tableStyle}>
-              <thead>
-                <tr>
-                  <th style={th}>Produto</th>
-                  <th style={th}>Qtd</th>
-                  <th style={th}>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.vendasPorProduto.map((p) => (
-                  <tr key={p.nome}>
-                    <td style={td}>{p.nome}</td>
-                    <td style={td}>{p.quantidade}</td>
-                    <td style={td}>{formatBRL(p.total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </Section>
+      {data.repassePendente > 0 && (
+        <p className="evento-muted" style={{ marginTop: -8, marginBottom: 18 }}>
+          {data.repassePendente} venda(s) ainda aguardando repasse.
+        </p>
+      )}
 
-        <Section title="Vendas por totem">
-          {data.vendasPorTotem.length === 0 ? (
-            <p style={{ color: '#78716c', margin: 0 }}>Nenhuma venda por totem.</p>
+      <div className="evento-grid-2">
+        <section className="evento-card">
+          <h2>Ranking de produtos</h2>
+          {data.vendasPorProduto.length === 0 ? (
+            <p className="evento-muted" style={{ margin: 0 }}>
+              Nenhuma venda ainda. Quando o caixa girar, o ranking aparece aqui.
+            </p>
           ) : (
-            <table style={tableStyle}>
-              <thead>
-                <tr>
-                  <th style={th}>Totem</th>
-                  <th style={th}>Vendas</th>
-                  <th style={th}>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.vendasPorTotem.map((t) => (
-                  <tr key={t.totemId}>
-                    <td style={td}>{t.totemNome}</td>
-                    <td style={td}>{t.vendas}</td>
-                    <td style={td}>{formatBRL(t.total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            data.vendasPorProduto.map((p) => (
+              <div key={p.nome}>
+                <div className="evento-rank-row">
+                  <span className="evento-rank-name">{p.nome}</span>
+                  <span className="evento-rank-meta">{p.quantidade} un.</span>
+                  <strong>{formatBRL(p.total)}</strong>
+                </div>
+                <div className="evento-rank-track">
+                  <div
+                    className="evento-rank-fill"
+                    style={{ width: `${Math.max(6, (p.total / maxProduto) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            ))
           )}
-        </Section>
+        </section>
+
+        <section className="evento-card">
+          <h2>Vendas por totem</h2>
+          {data.vendasPorTotem.length === 0 ? (
+            <p className="evento-muted" style={{ margin: 0 }}>
+              Nenhum totem vendeu ainda.
+            </p>
+          ) : (
+            data.vendasPorTotem.map((t) => (
+              <div key={t.totemId}>
+                <div className="evento-rank-row">
+                  <span className="evento-rank-name">{t.totemNome}</span>
+                  <span className="evento-rank-meta">{t.vendas} vendas</span>
+                  <strong>{formatBRL(t.total)}</strong>
+                </div>
+                <div className="evento-rank-track">
+                  <div
+                    className="evento-rank-fill"
+                    style={{
+                      width: `${Math.max(6, (t.total / maxTotem) * 100)}%`,
+                      background: 'linear-gradient(90deg, #38bdf8, #0284c7)',
+                    }}
+                  />
+                </div>
+              </div>
+            ))
+          )}
+        </section>
       </div>
     </div>
   );
 }
-
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      style={{
-        background: '#fff',
-        borderRadius: 12,
-        padding: 20,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-      }}
-    >
-      <h2 style={{ marginTop: 0, fontSize: 16, color: '#44403c' }}>{title}</h2>
-      {children}
-    </div>
-  );
-}
-
-const tableStyle: React.CSSProperties = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  fontSize: 14,
-};
-
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '8px 4px',
-  borderBottom: '1px solid #e7e5e4',
-  color: '#78716c',
-  fontWeight: 600,
-};
-
-const td: React.CSSProperties = {
-  padding: '8px 4px',
-  borderBottom: '1px solid #f5f5f4',
-  color: '#292524',
-};

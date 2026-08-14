@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { SumUpCardWidget } from '../components/SumUpCardWidget';
 import { createPixPayment, getPaymentStatus } from '../services/api';
 import { useCartStore, type CartItem } from '../store/cartStore';
+import {
+  getSumUpFailureMessage,
+  isSumUpPaymentConfirmed,
+  isSumUpPaymentFailed,
+  isSumUpPaymentSent,
+} from '../utils/sumupResponse';
 
 type Estado = 'loading' | 'aguardando' | 'aprovado' | 'expirado' | 'erro';
 
@@ -40,6 +47,9 @@ export default function PixQRCode() {
   const [pixCode, setPixCode] = useState('');
   const [qrCodeBase64, setQrCodeBase64] = useState('');
   const [paymentId, setPaymentId] = useState('');
+  const [checkoutId, setCheckoutId] = useState('');
+  const [useSumUpWidget, setUseSumUpWidget] = useState(false);
+  const [widgetErro, setWidgetErro] = useState('');
   const [secondsLeft, setSecondsLeft] = useState(DEFAULT_EXPIRES_IN);
   const [copiado, setCopiado] = useState(false);
 
@@ -62,6 +72,9 @@ export default function PixQRCode() {
       setPixCode(res.pixCode);
       setQrCodeBase64(res.qrCodeBase64);
       setPaymentId(res.paymentId);
+      setCheckoutId(res.checkoutId || res.paymentId);
+      setUseSumUpWidget(res.gateway === 'sumup');
+      setWidgetErro('');
       setSecondsLeft(res.expiresIn ?? DEFAULT_EXPIRES_IN);
       setEstado('aguardando');
     } catch (err) {
@@ -151,7 +164,9 @@ export default function PixQRCode() {
       <div style={centerBox}>
         <div className="spinner" />
         <p style={{ fontSize: 20, color: 'var(--text-muted)' }}>
-          Gerando QR Code...
+          {localStorage.getItem('gateway') === 'sumup'
+            ? 'Abrindo pagamento SumUp...'
+            : 'Gerando QR Code...'}
         </p>
       </div>
     );
@@ -249,8 +264,9 @@ export default function PixQRCode() {
 
       <div
         style={{
-          width: 300,
-          height: 300,
+          width: useSumUpWidget ? 'min(420px, 100%)' : 300,
+          height: useSumUpWidget ? 'auto' : 300,
+          minHeight: useSumUpWidget ? 320 : 300,
           background: '#fff',
           borderRadius: 16,
           padding: 12,
@@ -260,7 +276,28 @@ export default function PixQRCode() {
           justifyContent: 'center',
         }}
       >
-        {qrCodeBase64 ? (
+        {useSumUpWidget && checkoutId ? (
+          <div style={{ width: '100%' }}>
+            <SumUpCardWidget
+              checkoutId={checkoutId}
+              onResponse={(type, body) => {
+                if (isSumUpPaymentSent(type)) return;
+                if (isSumUpPaymentFailed(type, body)) {
+                  setWidgetErro(getSumUpFailureMessage(body));
+                  return;
+                }
+                if (isSumUpPaymentConfirmed(type, body)) {
+                  setEstado('aprovado');
+                }
+              }}
+            />
+            {widgetErro && (
+              <p style={{ color: '#b91c1c', textAlign: 'center', marginTop: 8 }}>
+                {widgetErro}
+              </p>
+            )}
+          </div>
+        ) : qrCodeBase64 ? (
           <img
             src={`data:image/png;base64,${qrCodeBase64}`}
             width={276}
@@ -277,17 +314,21 @@ export default function PixQRCode() {
           color: 'var(--text-muted)',
           textAlign: 'center',
           margin: '16px auto 0',
-          maxWidth: 320,
+          maxWidth: 360,
         }}
       >
-        Abra o app do banco e escaneie o QR Code
+        {useSumUpWidget
+          ? 'No widget SumUp, escolha PIX (ou cartão). Escaneie o QR ou pague no app do banco.'
+          : 'Abra o app do banco e escaneie o QR Code'}
       </p>
 
+      {!useSumUpWidget && (
       <div style={{ maxWidth: 320, margin: '16px auto 0' }}>
         <button className="btn-secondary" onClick={copiarCodigo} style={{ fontSize: 16, padding: '12px 24px' }}>
           {copiado ? '✓ Copiado!' : '📋 COPIAR CÓDIGO PIX'}
         </button>
       </div>
+      )}
 
       <div
         style={{

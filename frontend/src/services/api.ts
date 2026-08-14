@@ -94,6 +94,8 @@ export interface PixPaymentResponse {
   pixCode: string;
   qrCodeBase64: string;
   expiresIn: number;
+  gateway?: 'sumup' | 'mercadopago';
+  checkoutId?: string | null;
 }
 
 export interface PaymentStatusResponse {
