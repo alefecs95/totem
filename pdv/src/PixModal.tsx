@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
-import { createPixPayment, getPaymentStatus } from './api';
+import { useState } from 'react';
 import { SumUpCardWidget } from './SumUpCardWidget';
 import {
   getSumUpFailureMessage,
@@ -13,101 +12,50 @@ function formatPreco(preco: number): string {
 }
 
 type Props = {
-  tenantId: string;
   total: number;
-  items: Array<{ productId: string; quantidade: number }>;
   gateway?: string;
-  onClose: () => void;
+  checkoutId?: string | null;
+  pixCode?: string;
+  qrCode?: string;
+  summary?: string;
+  onMinimize: () => void;
+  onCancel: () => void;
   onPaid: () => void;
 };
 
 export function PixModal({
-  tenantId,
   total,
-  items,
   gateway,
-  onClose,
+  checkoutId,
+  pixCode,
+  qrCode,
+  summary,
+  onMinimize,
+  onCancel,
   onPaid,
 }: Props) {
-  const [loading, setLoading] = useState(true);
-  const [erro, setErro] = useState('');
   const [widgetErro, setWidgetErro] = useState('');
-  const [paymentId, setPaymentId] = useState('');
-  const [checkoutId, setCheckoutId] = useState('');
-  const [useWidget, setUseWidget] = useState(false);
-  const [pixCode, setPixCode] = useState('');
-  const [qrCode, setQrCode] = useState('');
   const [copiado, setCopiado] = useState(false);
-
-  const iniciar = useCallback(async () => {
-    setLoading(true);
-    setErro('');
-    setWidgetErro('');
-    try {
-      const res = await createPixPayment({ tenantId, items, total });
-      setPaymentId(res.paymentId);
-      setCheckoutId(res.checkoutId || res.paymentId);
-      setUseWidget(res.gateway === 'sumup');
-      setPixCode(res.pixCode || '');
-      setQrCode(res.qrCodeBase64 || '');
-    } catch (err: unknown) {
-      const detalhe = (
-        err as { response?: { data?: { detalhe?: string; error?: string } } }
-      )?.response?.data;
-      setErro(detalhe?.detalhe || detalhe?.error || 'Falha ao criar PIX.');
-    } finally {
-      setLoading(false);
-    }
-  }, [tenantId, items, total]);
-
-  useEffect(() => {
-    void iniciar();
-  }, [iniciar]);
-
-  useEffect(() => {
-    if (!paymentId || erro) return;
-    const id = window.setInterval(async () => {
-      try {
-        const { status } = await getPaymentStatus(paymentId);
-        if (status === 'approved') onPaid();
-      } catch {
-        /* keep polling */
-      }
-    }, 3000);
-    return () => window.clearInterval(id);
-  }, [paymentId, erro, onPaid]);
+  const useWidget = gateway === 'sumup' && Boolean(checkoutId);
 
   return (
-    <div className="pdv-modal-overlay" onClick={onClose}>
-      <div
-        className="pdv-pix-card"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="pdv-modal-overlay" onClick={onMinimize}>
+      <div className="pdv-pix-card" onClick={(e) => e.stopPropagation()}>
         <div className="pdv-pix-head">
           <div>
             <div className="pdv-pix-kicker">Pagamento</div>
-            <h2>
-              {gateway === 'sumup' || useWidget
-                ? 'PIX SumUp'
-                : 'PIX Mercado Pago'}
-            </h2>
+            <h2>{useWidget ? 'PIX SumUp' : 'PIX Mercado Pago'}</h2>
           </div>
           <div className="pdv-pix-total">{formatPreco(total)}</div>
         </div>
 
-        {loading ? (
-          <p className="pdv-pix-hint">Abrindo cobrança...</p>
-        ) : erro ? (
-          <div>
-            <p className="pdv-pix-error">{erro}</p>
-            <button type="button" className="pdv-btn pdv-btn-primary" onClick={() => void iniciar()}>
-              Tentar de novo
-            </button>
-          </div>
-        ) : useWidget && checkoutId ? (
+        {summary ? <p className="pdv-pix-hint">{summary}</p> : null}
+
+        {useWidget && checkoutId ? (
           <div className="pdv-pix-widget">
             <p className="pdv-pix-hint">
-              No widget, escolha <strong>PIX</strong>. O cliente paga no celular.
+              No widget, escolha <strong>PIX</strong>. Depois minimize e continue
+              vendendo — o PDV avisa quando pagar.
             </p>
             <SumUpCardWidget
               checkoutId={checkoutId}
@@ -150,9 +98,18 @@ export function PixModal({
           </div>
         )}
 
-        <p className="pdv-pix-wait">Aguardando pagamento... Esc fecha</p>
-        <button type="button" className="pdv-btn pdv-btn-ghost" onClick={onClose}>
-          Cancelar
+        <p className="pdv-pix-wait">
+          Aguardando pagamento. Esc ou minimizar libera o caixa.
+        </p>
+        <button
+          type="button"
+          className="pdv-btn pdv-btn-primary"
+          onClick={onMinimize}
+        >
+          Minimizar e continuar vendendo
+        </button>
+        <button type="button" className="pdv-btn pdv-btn-ghost" onClick={onCancel}>
+          Cancelar PIX
         </button>
       </div>
     </div>

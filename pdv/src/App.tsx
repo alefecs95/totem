@@ -5,6 +5,8 @@ import {
   getApiBase,
   getCardPaymentStatus,
   cancelCardPayment,
+  createPixPayment,
+  getPaymentStatus,
   getPdvSales,
   listSumupReaders,
   loadEvento,
@@ -38,6 +40,20 @@ type PendingCard = {
   chargedAmount: number;
   printItems: PrintItem[];
   gateway: PayGateway;
+  nomeFestival: string;
+  startedAt: number;
+  summary: string;
+};
+
+type PendingPix = {
+  localId: string;
+  paymentId: string;
+  checkoutId: string | null;
+  pixCode: string;
+  qrCode: string;
+  gateway: PayGateway;
+  total: number;
+  printItems: PrintItem[];
   nomeFestival: string;
   startedAt: number;
   summary: string;
@@ -157,11 +173,16 @@ export default function App() {
   );
   const [cardPickerOpen, setCardPickerOpen] = useState(false);
   const [gatewayPickerOpen, setGatewayPickerOpen] = useState(false);
-  const [pixJob, setPixJob] = useState<{
-    items: Array<{ productId: string; quantidade: number }>;
-    printItems: PrintItem[];
-    total: number;
-  } | null>(null);
+  const [pendingPix, setPendingPix] = useState<PendingPix[]>(() => {
+    try {
+      const raw = sessionStorage.getItem('pdvPendingPix');
+      return raw ? (JSON.parse(raw) as PendingPix[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [pixDetailId, setPixDetailId] = useState<string | null>(null);
+  const pixDoneRef = useRef(new Set<string>());
   const [salesOpen, setSalesOpen] = useState(false);
   const [sales, setSales] = useState<PdvSale[]>([]);
   const [salesLoading, setSalesLoading] = useState(false);
@@ -228,11 +249,15 @@ export default function App() {
   );
   const pendingQty =
     qtyDigits === '' ? 1 : Math.max(1, parseInt(qtyDigits, 10) || 1);
-  const canPay = cart.length > 0 && !pagando && !pixJob;
+  const canPay = cart.length > 0 && !pagando;
   const pixOk = Boolean(config?.pagamentos?.pix);
   const hasPendingCard = pendingCards.length > 0;
+  const hasPendingPix = pendingPix.length > 0;
   const cardDetail = cardDetailId
     ? pendingCards.find((p) => p.localId === cardDetailId) ?? null
+    : null;
+  const pixDetail = pixDetailId
+    ? pendingPix.find((p) => p.localId === pixDetailId) ?? null
     : null;
   const sumupOk = Boolean(config?.pagamentos?.sumup);
   const mpOk = Boolean(config?.pagamentos?.mercadopago);
@@ -307,6 +332,14 @@ export default function App() {
       /* ignore */
     }
   }, [pendingCards]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('pdvPendingPix', JSON.stringify(pendingPix));
+    } catch {
+      /* ignore */
+    }
+  }, [pendingPix]);
 
   const reclaimFocus = useCallback(() => {
     void window.pdvDesktop?.focusMainWindow?.();
@@ -826,6 +859,44 @@ export default function App() {
     }
   };
 
+  const notifyPixApproved = (amount: number) => {
+    playSaleBeep(true);
+    setSaleFlash(true);
+    window.setTimeout(() => setSaleFlash(false), 600);
+    setToast(`PIX APROVADO ${formatPreco(amount)} — fichas imprimindo`);
+    try {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification('Totem PDV', {
+          body: `PIX aprovado ${formatPreco(amount)}`,
+        });
+      } else if (
+        typeof Notification !== 'undefined' &&
+        Notification.permission !== 'denied'
+      ) {
+        void Notification.requestPermission();
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const concluirPixPendente = (item: PendingPix) => {
+    if (pixDoneRef.current.has(item.localId)) return;
+    pixDoneRef.current.add(item.localId);
+    setPendingPix((list) => list.filter((p) => p.localId !== item.localId));
+    setPixDetailId((cur) => (cur === item.localId ? null : cur));
+    notifyPixApproved(item.total);
+    imprimirFichasBg(item.printItems, item.nomeFestival);
+    reclaimFocus();
+  };
+
+  const cancelarPixPendente = (localId: string) => {
+    setPendingPix((list) => list.filter((p) => p.localId !== localId));
+    if (pixDetailId === localId) setPixDetailId(null);
+    setToast('PIX cancelado no PDV');
+    reclaimFocus();
+  };
+
   const cancelarCartaoPendente = async (localId: string) => {
     const item = pendingCards.find((p) => p.localId === localId);
     if (!item || !config) {
@@ -860,15 +931,15 @@ export default function App() {
 
   const pendingCardsRef = useRef(pendingCards);
   pendingCardsRef.current = pendingCards;
+  const pendingPixRef = useRef(pendingPix);
+  pendingPixRef.current = pendingPix;
 
-  // Poll todos os cartoes em segundo plano
   useEffect(() => {
     if (!config) return;
     const tenantId = config.tenantId;
     const id = window.setInterval(async () => {
-      const snapshot = [...pendingCardsRef.current];
-      if (snapshot.length === 0) return;
-      for (const pending of snapshot) {
+      const cards = [...pendingCardsRef.current];
+      for (const pending of cards) {
         try {
           const result = await getCardPaymentStatus(pending.intentId, tenantId);
           if (result.status === 'approved') {
@@ -898,6 +969,27 @@ export default function App() {
           /* keep polling */
         }
       }
+
+      const pixList = [...pendingPixRef.current];
+      for (const pending of pixList) {
+        try {
+          const { status } = await getPaymentStatus(pending.paymentId);
+          if (status === 'approved') {
+            concluirPixPendente(pending);
+          } else if (status === 'rejected' || status === 'cancelled') {
+            setPendingPix((list) =>
+              list.filter((p) => p.localId !== pending.localId)
+            );
+            setPixDetailId((cur) =>
+              cur === pending.localId ? null : cur
+            );
+            setToast('PIX recusado / expirado');
+            reclaimFocus();
+          }
+        } catch {
+          /* keep polling */
+        }
+      }
     }, 3000);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -910,34 +1002,62 @@ export default function App() {
     setErro('');
   };
 
-  const abrirPix = () => {
+  const abrirPix = async () => {
     if (!canPay || !config) return;
-    setPixJob({
-      items: cart.map((i) => ({ productId: i.id, quantidade: i.quantidade })),
-      printItems: cart.map((i) => ({
-        nome: i.nome,
-        quantidade: i.quantidade,
-        imprime_ficha: i.imprime_ficha,
-        ficha_2_vias: i.ficha_2_vias,
-        ficha_logo_data: i.ficha_logo_data,
-      })),
-      total: Math.round(total * 100) / 100,
-    });
+    setPagando('pix');
     setErro('');
+    const snapshot = cart.map((i) => ({ ...i }));
+    const netTotal = Math.round(total * 100) / 100;
+    const printPayload: PrintItem[] = snapshot.map((i) => ({
+      nome: i.nome,
+      quantidade: i.quantidade,
+      imprime_ficha: i.imprime_ficha,
+      ficha_2_vias: i.ficha_2_vias,
+      ficha_logo_data: i.ficha_logo_data,
+    }));
+    const summary = snapshot
+      .map((i) => `${i.quantidade}x ${i.nome}`)
+      .join(', ')
+      .slice(0, 80);
+    try {
+      const res = await createPixPayment({
+        tenantId: config.tenantId,
+        items: snapshot.map((i) => ({
+          productId: i.id,
+          quantidade: i.quantidade,
+        })),
+        total: netTotal,
+      });
+      limpar();
+      const pending: PendingPix = {
+        localId: uuid(),
+        paymentId: res.paymentId,
+        checkoutId: res.checkoutId || res.paymentId,
+        pixCode: res.pixCode || '',
+        qrCode: res.qrCodeBase64 || '',
+        gateway: res.gateway === 'sumup' ? 'sumup' : 'mercadopago',
+        total: netTotal,
+        printItems: printPayload,
+        nomeFestival: config.nomeFestival,
+        startedAt: Date.now(),
+        summary,
+      };
+      setPendingPix((list) => [...list, pending]);
+      setPixDetailId(pending.localId);
+      setToast(
+        `PIX ${formatPreco(netTotal)} aberto — minimize e continue vendendo`
+      );
+    } catch (err: unknown) {
+      const data = (
+        err as {
+          response?: { data?: { detalhe?: string; error?: string } };
+        }
+      )?.response?.data;
+      setErro(data?.detalhe || data?.error || 'Falha ao criar PIX.');
+    } finally {
+      setPagando(null);
+    }
   };
-
-  const pixJobRef = useRef(pixJob);
-  pixJobRef.current = pixJob;
-
-  const onPixPaid = useCallback(() => {
-    const job = pixJobRef.current;
-    const nome = config?.nomeFestival;
-    setPixJob(null);
-    if (job && nome) imprimirFichasBg(job.printItems, nome);
-    limpar();
-    setToast('PIX aprovado!');
-    reclaimFocus();
-  }, [config?.nomeFestival]);
 
   useEffect(() => {
     if (!config) return;
@@ -949,10 +1069,10 @@ export default function App() {
         reclaimFocus();
       }
 
-      if (pixJob) {
+      if (pixDetail) {
         if (e.key === 'Escape') {
           e.preventDefault();
-          setPixJob(null);
+          setPixDetailId(null);
           reclaimFocus();
         }
         return;
@@ -1016,7 +1136,7 @@ export default function App() {
         abrirDinheiro();
       } else if (e.key.toLowerCase() === 'p') {
         e.preventDefault();
-        if (pixOk) abrirPix();
+        if (pixOk) void abrirPix();
       } else if (e.key.toLowerCase() === 'f') {
         e.preventDefault();
         if (canPay) void finalizarManual('cartao_fisico');
@@ -1459,7 +1579,8 @@ export default function App() {
                 }
                 color="#0f766e"
                 disabled={!canPay}
-                onClick={abrirPix}
+                loading={pagando === 'pix'}
+                onClick={() => void abrirPix()}
                 primary
               />
             )}
@@ -1494,17 +1615,20 @@ export default function App() {
         </aside>
       </div>
 
-      {pixJob && config && (
+      {pixDetail && (
         <PixModal
-          tenantId={config.tenantId}
-          total={pixJob.total}
-          items={pixJob.items}
-          gateway={config.gateway}
-          onClose={() => {
-            setPixJob(null);
+          total={pixDetail.total}
+          gateway={pixDetail.gateway}
+          checkoutId={pixDetail.checkoutId}
+          pixCode={pixDetail.pixCode}
+          qrCode={pixDetail.qrCode}
+          summary={pixDetail.summary}
+          onMinimize={() => {
+            setPixDetailId(null);
             reclaimFocus();
           }}
-          onPaid={onPixPaid}
+          onCancel={() => cancelarPixPendente(pixDetail.localId)}
+          onPaid={() => concluirPixPendente(pixDetail)}
         />
       )}
 
@@ -1832,7 +1956,7 @@ export default function App() {
         </div>
       )}
 
-      {hasPendingCard && (
+      {(hasPendingCard || hasPendingPix) && (
         <div
           style={{
             position: 'fixed',
@@ -1845,6 +1969,58 @@ export default function App() {
             gap: 8,
           }}
         >
+          {pendingPix.map((p) => (
+            <div
+              key={p.localId}
+              style={{
+                background: '#1c1917',
+                border: '2px solid #22c55e',
+                borderRadius: 12,
+                padding: '10px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+              }}
+            >
+              <div style={{ fontSize: 22 }}>📱</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, color: '#fff', fontSize: 14 }}>
+                  PIX aguardando · {formatPreco(p.total)}
+                </div>
+                <div
+                  style={{
+                    color: '#a8a29e',
+                    fontSize: 12,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {p.summary || p.gateway} — minimize e continue vendendo
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPixDetailId(p.localId)}
+                style={{ ...hdrBtn, padding: '8px 10px' }}
+              >
+                Ver
+              </button>
+              <button
+                type="button"
+                onClick={() => cancelarPixPendente(p.localId)}
+                style={{
+                  ...hdrBtn,
+                  padding: '8px 10px',
+                  borderColor: '#7f1d1d',
+                  color: '#fecaca',
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          ))}
           {pendingCards.map((p) => (
             <div
               key={p.localId}
