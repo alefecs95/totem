@@ -1,16 +1,16 @@
-/** Ficha unica 80x28 mm; 2 vias 80x54 mm — margem inferior extra. */
+/** Ficha unica 80x32 mm; 2 vias 80x54 mm. */
 
 export const FICHA_LARGURA_MM = 80;
-export const FICHA_UNICA_ALTURA_MM = 28;
+export const FICHA_UNICA_ALTURA_MM = 32;
 export const FICHA_2VIAS_ALTURA_MM = 54;
 /** @deprecated use FICHA_UNICA_ALTURA_MM */
 export const FICHA_ALTURA_MM = FICHA_UNICA_ALTURA_MM;
 
 const PX_W = 576;
-const PX_H_UNICA = 224; // 8 px/mm × 28mm
+const PX_H_UNICA = 256; // 8 px/mm × 32mm
 const PX_H_2VIAS = 432; // 8 px/mm × 54mm
-const MARGIN_X = 32;
-const MARGIN_BOTTOM = 48;
+const MARGIN_X = 12;
+const MARGIN_BOTTOM = 36;
 
 export type FichaVia = 'unica' | 'barman' | 'cliente';
 
@@ -103,6 +103,52 @@ function toThermalMono(ctx: CanvasRenderingContext2D, w: number, h: number): voi
   ctx.putImageData(data, 0, 0);
 }
 
+function inkBounds(img: HTMLImageElement): {
+  sx: number;
+  sy: number;
+  sw: number;
+  sh: number;
+} {
+  const iw = img.naturalWidth || img.width;
+  const ih = img.naturalHeight || img.height;
+  const full = { sx: 0, sy: 0, sw: iw, sh: ih };
+  if (!iw || !ih) return full;
+  const c = document.createElement('canvas');
+  c.width = iw;
+  c.height = ih;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return full;
+  ctx.drawImage(img, 0, 0);
+  const data = ctx.getImageData(0, 0, iw, ih).data;
+  let minX = iw;
+  let minY = ih;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < ih; y += 1) {
+    for (let x = 0; x < iw; x += 1) {
+      const i = (y * iw + x) * 4;
+      const a = data[i + 3] ?? 0;
+      if (a < 20) continue;
+      const lum =
+        0.299 * (data[i] ?? 0) +
+        0.587 * (data[i + 1] ?? 0) +
+        0.114 * (data[i + 2] ?? 0);
+      if (lum > 232) continue;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (maxX < minX || maxY < minY) return full;
+  const pad = 2;
+  const sx = Math.max(0, minX - pad);
+  const sy = Math.max(0, minY - pad);
+  const ex = Math.min(iw - 1, maxX + pad);
+  const ey = Math.min(ih - 1, maxY + pad);
+  return { sx, sy, sw: ex - sx + 1, sh: ey - sy + 1 };
+}
+
 function drawContain(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
@@ -111,15 +157,14 @@ function drawContain(
   boxW: number,
   boxH: number
 ): void {
-  const iw = img.naturalWidth || img.width;
-  const ih = img.naturalHeight || img.height;
-  if (!iw || !ih || boxW <= 0 || boxH <= 0) return;
-  const scale = Math.min(boxW / iw, boxH / ih);
-  const dw = Math.max(1, Math.floor(iw * scale));
-  const dh = Math.max(1, Math.floor(ih * scale));
+  const b = inkBounds(img);
+  if (!b.sw || !b.sh || boxW <= 0 || boxH <= 0) return;
+  const scale = Math.min(boxW / b.sw, boxH / b.sh);
+  const dw = Math.max(1, Math.floor(b.sw * scale));
+  const dh = Math.max(1, Math.floor(b.sh * scale));
   const dx = x + Math.floor((boxW - dw) / 2);
   const dy = y + Math.floor((boxH - dh) / 2);
-  ctx.drawImage(img, dx, dy, dw, dh);
+  ctx.drawImage(img, b.sx, b.sy, b.sw, b.sh, dx, dy, dw, dh);
 }
 
 /** Quebra o sabor em linhas para caber na largura. */
@@ -292,19 +337,21 @@ function drawUnica(
 ): Promise<void> {
   return (async () => {
     const nome = (ticket.nome || 'FICHA').toUpperCase();
-    const headerH = 24;
-    const dateH = 22;
+    const headerH = 22;
+    const dateH = 18;
     const logoX = MARGIN_X;
-    const logoY = headerH;
+    const logoY = headerH + 2;
     const logoW = PX_W - MARGIN_X * 2;
-    const logoH = pxH - headerH - dateH - MARGIN_BOTTOM;
+    const logoH = pxH - logoY - dateH - MARGIN_BOTTOM;
 
-    ctx.font = 'bold 15px Arial, Helvetica, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
     ctx.fillText(
       festival.slice(0, 42).toUpperCase(),
-      PX_W / 2,
-      headerH / 2,
-      PX_W - MARGIN_X * 2
+      Math.floor(PX_W / 2),
+      Math.floor(headerH / 2),
+      logoW
     );
 
     let drewLogo = false;
@@ -324,11 +371,12 @@ function drawUnica(
 
     ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
     ctx.fillStyle = '#000';
+    ctx.textAlign = 'center';
     ctx.fillText(
       when,
-      PX_W / 2,
+      Math.floor(PX_W / 2),
       pxH - MARGIN_BOTTOM - dateH / 2,
-      PX_W - MARGIN_X * 2
+      logoW
     );
   })();
 }
