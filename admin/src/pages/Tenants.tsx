@@ -1229,7 +1229,6 @@ export default function Tenants() {
                     Opcional. Se vazio, usamos o e-mail da conta SumUp da API Key
                     (a mesma da Solo) + Merchant Code.
                   </p>
-                  </p>
                 </Field>
 
                 <div
