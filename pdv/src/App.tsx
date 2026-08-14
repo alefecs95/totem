@@ -1615,22 +1615,24 @@ export default function App() {
         </aside>
       </div>
 
-      {pixDetail && (
+      {pendingPix.map((p) => (
         <PixModal
-          total={pixDetail.total}
-          gateway={pixDetail.gateway}
-          checkoutId={pixDetail.checkoutId}
-          pixCode={pixDetail.pixCode}
-          qrCode={pixDetail.qrCode}
-          summary={pixDetail.summary}
+          key={p.localId}
+          total={p.total}
+          gateway={p.gateway}
+          checkoutId={p.checkoutId}
+          pixCode={p.pixCode}
+          qrCode={p.qrCode}
+          summary={p.summary}
+          minimized={pixDetailId !== p.localId}
           onMinimize={() => {
             setPixDetailId(null);
             reclaimFocus();
           }}
-          onCancel={() => cancelarPixPendente(pixDetail.localId)}
-          onPaid={() => concluirPixPendente(pixDetail)}
+          onCancel={() => cancelarPixPendente(p.localId)}
+          onPaid={() => concluirPixPendente(p)}
         />
-      )}
+      ))}
 
       {toast && <div style={toastStyle}>{toast}</div>}
 

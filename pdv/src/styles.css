@@ -33,6 +33,14 @@ button, input, select {
   backdrop-filter: blur(4px);
 }
 
+/* Esconde sem desmontar (display:none recarrega o iframe da SumUp). */
+.pdv-modal-overlay.pdv-pix-minimized {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
 .pdv-pix-card {
   background: #1c1917;
   border-radius: 18px;

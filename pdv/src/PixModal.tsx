@@ -18,6 +18,7 @@ type Props = {
   pixCode?: string;
   qrCode?: string;
   summary?: string;
+  minimized?: boolean;
   onMinimize: () => void;
   onCancel: () => void;
   onPaid: () => void;
@@ -30,6 +31,7 @@ export function PixModal({
   pixCode,
   qrCode,
   summary,
+  minimized = false,
   onMinimize,
   onCancel,
   onPaid,
@@ -39,7 +41,11 @@ export function PixModal({
   const useWidget = gateway === 'sumup' && Boolean(checkoutId);
 
   return (
-    <div className="pdv-modal-overlay" onClick={onMinimize}>
+    <div
+      className={`pdv-modal-overlay${minimized ? ' pdv-pix-minimized' : ''}`}
+      onClick={minimized ? undefined : onMinimize}
+      aria-hidden={minimized}
+    >
       <div className="pdv-pix-card" onClick={(e) => e.stopPropagation()}>
         <div className="pdv-pix-head">
           <div>
