@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { getStoredTenant } from '../services/api';
-import './evento.css';
+import '../evento.css';
 
 const links = [
   {
