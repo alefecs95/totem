@@ -9,8 +9,9 @@ export const FICHA_ALTURA_MM = FICHA_UNICA_ALTURA_MM;
 const PX_W = 576;
 const PX_H_UNICA = 256; // 8 px/mm × 32mm
 const PX_H_2VIAS = 432; // 8 px/mm × 54mm
-const MARGIN_X = 12;
-const MARGIN_BOTTOM = 36;
+const MARGIN = 32;
+const MARGIN_BOTTOM = 48;
+const LOGO_FILL = 0.78;
 
 export type FichaVia = 'unica' | 'barman' | 'cliente';
 
@@ -159,12 +160,60 @@ function drawContain(
 ): void {
   const b = inkBounds(img);
   if (!b.sw || !b.sh || boxW <= 0 || boxH <= 0) return;
-  const scale = Math.min(boxW / b.sw, boxH / b.sh);
+  const innerW = Math.floor(boxW * LOGO_FILL);
+  const innerH = Math.floor(boxH * LOGO_FILL);
+  const scale = Math.min(innerW / b.sw, innerH / b.sh);
   const dw = Math.max(1, Math.floor(b.sw * scale));
   const dh = Math.max(1, Math.floor(b.sh * scale));
   const dx = x + Math.floor((boxW - dw) / 2);
   const dy = y + Math.floor((boxH - dh) / 2);
-  ctx.drawImage(img, b.sx, b.sy, b.sw, b.sh, dx, dy, dw, dh);
+
+  const off = document.createElement('canvas');
+  off.width = dw;
+  off.height = dh;
+  const octx = off.getContext('2d', { willReadFrequently: true });
+  if (!octx) return;
+  octx.fillStyle = '#fff';
+  octx.fillRect(0, 0, dw, dh);
+  octx.drawImage(img, b.sx, b.sy, b.sw, b.sh, 0, 0, dw, dh);
+  const data = octx.getImageData(0, 0, dw, dh);
+  const px = data.data;
+  const dark = (i: number) => {
+    const a = px[i + 3] ?? 0;
+    if (a < 20) return false;
+    const lum =
+      0.299 * (px[i] ?? 0) + 0.587 * (px[i + 1] ?? 0) + 0.114 * (px[i + 2] ?? 0);
+    return lum < 170;
+  };
+  const at = (xx: number, yy: number) => {
+    if (xx < 0 || yy < 0 || xx >= dw || yy >= dh) return false;
+    return dark((yy * dw + xx) * 4);
+  };
+  const out = octx.createImageData(dw, dh);
+  const op = out.data;
+  for (let yy = 0; yy < dh; yy += 1) {
+    for (let xx = 0; xx < dw; xx += 1) {
+      const i = (yy * dw + xx) * 4;
+      let ink = false;
+      if (at(xx, yy)) {
+        let interior = true;
+        for (let oy = -2; oy <= 2 && interior; oy += 1) {
+          for (let ox = -2; ox <= 2; ox += 1) {
+            if (!at(xx + ox, yy + oy)) {
+              interior = false;
+              break;
+            }
+          }
+        }
+        ink = !interior;
+      }
+      const v = ink ? 0 : 255;
+      op[i] = op[i + 1] = op[i + 2] = v;
+      op[i + 3] = 255;
+    }
+  }
+  octx.putImageData(out, 0, 0);
+  ctx.drawImage(off, dx, dy);
 }
 
 /** Quebra o sabor em linhas para caber na largura. */
@@ -208,14 +257,16 @@ function drawNomeBar(
   h: number
 ): void {
   const text = (nome || 'FICHA').toUpperCase();
+  const x = MARGIN + 8;
+  const w = PX_W - (MARGIN + 8) * 2;
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 0.5, y + 8 + 0.5, w, h - 16);
   ctx.fillStyle = '#000';
-  ctx.fillRect(MARGIN_X, y + 6, PX_W - MARGIN_X * 2, h - 12);
-  ctx.fillStyle = '#fff';
   const len = text.length;
-  const fontSize = len <= 10 ? 30 : len <= 16 ? 24 : 18;
+  const fontSize = len <= 10 ? 28 : len <= 16 ? 22 : 16;
   ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
-  ctx.fillText(text, PX_W / 2, y + h / 2, PX_W - MARGIN_X * 4);
-  ctx.fillStyle = '#000';
+  ctx.fillText(text, Math.floor(PX_W / 2), y + h / 2, w - 24);
 }
 
 function drawDashedLine(
@@ -337,22 +388,39 @@ function drawUnica(
 ): Promise<void> {
   return (async () => {
     const nome = (ticket.nome || 'FICHA').toUpperCase();
-    const headerH = 22;
-    const dateH = 18;
-    const logoX = MARGIN_X;
-    const logoY = headerH + 2;
-    const logoW = PX_W - MARGIN_X * 2;
-    const logoH = pxH - logoY - dateH - MARGIN_BOTTOM;
+    const frameX = MARGIN;
+    const frameY = MARGIN;
+    const frameW = PX_W - MARGIN * 2;
+    const frameH = pxH - MARGIN - MARGIN_BOTTOM;
+    const headerH = 28;
+    const dateH = 22;
+    const gap = 10;
+    const logoX = frameX + 12;
+    const logoY = frameY + headerH + gap;
+    const logoW = frameW - 24;
+    const logoH = frameH - headerH - dateH - gap * 2;
+
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(frameX + 0.5, frameY + 0.5, frameW - 1, frameH - 1);
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 15px Arial, Helvetica, sans-serif';
     ctx.fillText(
       festival.slice(0, 42).toUpperCase(),
       Math.floor(PX_W / 2),
-      Math.floor(headerH / 2),
+      frameY + headerH / 2,
       logoW
     );
+    ctx.beginPath();
+    ctx.setLineDash([6, 5]);
+    ctx.lineWidth = 1;
+    ctx.moveTo(frameX + 14, frameY + headerH);
+    ctx.lineTo(frameX + frameW - 14, frameY + headerH);
+    ctx.stroke();
+    ctx.setLineDash([]);
 
     let drewLogo = false;
     if (ticket.logo?.startsWith('data:image/')) {
@@ -369,13 +437,13 @@ function drawUnica(
       drawNomeBar(ctx, nome, logoY, logoH);
     }
 
-    ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
+    ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
     ctx.fillStyle = '#000';
     ctx.textAlign = 'center';
     ctx.fillText(
       when,
       Math.floor(PX_W / 2),
-      pxH - MARGIN_BOTTOM - dateH / 2,
+      frameY + frameH - dateH / 2,
       logoW
     );
   })();
