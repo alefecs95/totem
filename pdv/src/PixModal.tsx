@@ -16,11 +16,19 @@ type Props = {
   tenantId: string;
   total: number;
   items: Array<{ productId: string; quantidade: number }>;
+  gateway?: string;
   onClose: () => void;
   onPaid: () => void;
 };
 
-export function PixModal({ tenantId, total, items, onClose, onPaid }: Props) {
+export function PixModal({
+  tenantId,
+  total,
+  items,
+  gateway,
+  onClose,
+  onPaid,
+}: Props) {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
   const [widgetErro, setWidgetErro] = useState('');
@@ -78,7 +86,11 @@ export function PixModal({ tenantId, total, items, onClose, onPaid }: Props) {
         <div className="pdv-pix-head">
           <div>
             <div className="pdv-pix-kicker">Pagamento</div>
-            <h2>PIX</h2>
+            <h2>
+              {gateway === 'sumup' || useWidget
+                ? 'PIX SumUp'
+                : 'PIX Mercado Pago'}
+            </h2>
           </div>
           <div className="pdv-pix-total">{formatPreco(total)}</div>
         </div>

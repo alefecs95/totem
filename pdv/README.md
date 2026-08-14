@@ -33,7 +33,7 @@ Na tela de login:
 Gerado em:
 
 ```text
-pdv/release/Totem PDV Setup 1.1.0.exe
+pdv/release/Totem PDV Setup 1.1.1.exe
 ```
 
 Para regenerar:
@@ -68,7 +68,7 @@ Ficha unica continua **80×25 mm**.
 
 Extras no PDV:
 - **Historico** (tecla `H`) — ultimas vendas do evento
-- **PIX** (tecla `P`) — widget SumUp (mesmas credenciais da Solo) ou QR Mercado Pago
+- **PIX** (tecla `P`) — usa a **operadora padrao** do admin (SumUp widget ou QR Mercado Pago)
 - **LEITOR** (tecla `L`) — escolhe **SumUp** ou **Mercado Pago** na hora
 - **Maquininha** — lista/seleciona o leitor SumUp
 - **Cartao em segundo plano** — apos enviar ao leitor, o PDV libera; barra inferior mostra o pendente; ao aprovar notifica + imprime fichas

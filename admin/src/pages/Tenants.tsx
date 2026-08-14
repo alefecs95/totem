@@ -563,7 +563,9 @@ export default function Tenants() {
                   </td>
                   <td>{t.responsavel}</td>
                   <td>
-                    <span className="badge badge-soft">{t.gateway}</span>
+                    <span className="badge badge-soft">
+                      Pix {t.gateway === 'sumup' ? 'SumUp' : 'Mercado Pago'}
+                    </span>
                   </td>
                   <td>{Number(t.comissao_pct)}%</td>
                   <td>
@@ -736,7 +738,7 @@ export default function Tenants() {
             </Field>
 
             <div style={{ display: 'flex', gap: 12 }}>
-              <Field label="Gateway padrao">
+              <Field label="Operadora do Pix (padrao)">
                 <select
                   style={input}
                   value={form.gateway}
@@ -748,8 +750,9 @@ export default function Tenants() {
                   <option value="sumup">SumUp</option>
                 </select>
                 <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
-                  Configure MP e SumUp abaixo. No PDV Electron o operador escolhe
-                  qual maquininha usar em cada venda.
+                  O Pix do totem e do PDV usa esta operadora. Se escolher SumUp,
+                  entram as mesmas credenciais da Solo. Cartao no PDV continua
+                  escolhendo a maquininha na hora da venda.
                 </p>
               </Field>
               <Field label="Comissão (%)">

@@ -1454,7 +1454,9 @@ export default function App() {
             {pixOk && (
               <PayBtn
                 label="PIX"
-                hint="P · widget SumUp"
+                hint={
+                  config.gateway === 'sumup' ? 'P · SumUp' : 'P · Mercado Pago'
+                }
                 color="#0f766e"
                 disabled={!canPay}
                 onClick={abrirPix}
@@ -1497,6 +1499,7 @@ export default function App() {
           tenantId={config.tenantId}
           total={pixJob.total}
           items={pixJob.items}
+          gateway={config.gateway}
           onClose={() => {
             setPixJob(null);
             reclaimFocus();

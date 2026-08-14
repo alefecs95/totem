@@ -66,8 +66,7 @@ router.get('/config', async (req, res) => {
       ficha_logo_data: (row.ficha_logo_data as string | null) || null,
     }));
 
-    // Métodos de pagamento realmente disponíveis para este tenant.
-    // Pix precisa só de credencial; cartão precisa da maquininha configurada.
+    // Pix e cartao do totem usam a operadora selecionada no admin.
     const gateway = tenant.gateway === 'sumup' ? 'sumup' : 'mercadopago';
     const pixDisponivel =
       gateway === 'sumup'

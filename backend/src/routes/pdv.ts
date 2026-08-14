@@ -101,6 +101,8 @@ router.get('/:codigo', async (req, res) => {
         (tenant.sumup_pay_to_email || tenant.sumup_merchant_code)
     );
     const mpPix = Boolean(tenant.mp_access_token);
+    const pix =
+      defaultGateway === 'sumup' ? sumupPix : mpPix;
 
     res.json({
       codigo: normalizeEventCode(String(req.params.codigo)),
@@ -109,7 +111,7 @@ router.get('/:codigo', async (req, res) => {
       gateway: defaultGateway,
       produtos,
       pagamentos: {
-        pix: sumupPix || mpPix,
+        pix,
         cartao: sumupCartao || mpCartao,
         sumup: sumupCartao,
         mercadopago: mpCartao,
