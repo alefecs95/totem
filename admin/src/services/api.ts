@@ -284,6 +284,17 @@ export async function createTenant(
   return data;
 }
 
+export async function duplicateTenant(
+  id: string,
+  input?: { nome?: string }
+): Promise<{ tenant: Tenant }> {
+  const { data } = await api.post<{ tenant: Tenant }>(
+    `/admin/tenants/${id}/duplicate`,
+    input ?? {}
+  );
+  return data;
+}
+
 export async function updateTenant(
   id: string,
   input: TenantInput

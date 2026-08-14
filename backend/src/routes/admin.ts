@@ -739,6 +739,96 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
   }
 });
 
+const duplicateTenantSchema = z.object({
+  nome: z.string().min(1).max(200).optional(),
+});
+
+async function uniqueEventCode(nome: string): Promise<string> {
+  for (let i = 0; i < 10; i += 1) {
+    const codigo = generateEventCode(nome);
+    const exists = await query(
+      'SELECT 1 FROM tenants WHERE codigo_evento = $1 LIMIT 1',
+      [codigo]
+    );
+    if (exists.rows.length === 0) return codigo;
+  }
+  return `${generateEventCode(nome)}${Date.now().toString(36).slice(-3)}`
+    .toUpperCase()
+    .slice(0, 12);
+}
+
+// POST /api/admin/tenants/:id/duplicate
+// Copia dono, maquininhas, gateway e totens. Produtos e vendas ficam vazios.
+router.post('/tenants/:id/duplicate', verifyAdmin, async (req, res) => {
+  const parsed = duplicateTenantSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    const source = await query('SELECT * FROM tenants WHERE id = $1', [
+      req.params.id,
+    ]);
+    const src = source.rows[0];
+    if (!src) {
+      res.status(404).json({ error: 'tenant_not_found' });
+      return;
+    }
+
+    const nome =
+      parsed.data.nome?.trim() || `${String(src.nome)} (copia)`;
+    const codigo = await uniqueEventCode(nome);
+
+    const inserted = await query<TenantRow>(
+      `INSERT INTO tenants
+        (nome, responsavel, telefone, email, gateway, comissao_pct,
+         mp_access_token, mp_webhook_secret, mp_device_id, mp_user_id, mp_store_id,
+         sumup_api_key, sumup_reader_id, sumup_merchant_code,
+         sumup_affiliate_key, sumup_affiliate_app_id, sumup_pay_to_email,
+         sumup_surcharge_enabled, sumup_debit_surcharge_percent,
+         sumup_credit_surcharge_percent,
+         endereco, numero, bairro, cidade, estado, latitude, longitude,
+         portal_senha_hash, operador_senha_hash, operador_email,
+         ficha_logo_data, codigo_evento, ativo)
+       SELECT
+         $1, responsavel, telefone, email, gateway, comissao_pct,
+         mp_access_token, mp_webhook_secret, mp_device_id, mp_user_id, mp_store_id,
+         sumup_api_key, sumup_reader_id, sumup_merchant_code,
+         sumup_affiliate_key, sumup_affiliate_app_id, sumup_pay_to_email,
+         sumup_surcharge_enabled, sumup_debit_surcharge_percent,
+         sumup_credit_surcharge_percent,
+         endereco, numero, bairro, cidade, estado, latitude, longitude,
+         portal_senha_hash, operador_senha_hash, NULL,
+         ficha_logo_data, $2, true
+       FROM tenants
+       WHERE id = $3
+       RETURNING *`,
+      [nome, codigo, req.params.id]
+    );
+    const tenant = inserted.rows[0];
+    if (!tenant) {
+      res.status(500).json({ error: 'duplicate_tenant_failed' });
+      return;
+    }
+
+    await query(
+      `INSERT INTO totens (tenant_id, nome, local, ativo, mp_pos_id)
+       SELECT $1, nome, local, ativo, mp_pos_id
+       FROM totens
+       WHERE tenant_id = $2`,
+      [tenant.id, req.params.id]
+    );
+
+    res.status(201).json({
+      tenant: stripTenantSecrets(tenant),
+    });
+  } catch (err) {
+    console.error('Erro ao duplicar tenant:', err);
+    res.status(500).json({ error: 'duplicate_tenant_failed' });
+  }
+});
+
 // PUT /api/admin/tenants/:id
 router.put('/tenants/:id', verifyAdmin, async (req, res) => {
   const parsed = tenantSchema.partial().safeParse(req.body);

@@ -111,10 +111,14 @@ export interface DashboardData {
   }>;
 }
 
-export async function login(email: string, senha: string): Promise<TenantInfo> {
+export async function login(
+  email: string,
+  senha: string,
+  tenantId?: string
+): Promise<TenantInfo> {
   const { data } = await api.post<{ token: string; tenant: TenantInfo }>(
     '/portal/login',
-    { email, senha, mode: 'portal' }
+    { email, senha, mode: 'portal', ...(tenantId ? { tenantId } : {}) }
   );
   sessionStorage.setItem('portalToken', data.token);
   sessionStorage.setItem('portalTenant', JSON.stringify(data.tenant));

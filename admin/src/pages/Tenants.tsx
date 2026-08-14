@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import {
   createTenant,
   deleteTenant,
+  duplicateTenant,
   geocode,
   getTenantSumUpReaders,
   getTenantTerminals,
@@ -96,6 +97,7 @@ export default function Tenants() {
   const [totensTenant, setTotensTenant] = useState<Tenant | null>(null);
   const [produtosTenant, setProdutosTenant] = useState<Tenant | null>(null);
   const [resetandoSenha, setResetandoSenha] = useState<string | null>(null);
+  const [duplicandoId, setDuplicandoId] = useState<string | null>(null);
 
   const carregar = () => {
     setLoading(true);
@@ -366,6 +368,32 @@ export default function Tenants() {
     setModalOpen(true);
   };
 
+  const duplicar = async (t: Tenant) => {
+    const nome = window.prompt(
+      `Novo evento (copia de "${t.nome}").\n\nMaquininhas, Pix, totens e senha do dono sao copiados. Produtos e vendas ficam vazios.`,
+      `${t.nome} (copia)`
+    );
+    if (nome === null) return;
+    const trimmed = nome.trim();
+    if (!trimmed) {
+      window.alert('Informe o nome do novo evento.');
+      return;
+    }
+    setDuplicandoId(t.id);
+    try {
+      const { tenant } = await duplicateTenant(t.id, { nome: trimmed });
+      carregar();
+      abrirEdicao(tenant);
+      setAviso(
+        `Evento duplicado. Codigo PDV: ${tenant.codigo_evento || '—'}. Produtos e vendas zerados — revise o nome se quiser e salve.`
+      );
+    } catch {
+      window.alert('Falha ao duplicar o evento. Tente novamente.');
+    } finally {
+      setDuplicandoId(null);
+    }
+  };
+
   const resetarSenha = async (t: Tenant) => {
     const custom = window.prompt(
       `Nova senha do ADM DO EVENTO (portal) para "${t.nome}".\n\nDigite a senha (mín. 4) ou deixe em branco para GERAR:`
@@ -598,6 +626,14 @@ export default function Tenants() {
                       className="btn-link"
                     >
                       Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void duplicar(t)}
+                      className="btn-link"
+                      disabled={duplicandoId === t.id}
+                    >
+                      {duplicandoId === t.id ? '...' : 'Duplicar'}
                     </button>
                     {t.ativo && (
                       <button

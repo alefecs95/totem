@@ -38,6 +38,8 @@ const loginSchema = z.object({
   mode: z.enum(['portal', 'operador']).optional().default('portal'),
   /** Codigo do evento (vindo do link /e/:codigo, salvo no localStorage). */
   codigo: z.string().trim().min(3).max(32).optional(),
+  /** Quando o mesmo e-mail tem varios eventos, o adm escolhe qual abrir. */
+  tenantId: z.string().uuid().optional(),
 });
 
 // POST /api/portal/login
@@ -51,7 +53,7 @@ router.post('/login', async (req, res) => {
     return;
   }
 
-  const { email, senha, mode, codigo } = parsed.data;
+  const { email, senha, mode, codigo, tenantId } = parsed.data;
   const emailNorm = email.trim().toLowerCase().replace(/\s+/g, '');
   const codigoNorm = codigo ? normalizeEventCode(codigo) : '';
 
@@ -125,11 +127,11 @@ router.post('/login', async (req, res) => {
       `SELECT id, nome, email, portal_senha_hash, codigo_evento, ativo
        FROM tenants
        WHERE LOWER(REPLACE(TRIM(COALESCE(email, '')), ' ', '')) = $1
-       LIMIT 1`,
+         AND ativo = true
+       ORDER BY criado_em DESC`,
       [emailNorm]
     );
-    const tenant = result.rows[0];
-    if (!tenant?.ativo) {
+    if (result.rows.length === 0) {
       res.status(401).json({
         error: 'invalid_credentials',
         detalhe:
@@ -137,31 +139,48 @@ router.post('/login', async (req, res) => {
       });
       return;
     }
-    if (!tenant.portal_senha_hash) {
-      res.status(401).json({
-        error: 'invalid_credentials',
-        detalhe: 'Senha do portal nao configurada. Peca ao super admin para redefinir.',
-      });
-      return;
+
+    const withPassword = result.rows.filter((row) => row.portal_senha_hash);
+    const matches: typeof result.rows = [];
+    for (const row of withPassword) {
+      const ok = await bcrypt.compare(senha, row.portal_senha_hash as string);
+      if (ok) matches.push(row);
     }
-    if (codigoNorm) {
-      const tenantCodigo = tenant.codigo_evento
-        ? normalizeEventCode(tenant.codigo_evento)
-        : '';
-      if (!tenantCodigo || tenantCodigo !== codigoNorm) {
-        res.status(401).json({
-          error: 'invalid_credentials',
-          detalhe:
-            'Este link nao corresponde a este e-mail. Use o e-mail do adm deste evento.',
-        });
-        return;
-      }
-    }
-    const ok = await bcrypt.compare(senha, tenant.portal_senha_hash);
-    if (!ok) {
+    if (matches.length === 0) {
       res.status(401).json({
         error: 'invalid_credentials',
         detalhe: 'Senha do adm do evento incorreta.',
+      });
+      return;
+    }
+
+    let tenant = matches[0];
+    if (tenantId) {
+      const chosen = matches.find((row) => row.id === tenantId);
+      if (!chosen) {
+        res.status(401).json({
+          error: 'invalid_credentials',
+          detalhe: 'Evento nao encontrado para este e-mail.',
+        });
+        return;
+      }
+      tenant = chosen;
+    } else if (codigoNorm) {
+      const byCode = matches.find(
+        (row) =>
+          row.codigo_evento &&
+          normalizeEventCode(row.codigo_evento) === codigoNorm
+      );
+      if (byCode) tenant = byCode;
+    } else if (matches.length > 1) {
+      res.status(409).json({
+        error: 'choose_event',
+        detalhe: 'Este e-mail tem mais de um evento. Escolha qual abrir.',
+        eventos: matches.map((row) => ({
+          id: row.id,
+          nome: row.nome,
+          codigo_evento: row.codigo_evento,
+        })),
       });
       return;
     }
