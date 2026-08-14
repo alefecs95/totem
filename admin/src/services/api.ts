@@ -19,6 +19,9 @@ api.interceptors.response.use(
   (error) => {
     if (error?.response?.status === 401) {
       sessionStorage.removeItem('adminToken');
+      if (window.location.pathname.startsWith('/evento')) {
+        return Promise.reject(error);
+      }
       // BASE_URL respeita o subpath /admin/ configurado no Vite.
       const loginPath = import.meta.env.BASE_URL;
       if (window.location.pathname !== loginPath) {

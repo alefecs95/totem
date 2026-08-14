@@ -1,21 +1,25 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { login } from '../services/api';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { login } from '../eventPortal/services/api';
 
-export default function Login() {
+export default function EventLogin() {
   const navigate = useNavigate();
+  const already = sessionStorage.getItem('portalToken');
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
   const [loading, setLoading] = useState(false);
+
+  if (already) return <Navigate to="/evento/dashboard" replace />;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErro('');
     setLoading(true);
     try {
+      sessionStorage.removeItem('adminToken');
       await login(email, senha);
-      navigate('/dashboard');
+      navigate('/evento/dashboard');
     } catch (err: unknown) {
       const detalhe = (
         err as { response?: { data?: { detalhe?: string } } }
@@ -50,26 +54,27 @@ export default function Login() {
         }}
       >
         <h1 style={{ margin: 0, fontSize: 22, color: '#9a3412' }}>
-          Portal do Organizador
+          Adm do evento
         </h1>
         <p style={{ margin: 0, color: '#78716c', fontSize: 14 }}>
-          Entre com o e-mail e a senha do adm do evento para abrir o painel do
-          seu festival.
+          Entre com o e-mail e a senha do organizador. Você vai para o painel
+          do seu festival.
         </p>
 
         <label style={{ fontSize: 13, color: '#44403c', fontWeight: 600 }}>
-          E-mail do cadastro
+          E-mail
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            autoFocus
             style={inputStyle}
           />
         </label>
 
         <label style={{ fontSize: 13, color: '#44403c', fontWeight: 600 }}>
-          Senha do portal
+          Senha
           <input
             type="password"
             value={senha}
@@ -95,7 +100,7 @@ export default function Login() {
             opacity: loading ? 0.6 : 1,
           }}
         >
-          {loading ? 'Entrando...' : 'Entrar'}
+          {loading ? 'Entrando...' : 'Entrar no meu evento'}
         </button>
       </form>
     </div>

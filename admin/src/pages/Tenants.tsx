@@ -381,7 +381,7 @@ export default function Tenants() {
       const result = await resetTenantSenha(t.id, 'portal', senha || undefined);
       carregar();
       window.alert(
-        `Senha do adm do evento redefinida.\n\nLink do portal:\n${portalEventUrl(t.codigo_evento) || '—'}\nE-mail: ${t.email || '—'}\nSenha: ${result.senha}\n\nEnvie o link + e-mail + senha.`
+        `Senha do adm do evento redefinida.\n\nLink:\n${portalEventUrl()}\nE-mail: ${t.email || '—'}\nSenha: ${result.senha}\n\nO organizador entra com e-mail e senha e cai no painel do próprio evento.`
       );
     } catch {
       window.alert('Falha ao resetar senha. Tente novamente.');
@@ -390,17 +390,13 @@ export default function Tenants() {
     }
   };
 
-  const copiarLinkPortal = async (t: Tenant) => {
-    const url = portalEventUrl(t.codigo_evento);
-    if (!url) {
-      window.alert('Sem código do evento. Salve o organizador para gerar o código.');
-      return;
-    }
+  const copiarLinkPortal = async () => {
+    const url = portalEventUrl();
     try {
       await navigator.clipboard.writeText(url);
       setAviso(`Link copiado: ${url}`);
     } catch {
-      window.prompt('Copie o link do portal:', url);
+      window.prompt('Copie o link do adm do evento:', url);
     }
   };
 
@@ -546,32 +542,24 @@ export default function Tenants() {
                     <span className="code-pill">{t.codigo_evento || '—'}</span>
                   </td>
                   <td>
-                    {portalEventUrl(t.codigo_evento) ? (
-                      <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
-                        <button
-                          type="button"
-                          className="btn-link"
-                          onClick={() =>
-                            window.open(
-                              portalEventUrl(t.codigo_evento)!,
-                              '_blank',
-                              'noopener'
-                            )
-                          }
-                        >
-                          Abrir adm
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-link"
-                          onClick={() => void copiarLinkPortal(t)}
-                        >
-                          Copiar link
-                        </button>
-                      </span>
-                    ) : (
-                      <span className="muted">Sem código</span>
-                    )}
+                    <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        className="btn-link"
+                        onClick={() =>
+                          window.open(portalEventUrl(), '_blank', 'noopener')
+                        }
+                      >
+                        Abrir adm
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-link"
+                        onClick={() => void copiarLinkPortal()}
+                      >
+                        Copiar link
+                      </button>
+                    </span>
                   </td>
                   <td>{t.responsavel}</td>
                   <td>

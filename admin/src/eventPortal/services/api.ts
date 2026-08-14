@@ -18,8 +18,8 @@ api.interceptors.response.use(
     if (error?.response?.status === 401) {
       sessionStorage.removeItem('portalToken');
       sessionStorage.removeItem('portalTenant');
-      if (window.location.pathname !== '/') {
-        window.location.href = '/';
+      if (!window.location.pathname.startsWith('/evento')) {
+        window.location.href = '/evento';
       }
     }
     return Promise.reject(error);
@@ -109,13 +109,6 @@ export interface DashboardData {
     vendas: number;
     total: number;
   }>;
-}
-
-export async function getEventoPublico(codigo: string): Promise<{ nome: string }> {
-  const { data } = await api.get<{ nome: string }>(
-    `/portal/evento/${encodeURIComponent(codigo)}`
-  );
-  return data;
 }
 
 export async function login(email: string, senha: string): Promise<TenantInfo> {

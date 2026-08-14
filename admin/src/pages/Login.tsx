@@ -15,6 +15,8 @@ export default function Login() {
     setLoading(true);
     try {
       const token = await login(email, senha);
+      sessionStorage.removeItem('portalToken');
+      sessionStorage.removeItem('portalTenant');
       sessionStorage.setItem('adminToken', token);
       navigate('/dashboard');
     } catch {
@@ -70,6 +72,9 @@ export default function Login() {
           <button type="submit" className="btn btn-primary" disabled={loading}>
             {loading ? 'Entrando...' : 'Entrar no painel'}
           </button>
+          <p className="sub" style={{ marginTop: 16, marginBottom: 0 }}>
+            <a href="/evento">Sou adm do evento</a>
+          </p>
         </form>
       </section>
     </div>

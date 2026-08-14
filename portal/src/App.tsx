@@ -11,11 +11,10 @@ import Sales from './pages/Sales';
 import Totens from './pages/Totens';
 import Operadores from './pages/Operadores';
 import PortalLayout from './components/PortalLayout';
-import { portalLoginPath } from './eventCode';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = sessionStorage.getItem('portalToken');
-  if (!token) return <Navigate to={portalLoginPath()} replace />;
+  if (!token) return <Navigate to="/" replace />;
   return <PortalLayout>{children}</PortalLayout>;
 }
 

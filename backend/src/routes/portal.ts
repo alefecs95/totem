@@ -114,15 +114,6 @@ router.post('/login', async (req, res) => {
       return;
     }
 
-    if (!codigoNorm) {
-      res.status(401).json({
-        error: 'invalid_credentials',
-        detalhe:
-          'Abra o link do seu evento (enviado pelo Totem). O endereco raiz do portal nao identifica o festival.',
-      });
-      return;
-    }
-
     const result = await query<{
       id: string;
       nome: string;
@@ -153,16 +144,18 @@ router.post('/login', async (req, res) => {
       });
       return;
     }
-    const tenantCodigo = tenant.codigo_evento
-      ? normalizeEventCode(tenant.codigo_evento)
-      : '';
-    if (!tenantCodigo || tenantCodigo !== codigoNorm) {
-      res.status(401).json({
-        error: 'invalid_credentials',
-        detalhe:
-          'Este link nao corresponde a este e-mail. Use o link do portal do seu evento.',
-      });
-      return;
+    if (codigoNorm) {
+      const tenantCodigo = tenant.codigo_evento
+        ? normalizeEventCode(tenant.codigo_evento)
+        : '';
+      if (!tenantCodigo || tenantCodigo !== codigoNorm) {
+        res.status(401).json({
+          error: 'invalid_credentials',
+          detalhe:
+            'Este link nao corresponde a este e-mail. Use o e-mail do adm deste evento.',
+        });
+        return;
+      }
     }
     const ok = await bcrypt.compare(senha, tenant.portal_senha_hash);
     if (!ok) {
