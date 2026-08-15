@@ -5,7 +5,6 @@ import { createCardPayment, getConfig, persistTotemConfig } from '../../services
 import {
   computeCardSurchargeForCardType,
   formatSurchargePercent,
-  isSumupGateway,
   readSumupSurchargeConfig,
   type CardType,
 } from '../../utils/cardSurcharge';
@@ -45,6 +44,7 @@ function metodoLabel(metodo: string): string {
     dinheiro: 'Dinheiro',
     cartao_fisico: 'Cartão físico',
     pix: 'Pix',
+    pix_proprietario: 'Pix dono',
     cartao: 'Cartão',
   };
   return map[metodo] ?? metodo;
@@ -167,7 +167,11 @@ export default function Operator() {
     try {
       const raw = localStorage.getItem('pagamentos');
       return raw
-        ? (JSON.parse(raw) as { pix: boolean; cartao: boolean })
+        ? (JSON.parse(raw) as {
+            pix: boolean;
+            cartao: boolean;
+            pixProprietario?: boolean;
+          })
         : { pix: true, cartao: true };
     } catch {
       return { pix: true, cartao: true };
@@ -212,7 +216,7 @@ export default function Operator() {
   }, [pagando]);
 
   const finalizarManual = useCallback(
-    async (metodo: 'dinheiro' | 'cartao_fisico', recebido?: number) => {
+    async (metodo: 'dinheiro' | 'cartao_fisico' | 'pix_proprietario', recebido?: number) => {
       const state = useCartStore.getState();
       if (state.items.length === 0 || pagando) return;
       const tot = state.getTotal();
@@ -329,7 +333,7 @@ export default function Operator() {
 
   const iniciarCartaoGateway = useCallback(() => {
     const surcharge = readSumupSurchargeConfig();
-    if (isSumupGateway() && surcharge?.enabled) {
+    if (surcharge?.enabled) {
       setCardPickerOpen(true);
       return;
     }
@@ -842,6 +846,16 @@ export default function Operator() {
                 color="#059669"
                 disabled={!canPay}
                 onClick={pagarPix}
+              />
+            )}
+            {pagamentos.pixProprietario && (
+              <PayBtn
+                label="PIX DONO"
+                hint="Chave do dono"
+                color="#047857"
+                disabled={!canPay}
+                loading={pagando === 'pix_proprietario'}
+                onClick={() => void finalizarManual('pix_proprietario')}
               />
             )}
             {pagamentos.cartao && (

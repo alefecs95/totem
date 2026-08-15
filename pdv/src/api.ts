@@ -63,10 +63,12 @@ export interface PdvConfig {
     cartao: boolean;
     sumup?: boolean;
     mercadopago?: boolean;
+    pixProprietario?: boolean;
   };
   sumupReaderId?: string | null;
   mpDeviceId?: string | null;
   sumupSurcharge?: SumupSurcharge | null;
+  pixProprietarioChave?: string | null;
 }
 
 export async function loadEvento(codigo: string): Promise<PdvConfig> {
@@ -113,7 +115,7 @@ export async function criarVenda(input: {
   codigo: string;
   items: Array<{ productId: string; quantidade: number }>;
   total: number;
-  metodo: 'dinheiro' | 'cartao_fisico';
+  metodo: 'dinheiro' | 'cartao_fisico' | 'pix_proprietario';
   clientTransactionId: string;
 }): Promise<{
   transactionId: string;

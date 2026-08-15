@@ -2,7 +2,7 @@
 
 export const PDV_OFFLINE_KEY = 'pdv_offline_sales_queue';
 
-export type ManualMetodo = 'dinheiro' | 'cartao_fisico';
+export type ManualMetodo = 'dinheiro' | 'cartao_fisico' | 'pix_proprietario';
 
 export interface QueuedPdvSale {
   id: string;

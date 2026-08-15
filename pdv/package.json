@@ -1,6 +1,6 @@
 {
   "name": "totem-pdv",
-  "version": "1.2.6",
+  "version": "1.2.15",
   "private": true,
   "description": "PDV Electron — venda e impressão de fichas por código do evento",
   "main": "electron/main.cjs",
@@ -16,6 +16,7 @@
     "productName": "Totem PDV",
     "directories": { "output": "release" },
     "files": ["dist/**/*", "electron/**/*", "package.json"],
+    "asarUnpack": ["electron/rawPrint.ps1"],
     "win": { "target": ["nsis"] }
   },
   "dependencies": {

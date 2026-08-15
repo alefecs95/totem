@@ -220,6 +220,8 @@ export default function App() {
     () => localStorage.getItem('pdvSumupReaderId') || ''
   );
   const [cardPickerOpen, setCardPickerOpen] = useState(false);
+  const [pixDonoOpen, setPixDonoOpen] = useState(false);
+  const [cardPayGateway, setCardPayGateway] = useState<PayGateway>('sumup');
   const [gatewayPickerOpen, setGatewayPickerOpen] = useState(false);
   const [pendingPix, setPendingPix] = useState<PendingPix[]>(() => {
     try {
@@ -299,6 +301,7 @@ export default function App() {
     qtyDigits === '' ? 1 : Math.max(1, parseInt(qtyDigits, 10) || 1);
   const canPay = cart.length > 0 && !pagando;
   const pixOk = Boolean(config?.pagamentos?.pix);
+  const pixDonoOk = Boolean(config?.pagamentos?.pixProprietario);
   const hasPendingCard = pendingCards.length > 0;
   const hasPendingPix = pendingPix.length > 0;
   const cardDetail = cardDetailId
@@ -390,7 +393,6 @@ export default function App() {
   }, [pendingPix]);
 
   const reclaimFocus = useCallback(() => {
-    void window.pdvDesktop?.focusMainWindow?.();
     const el = shellRef.current;
     if (el) {
       try {
@@ -398,15 +400,6 @@ export default function App() {
       } catch {
         el.focus();
       }
-    }
-    const active = document.activeElement as HTMLElement | null;
-    if (
-      active &&
-      (active.tagName === 'SELECT' ||
-        active.tagName === 'BUTTON' ||
-        active.tagName === 'A')
-    ) {
-      active.blur();
     }
   }, []);
 
@@ -416,26 +409,17 @@ export default function App() {
     return () => window.clearTimeout(id);
   }, [toast]);
 
-  // Recupera foco do teclado apos blur / impressao / clique fora
+  // Atalhos de teclado: so recupera foco interno se a janela ja estiver ativa.
   useEffect(() => {
-    const onFocus = () => reclaimFocus();
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') reclaimFocus();
-    };
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onVisibility);
     const id = window.setInterval(() => {
+      if (document.hidden) return;
       if (!document.hasFocus()) return;
       const tag = (document.activeElement as HTMLElement | null)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (document.activeElement === shellRef.current) return;
       if (document.activeElement === document.body) reclaimFocus();
-    }, 2000);
-    return () => {
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.clearInterval(id);
-    };
+    }, 4000);
+    return () => window.clearInterval(id);
   }, [reclaimFocus]);
 
   // Kiosk: esconde cursor apos 5s sem movimento; volta ao mexer
@@ -603,9 +587,19 @@ export default function App() {
         }
         localStorage.setItem('pdvPrinter', printerName);
         if (window.pdvDesktop?.printFichasSilent) {
-          await window.pdvDesktop.printFichasSilent(pages, printerName);
+          const printed = await window.pdvDesktop.printFichasSilent(
+            pages,
+            printerName
+          );
+          if (!printed?.ok) {
+            setToast(
+              printed?.error
+                ? `Impressao falhou (${printed.error})`
+                : 'Impressao falhou — confira a impressora'
+            );
+            return;
+          }
         }
-        reclaimFocus();
         if (opts?.isReprint) setToast('Reimpressao enviada');
       } catch {
         setToast(
@@ -613,7 +607,6 @@ export default function App() {
             ? 'Falha na reimpressao'
             : 'Venda ok, mas falhou a impressao - tente de novo'
         );
-        reclaimFocus();
       }
     })();
   };
@@ -629,7 +622,9 @@ export default function App() {
     });
   };
 
-  const finalizarManual = async (metodo: 'dinheiro' | 'cartao_fisico') => {
+  const finalizarManual = async (
+    metodo: 'dinheiro' | 'cartao_fisico' | 'pix_proprietario'
+  ) => {
     if (!config || cart.length === 0) return;
     setPagando(metodo);
     setErro('');
@@ -755,9 +750,9 @@ export default function App() {
     cardType?: CardType
   ) => {
     if (!config || cart.length === 0) return;
-    if (pendingCards.length > 0) {
+    if (pendingCards.some((p) => p.gateway === gateway)) {
       setErro(
-        'Ja ha cartao aguardando na maquininha. Minimize e continue vendendo em dinheiro, ou cancele o pendente na barra inferior.'
+        `Ja ha cartao aguardando na ${gateway === 'sumup' ? 'SumUp' : 'Mercado Pago'}. Cancele ou espere, ou use a outra maquininha.`
       );
       return;
     }
@@ -787,7 +782,7 @@ export default function App() {
         })),
         total: netTotal,
         gateway,
-        cardType: gateway === 'sumup' ? cardType : undefined,
+        cardType,
         readerId:
           gateway === 'sumup'
             ? selectedReaderId || config.sumupReaderId || undefined
@@ -835,6 +830,7 @@ export default function App() {
   };
 
   const iniciarSumupComTipo = () => {
+    setCardPayGateway('sumup');
     if (needsCardType) {
       setGatewayPickerOpen(false);
       setCardPickerOpen(true);
@@ -843,19 +839,27 @@ export default function App() {
     void pagarCartaoGateway('sumup');
   };
 
-  const iniciarLeitor = () => {
-    if (!canPay) return;
-    if (pendingCards.length > 0) {
-      setErro(
-        'Cartao em andamento. Venda em dinheiro/cartao fisico, ou cancele o pendente.'
-      );
+  const iniciarMpComTipo = () => {
+    setCardPayGateway('mercadopago');
+    if (needsCardType) {
+      setGatewayPickerOpen(false);
+      setCardPickerOpen(true);
       return;
     }
+    void pagarCartaoGateway('mercadopago');
+  };
+
+  const iniciarLeitor = () => {
+    if (!canPay) return;
     if (sumupOk && mpOk) {
       setGatewayPickerOpen(true);
       return;
     }
     if (sumupOk) {
+      if (pendingCards.some((p) => p.gateway === 'sumup')) {
+        setErro('SumUp em andamento. Use Mercado Pago, dinheiro/Pix, ou cancele.');
+        return;
+      }
       if (!selectedReaderId && !config?.sumupReaderId) {
         setErro('Selecione a maquininha SumUp (botao Maquininha).');
         void abrirMaquininhas();
@@ -865,7 +869,11 @@ export default function App() {
       return;
     }
     if (mpOk) {
-      void pagarCartaoGateway('mercadopago');
+      if (pendingCards.some((p) => p.gateway === 'mercadopago')) {
+        setErro('Mercado Pago em andamento. Use SumUp, dinheiro/Pix, ou cancele.');
+        return;
+      }
+      iniciarMpComTipo();
       return;
     }
     setErro('Nenhuma maquininha configurada (SumUp ou Mercado Pago).');
@@ -1390,6 +1398,14 @@ export default function App() {
         </button>
         <button
           type="button"
+          onClick={() => void window.pdvDesktop?.minimizeMainWindow?.()}
+          style={hdrBtn}
+          title="Minimizar"
+        >
+          Minimizar
+        </button>
+        <button
+          type="button"
           onClick={reimprimirUltima}
           style={hdrBtn}
           disabled={!lastPrint}
@@ -1420,7 +1436,8 @@ export default function App() {
           <span>0-9 quantidade</span>
           <span>F1-F9 produto</span>
           <span>D/Enter dinheiro</span>
-          <span>P PIX SumUp</span>
+          <span>P PIX operadora</span>
+          <span>L leitor (SumUp+MP juntos)</span>
           <span>F cartao fisico</span>
           <span>L leitor (SumUp/MP)</span>
           <span>H historico</span>
@@ -1641,6 +1658,20 @@ export default function App() {
                 primary
               />
             )}
+            {pixDonoOk && (
+              <PayBtn
+                label="PIX DONO"
+                hint="Chave do proprietario"
+                color="#047857"
+                disabled={!canPay}
+                loading={pagando === 'pix_proprietario'}
+                onClick={() => {
+                  if (!canPay) return;
+                  setPixDonoOpen(true);
+                  setErro('');
+                }}
+              />
+            )}
             <PayBtn
               label="DINHEIRO"
               hint="D / Enter"
@@ -1774,6 +1805,71 @@ export default function App() {
         </div>
       )}
 
+      {pixDonoOpen && (
+        <div style={modalOverlay} onClick={() => setPixDonoOpen(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 18 }}>Pix proprietario</div>
+            <p style={{ color: '#a8a29e', fontSize: 13, marginTop: 8 }}>
+              Cliente paga na chave do dono. Confirme so depois de receber.
+            </p>
+            {config.pixProprietarioChave ? (
+              <div
+                style={{
+                  marginTop: 14,
+                  padding: 14,
+                  borderRadius: 10,
+                  background: '#292524',
+                  fontWeight: 800,
+                  fontSize: 16,
+                  wordBreak: 'break-all',
+                }}
+              >
+                {config.pixProprietarioChave}
+              </div>
+            ) : null}
+            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 36, color: '#ea580c', marginTop: 12 }}>
+              {formatPreco(total)}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                disabled={!!pagando}
+                onClick={() => {
+                  setPixDonoOpen(false);
+                  void finalizarManual('pix_proprietario');
+                }}
+                style={{
+                  padding: 16,
+                  borderRadius: 10,
+                  border: 'none',
+                  background: '#047857',
+                  color: '#fff',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                Confirmar Pix recebido
+              </button>
+              <button
+                type="button"
+                onClick={() => setPixDonoOpen(false)}
+                style={{
+                  padding: 12,
+                  borderRadius: 10,
+                  border: '1px solid #57534e',
+                  background: 'transparent',
+                  color: '#fff',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {gatewayPickerOpen && (
         <div style={modalOverlay} onClick={() => setGatewayPickerOpen(false)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
@@ -1785,7 +1881,10 @@ export default function App() {
               {sumupOk && (
                 <button
                   type="button"
-                  disabled={!!pagando}
+                  disabled={
+                    !!pagando ||
+                    pendingCards.some((p) => p.gateway === 'sumup')
+                  }
                   onClick={iniciarSumupComTipo}
                   style={{
                     padding: 18,
@@ -1804,8 +1903,11 @@ export default function App() {
               {mpOk && (
                 <button
                   type="button"
-                  disabled={!!pagando}
-                  onClick={() => void pagarCartaoGateway('mercadopago')}
+                  disabled={
+                    !!pagando ||
+                    pendingCards.some((p) => p.gateway === 'mercadopago')
+                  }
+                  onClick={() => iniciarMpComTipo()}
                   style={{
                     padding: 18,
                     borderRadius: 10,
@@ -1958,7 +2060,7 @@ export default function App() {
               <button
                 type="button"
                 disabled={!!pagando}
-                onClick={() => void pagarCartaoGateway('sumup', 'debit')}
+                onClick={() => void pagarCartaoGateway(cardPayGateway, 'debit')}
                 style={{
                   padding: 16,
                   borderRadius: 10,
@@ -1978,7 +2080,7 @@ export default function App() {
               <button
                 type="button"
                 disabled={!!pagando}
-                onClick={() => void pagarCartaoGateway('sumup', 'credit')}
+                onClick={() => void pagarCartaoGateway(cardPayGateway, 'credit')}
                 style={{
                   padding: 16,
                   borderRadius: 10,
@@ -2097,7 +2199,8 @@ export default function App() {
               <div style={{ fontSize: 22 }}>💳</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 800, color: '#fff', fontSize: 14 }}>
-                  Cartao aguardando · {formatPreco(p.chargedAmount)}
+                  Cartao {p.gateway === 'sumup' ? 'SumUp' : 'Mercado Pago'} ·{' '}
+                  {formatPreco(p.chargedAmount)}
                 </div>
                 <div
                   style={{

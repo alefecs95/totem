@@ -43,6 +43,8 @@ const emptyForm: TenantInput = {
   sumup_surcharge_enabled: false,
   sumup_debit_surcharge_percent: 0,
   sumup_credit_surcharge_percent: 0,
+  pix_proprietario_enabled: false,
+  pix_proprietario_chave: '',
   ficha_logo_data: null,
   endereco: '',
   numero: '',
@@ -354,6 +356,8 @@ export default function Tenants() {
       sumup_surcharge_enabled: Boolean(t.sumup_surcharge_enabled),
       sumup_debit_surcharge_percent: Number(t.sumup_debit_surcharge_percent ?? 0),
       sumup_credit_surcharge_percent: Number(t.sumup_credit_surcharge_percent ?? 0),
+      pix_proprietario_enabled: Boolean(t.pix_proprietario_enabled),
+      pix_proprietario_chave: t.pix_proprietario_chave ?? '',
       ficha_logo_data: t.ficha_logo_data ?? null,
       endereco: t.endereco ?? '',
       numero: t.numero ?? '',
@@ -801,6 +805,58 @@ export default function Tenants() {
                   onChange={(e) =>
                     setField('comissao_pct', Number(e.target.value))
                   }
+                />
+              </Field>
+            </div>
+
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 10,
+                border: '1px solid #e2e8f0',
+                background: '#f8fafc',
+              }}
+            >
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 10,
+                  cursor: 'pointer',
+                  marginBottom: 12,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.pix_proprietario_enabled)}
+                  onChange={(e) =>
+                    setField('pix_proprietario_enabled', e.target.checked)
+                  }
+                  style={{ marginTop: 4 }}
+                />
+                <span>
+                  <strong>Pix proprietário</strong>
+                  <p
+                    style={{
+                      margin: '4px 0 0',
+                      fontSize: 12,
+                      color: '#64748b',
+                      fontWeight: 400,
+                    }}
+                  >
+                    O cliente paga na chave Pix do dono. O caixa só registra a
+                    venda no sistema (sem cobrança SumUp/Mercado Pago).
+                  </p>
+                </span>
+              </label>
+              <Field label="Chave Pix (opcional, aparece no caixa)">
+                <input
+                  style={input}
+                  value={form.pix_proprietario_chave ?? ''}
+                  onChange={(e) =>
+                    setField('pix_proprietario_chave', e.target.value)
+                  }
+                  placeholder="CPF, e-mail, telefone ou chave aleatória"
                 />
               </Field>
             </div>
@@ -1302,9 +1358,9 @@ export default function Tenants() {
                           fontWeight: 400,
                         }}
                       >
-                        A venda continua valendo o valor dos produtos. A taxa é
-                        somada só no valor cobrado no cartão, para o organizador
-                        receber o líquido cheio.
+                        Vale para SumUp e Mercado Pago. A venda continua no valor
+                        dos produtos; a taxa entra só no valor cobrado no cartão,
+                        para o organizador receber o líquido cheio.
                       </p>
                     </span>
                   </label>
@@ -1367,10 +1423,11 @@ export default function Tenants() {
                     </div>
                   </div>
                   <p style={{ margin: '10px 0 0', fontSize: 12, color: '#64748b' }}>
-                    Use as taxas do contrato SumUp (app/extrato da Solo). Exemplo
-                    em venda de R$ 100: débito 1,99% → cobra ~R$ 102,04; crédito
-                    4,99% → cobra ~R$ 105,25. Informe o cliente sobre diferença
-                    débito/crédito (Lei 13.455/2017).
+                    Use as taxas do contrato (SumUp Solo ou Mercado Pago Point).
+                    Exemplo em venda de R$ 100: débito 1,99% → cobra ~R$ 102,04;
+                    crédito 4,99% → cobra ~R$ 105,25. No caixa, escolha débito ou
+                    crédito antes de enviar à maquininha. Informe o cliente
+                    (Lei 13.455/2017).
                   </p>
                 </div>
                 <Field label="SumUp Reader ID (maquininha Solo)">

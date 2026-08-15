@@ -9,9 +9,17 @@ export const FICHA_ALTURA_MM = FICHA_UNICA_ALTURA_MM;
 const PX_W = 576;
 const PX_H_UNICA = 256; // 8 px/mm × 32mm
 const PX_H_2VIAS = 432; // 8 px/mm × 54mm
-const MARGIN_X = 16;
-const MARGIN_TOP = 4;
-const MARGIN_BOTTOM = 56;
+const MARGIN_LEFT = 24;
+const MARGIN_RIGHT = 56;
+const MARGIN_TOP = 2;
+const MARGIN_BOTTOM = 10;
+
+function contentLayout() {
+  const x = MARGIN_LEFT;
+  const w = PX_W - MARGIN_LEFT - MARGIN_RIGHT;
+  const cx = x + Math.floor(w / 2);
+  return { x, w, cx };
+}
 
 export type FichaVia = 'unica' | 'barman' | 'cliente';
 
@@ -29,7 +37,6 @@ export type PrintPage = {
   heightMm: number;
 };
 
-const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 const DAY_SEQ_KEY = 'pdvFichaDaySeq';
 
 export function ticketHeightMm(via?: FichaVia): number {
@@ -64,14 +71,20 @@ export function nextDaySeq(): number {
   }
 }
 
-export function generateFichaCodigo(len = 4): string {
-  const bytes = new Uint8Array(len);
-  crypto.getRandomValues(bytes);
-  let out = '';
-  for (let i = 0; i < len; i += 1) {
-    out += CODE_ALPHABET[bytes[i]! % CODE_ALPHABET.length];
+export function formatFichaNumero(n: number): string {
+  return String(Math.max(0, Math.floor(n))).padStart(3, '0');
+}
+
+export function generateFichaCodigo(): string {
+  return formatFichaNumero(nextDaySeq());
+}
+
+function fichaNumero(ticket: FichaTicket): string {
+  if (ticket.seqDia != null && Number.isFinite(ticket.seqDia)) {
+    return formatFichaNumero(ticket.seqDia);
   }
-  return `B-${out}`;
+  const digits = String(ticket.codigo || '').replace(/\D/g, '');
+  return (digits || '0').padStart(3, '0');
 }
 
 function formatDataHora(date: Date): string {
@@ -208,125 +221,100 @@ function drawNomeBar(
   y: number,
   h: number
 ): void {
+  const { x, w, cx } = contentLayout();
   const text = (nome || 'FICHA').toUpperCase();
   ctx.fillStyle = '#000';
-  ctx.fillRect(MARGIN_X, y + 4, PX_W - MARGIN_X * 2, h - 8);
+  ctx.fillRect(x, y + 4, w, h - 8);
   ctx.fillStyle = '#fff';
   const len = text.length;
   const fontSize = len <= 10 ? 30 : len <= 16 ? 24 : 18;
   ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
-  ctx.fillText(text, Math.floor(PX_W / 2), y + h / 2, PX_W - MARGIN_X * 4);
+  ctx.fillText(text, cx, y + h / 2, w - 24);
   ctx.fillStyle = '#000';
 }
 
-function drawDashedLine(
+function drawWrappedName(
   ctx: CanvasRenderingContext2D,
+  nome: string,
+  cx: number,
+  w: number,
   y: number,
-  width = PX_W
-): void {
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = 2;
-  ctx.setLineDash([8, 6]);
-  ctx.beginPath();
-  ctx.moveTo(16, y);
-  ctx.lineTo(width - 16, y);
-  ctx.stroke();
-  ctx.setLineDash([]);
+  maxFont: number
+): number {
+  let fontSize =
+    nome.length <= 12 ? maxFont : nome.length <= 20 ? maxFont - 10 : maxFont - 18;
+  ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
+  let lines = wrapLines(ctx, nome, w - 16, 3);
+  while (fontSize > 26 && lines.length > 2) {
+    fontSize -= 4;
+    ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
+    lines = wrapLines(ctx, nome, w - 16, 3);
+  }
+  const lineH = fontSize + 8;
+  let ty = y;
+  for (const line of lines) {
+    ctx.fillText(line, cx, ty, w - 16);
+    ty += lineH;
+  }
+  return ty;
 }
 
-/** Via barman: SABOR em destaque; codigo secundario. */
+/** Via barman: sabor + numero grande, so texto. */
 function drawBarman(
   ctx: CanvasRenderingContext2D,
   ticket: FichaTicket,
   when: string,
   pxH: number
 ): void {
+  const { w, cx } = contentLayout();
   const nome = (ticket.nome || 'FICHA').toUpperCase();
-  const codigo = (ticket.codigo || 'B----').toUpperCase();
-  const seq =
-    ticket.seqDia != null
-      ? `#${String(ticket.seqDia).padStart(3, '0')}`
-      : '';
+  const numero = fichaNumero(ticket);
 
-  ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
-  ctx.fillText(
-    seq ? `BARMAN  ${seq}` : 'BARMAN',
-    PX_W / 2,
-    22,
-    PX_W - 24
-  );
-  drawDashedLine(ctx, 40);
-
-  // Bloco do sabor (prioridade visual)
-  const saborTop = 52;
-  const saborH = 250;
-  ctx.fillStyle = '#000';
-  ctx.fillRect(16, saborTop, PX_W - 32, saborH);
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 14px Arial, Helvetica, sans-serif';
-  ctx.fillText('SABOR', PX_W / 2, saborTop + 28);
-
-  // Fonte grande, ajusta se o nome for longo
-  let fontSize = nome.length <= 12 ? 64 : nome.length <= 20 ? 48 : 40;
-  ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
-  let lines = wrapLines(ctx, nome, PX_W - 64, 3);
-  while (fontSize > 32 && lines.length > 2) {
-    fontSize -= 4;
-    ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
-    lines = wrapLines(ctx, nome, PX_W - 64, 3);
-  }
-  const lineH = fontSize + 10;
-  const blockH = lines.length * lineH;
-  let ty = saborTop + 40 + (saborH - 56 - blockH) / 2 + lineH / 2;
-  for (const line of lines) {
-    ctx.fillText(line, PX_W / 2, ty, PX_W - 64);
-    ty += lineH;
-  }
-
-  // Codigo menor (secundario)
   ctx.fillStyle = '#000';
   ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
-  ctx.fillText(`CODIGO  ${codigo}`, PX_W / 2, pxH - MARGIN_BOTTOM - 22, PX_W - 24);
+  ctx.fillText('BARMAN', cx, 22, w);
+
   ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
-  ctx.fillText(when, PX_W / 2, pxH - MARGIN_BOTTOM - 4, PX_W - 24);
+  ctx.fillText('SABOR', cx, 52, w);
+  drawWrappedName(ctx, nome, cx, w, 88, 48);
+
+  ctx.font = 'bold 14px Arial, Helvetica, sans-serif';
+  ctx.fillText('NUMERO', cx, 220, w);
+  ctx.font = 'bold 112px Arial, Helvetica, sans-serif';
+  ctx.fillText(numero, cx, 292, w);
+
+  ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
+  ctx.fillText(when, cx, 360, w);
 }
 
-/** Via cliente: so o codigo em destaque. */
+/** Via cliente: sabor + mesmo numero, so texto. */
 function drawCliente(
   ctx: CanvasRenderingContext2D,
   ticket: FichaTicket,
   when: string,
   pxH: number
 ): void {
-  const codigo = (ticket.codigo || 'B----').toUpperCase();
+  const { w, cx } = contentLayout();
+  const nome = (ticket.nome || 'FICHA').toUpperCase();
+  const numero = fichaNumero(ticket);
 
+  ctx.fillStyle = '#000';
   ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
-  ctx.fillText('CLIENTE', PX_W / 2, 24, PX_W - 24);
-  drawDashedLine(ctx, 42);
+  ctx.fillText('CLIENTE', cx, 22, w);
 
-  ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
-  ctx.fillText('SEU CODIGO', PX_W / 2, 90, PX_W - 24);
+  ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
+  ctx.fillText('SABOR', cx, 52, w);
+  drawWrappedName(ctx, nome, cx, w, 86, 40);
 
-  // Caixa do codigo — ocupa o centro
-  const boxY = 120;
-  const boxH = 200;
-  const x = 40;
-  const w = PX_W - 80;
-  ctx.fillStyle = '#000';
-  ctx.fillRect(x, boxY, w, boxH);
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(x + 8, boxY + 8, w - 16, boxH - 16);
-  ctx.fillStyle = '#000';
-  ctx.fillRect(x + 18, boxY + 18, w - 36, boxH - 36);
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 72px Arial, Helvetica, sans-serif';
-  ctx.fillText(codigo, PX_W / 2, boxY + boxH / 2 + 8, w - 56);
-
-  ctx.fillStyle = '#000';
   ctx.font = 'bold 14px Arial, Helvetica, sans-serif';
-  ctx.fillText('APRESENTE NO BAR', PX_W / 2, pxH - MARGIN_BOTTOM - 22, PX_W - 24);
+  ctx.fillText('NUMERO', cx, 200, w);
+  ctx.font = 'bold 112px Arial, Helvetica, sans-serif';
+  ctx.fillText(numero, cx, 272, w);
+
+  ctx.font = 'bold 14px Arial, Helvetica, sans-serif';
+  ctx.fillText('APRESENTE NO BAR', cx, 348, w);
   ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
-  ctx.fillText(when, PX_W / 2, pxH - MARGIN_BOTTOM - 4, PX_W - 24);
+  ctx.fillText(when, cx, 370, w);
 }
 
 function drawUnica(
@@ -338,23 +326,19 @@ function drawUnica(
 ): Promise<void> {
   return (async () => {
     const nome = (ticket.nome || 'FICHA').toUpperCase();
-    const headerH = 18;
+    const { x: logoX, w: logoW, cx } = contentLayout();
+    const headerH = 34;
     const dateH = 16;
-    const logoX = MARGIN_X;
     const logoY = MARGIN_TOP + headerH;
-    const logoW = PX_W - MARGIN_X * 2;
     const logoH = pxH - logoY - dateH - MARGIN_BOTTOM;
+    const title = (festival || '').trim().toUpperCase().slice(0, 42);
+    const titleSize = title.length <= 14 ? 26 : title.length <= 22 ? 22 : 18;
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#000';
-    ctx.font = 'bold 14px Arial, Helvetica, sans-serif';
-    ctx.fillText(
-      festival.slice(0, 42).toUpperCase(),
-      Math.floor(PX_W / 2),
-      MARGIN_TOP + headerH / 2,
-      logoW
-    );
+    ctx.font = `bold ${titleSize}px Arial, Helvetica, sans-serif`;
+    ctx.fillText(title, cx, MARGIN_TOP + headerH / 2, logoW);
 
     let drewLogo = false;
     if (ticket.logo?.startsWith('data:image/')) {
@@ -373,12 +357,7 @@ function drawUnica(
 
     ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
     ctx.fillStyle = '#000';
-    ctx.fillText(
-      when,
-      Math.floor(PX_W / 2),
-      pxH - MARGIN_BOTTOM - dateH / 2,
-      logoW
-    );
+    ctx.fillText(when, cx, pxH - MARGIN_BOTTOM - dateH / 2, logoW);
   })();
 }
 
@@ -412,7 +391,7 @@ export async function renderFichaBitmap(
   }
 
   toThermalMono(ctx, PX_W, pxH);
-  return canvas.toDataURL('image/png');
+  return canvas.toDataURL('image/jpeg', 1);
 }
 
 export async function renderFichaPage(
@@ -434,7 +413,7 @@ export type PrintItem = {
 
 /**
  * 2 vias e ficha unica sao independentes:
- * - ficha_2_vias → barman (sabor) + cliente (codigo)
+ * - ficha_2_vias → barman + cliente (sabor e numero do dia)
  * - imprime_ficha (sem 2 vias) → ficha unica 28mm
  */
 export function expandFichas(items: PrintItem[]): FichaTicket[] {
@@ -448,8 +427,8 @@ export function expandFichas(items: PrintItem[]): FichaTicket[] {
     for (let i = 0; i < qtd; i += 1) {
       const base = `${item.nome}-${i}-${Math.random().toString(36).slice(2, 6)}`;
       if (dual) {
-        const codigo = generateFichaCodigo(4);
         const seqDia = nextDaySeq();
+        const codigo = formatFichaNumero(seqDia);
         out.push({
           key: `${base}-bar`,
           nome: item.nome,

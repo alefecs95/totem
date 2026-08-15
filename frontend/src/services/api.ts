@@ -24,7 +24,9 @@ export interface TotemConfig {
   pagamentos?: {
     pix: boolean;
     cartao: boolean;
+    pixProprietario?: boolean;
   };
+  pixProprietarioChave?: string | null;
   sumupSurcharge?: {
     enabled: boolean;
     debitPercent: number;
@@ -36,6 +38,11 @@ export function persistTotemConfig(config: TotemConfig): void {
   localStorage.setItem('tenantName', config.nomeFestival);
   if (config.pagamentos) {
     localStorage.setItem('pagamentos', JSON.stringify(config.pagamentos));
+  }
+  if (config.pixProprietarioChave) {
+    localStorage.setItem('pixProprietarioChave', config.pixProprietarioChave);
+  } else {
+    localStorage.removeItem('pixProprietarioChave');
   }
   if (config.gateway) {
     localStorage.setItem('gateway', config.gateway);

@@ -59,6 +59,8 @@ export interface Tenant {
   sumup_surcharge_enabled?: boolean;
   sumup_debit_surcharge_percent?: string | number;
   sumup_credit_surcharge_percent?: string | number;
+  pix_proprietario_enabled?: boolean;
+  pix_proprietario_chave?: string | null;
   endereco: string | null;
   numero: string | null;
   bairro: string | null;
@@ -92,6 +94,8 @@ export type TenantInput = Partial<
     | 'sumup_surcharge_enabled'
     | 'sumup_debit_surcharge_percent'
     | 'sumup_credit_surcharge_percent'
+    | 'pix_proprietario_enabled'
+    | 'pix_proprietario_chave'
     | 'endereco'
     | 'numero'
     | 'bairro'
@@ -109,6 +113,8 @@ export type TenantInput = Partial<
   sumup_surcharge_enabled?: boolean;
   sumup_debit_surcharge_percent?: number;
   sumup_credit_surcharge_percent?: number;
+  pix_proprietario_enabled?: boolean;
+  pix_proprietario_chave?: string | null;
   ficha_logo_data?: string | null;
 };
 

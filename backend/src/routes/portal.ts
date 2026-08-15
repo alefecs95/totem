@@ -27,7 +27,7 @@ const manualSaleSchema = z.object({
     })
   ).min(1),
   total: z.number().positive(),
-  metodo: z.enum(['dinheiro', 'cartao_fisico']),
+  metodo: z.enum(['dinheiro', 'cartao_fisico', 'pix_proprietario']),
   totemId: z.string().uuid().optional().nullable(),
 });
 

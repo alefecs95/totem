@@ -19,6 +19,7 @@ import {
   getSumUpReaderStatus,
   resolveTenantSumUpConfig,
   resolveSumUpPayToEmail,
+  getTenantCardSurchargeConfig,
   terminateSumUpReaderCheckout,
   SumUpError,
 } from '../services/sumup';
@@ -331,15 +332,14 @@ router.post('/card', async (req, res) => {
     const sumupConfig =
       gateway === 'sumup' ? resolveTenantSumUpConfig(tenant) : null;
     const cardType: CardType = bodyCardType ?? 'credit';
-    const surcharge =
-      gateway === 'sumup' && sumupConfig
-        ? computeCardSurchargeForCardType({
-            netAmount: total,
-            config: sumupConfig.surcharge,
-            cardType,
-          })
-        : null;
-    const chargedAmount = surcharge?.grossAmount ?? total;
+    const surchargeConfig = getTenantCardSurchargeConfig(tenant);
+    const surcharge = computeCardSurchargeForCardType({
+      netAmount: total,
+      config: surchargeConfig,
+      cardType,
+    });
+    const chargedAmount = surcharge.grossAmount;
+    const passFeeToCustomer = Boolean(surchargeConfig.enabled);
 
     // Valida as credenciais do gateway antes de registrar a transação.
     if (gateway === 'sumup') {
@@ -383,13 +383,11 @@ router.post('/card', async (req, res) => {
 
     const comissaoPct = Number(tenant.comissao_pct);
     const taxaGatewayPct =
-      gateway === 'sumup' && sumupConfig?.surcharge.enabled
-        ? 0
-        : gateway === 'sumup'
-          ? 0
-          : TAXA_CARD_MP;
+      passFeeToCustomer || gateway === 'sumup' ? 0 : TAXA_CARD_MP;
     const taxaGatewayValor =
-      gateway === 'sumup' ? 0 : round2(total * TAXA_CARD_MP);
+      passFeeToCustomer || gateway === 'sumup'
+        ? 0
+        : round2(total * TAXA_CARD_MP);
     const comissaoValor = round2(total * (comissaoPct / 100));
     const valorLiquido = round2(total - taxaGatewayValor - comissaoValor);
 
@@ -427,9 +425,9 @@ router.post('/card', async (req, res) => {
         comissaoValor,
         valorLiquido,
         JSON.stringify(itens),
-        surcharge && surcharge.surchargeAmount > 0 ? surcharge.surchargeAmount : null,
-        gateway === 'sumup' ? chargedAmount : null,
-        gateway === 'sumup' ? cardType : null,
+        surcharge.surchargeAmount > 0 ? surcharge.surchargeAmount : null,
+        chargedAmount,
+        cardType,
       ]
     );
 
@@ -462,6 +460,7 @@ router.post('/card', async (req, res) => {
       const pendingResult = await query<{ payment_id: string }>(
         `SELECT payment_id FROM transactions
          WHERE tenant_id = $1 AND metodo = 'cartao' AND status = 'pending'
+           AND gateway = 'mercadopago'
            AND payment_id IS NOT NULL
          ORDER BY criado_em DESC
          LIMIT 10`,
@@ -479,6 +478,7 @@ router.post('/card', async (req, res) => {
         await query(
           `UPDATE transactions SET status = 'rejected', atualizado_em = NOW()
            WHERE tenant_id = $1 AND metodo = 'cartao' AND status = 'pending'
+             AND gateway = 'mercadopago'
              AND payment_id = ANY($2::text[])`,
           [tenantId, pendingIntentIds]
         );
@@ -486,7 +486,7 @@ router.post('/card', async (req, res) => {
 
       const result = await createCardPayment({
         accessToken,
-        total,
+        total: chargedAmount,
         deviceId: deviceId as string,
         items: gatewayItems,
         tenantId,
@@ -509,8 +509,8 @@ router.post('/card', async (req, res) => {
       status: 'aguardando_maquininha',
       netAmount: total,
       chargedAmount,
-      surchargeAmount: surcharge?.surchargeAmount ?? 0,
-      cardType: gateway === 'sumup' ? cardType : undefined,
+      surchargeAmount: surcharge.surchargeAmount,
+      cardType,
     });
   } catch (err) {
     console.error('Erro ao criar pagamento no cartão:', err);

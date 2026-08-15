@@ -45,7 +45,7 @@ const saleSchema = z.object({
     )
     .min(1),
   total: z.number().positive(),
-  metodo: z.enum(['dinheiro', 'cartao_fisico']).default('dinheiro'),
+  metodo: z.enum(['dinheiro', 'cartao_fisico', 'pix_proprietario']).default('dinheiro'),
 });
 
 const selectReaderSchema = z.object({
@@ -115,7 +115,10 @@ router.get('/:codigo', async (req, res) => {
         cartao: sumupCartao || mpCartao,
         sumup: sumupCartao,
         mercadopago: mpCartao,
+        pixProprietario: Boolean(tenant.pix_proprietario_enabled),
       },
+      pixProprietarioChave:
+        (tenant.pix_proprietario_chave as string | null) || null,
       sumupReaderId: (tenant.sumup_reader_id as string | null) || null,
       mpDeviceId: (tenant.mp_device_id as string | null) || null,
       sumupSurcharge: getTenantCardSurchargeConfig(tenant),

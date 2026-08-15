@@ -4,7 +4,7 @@ export const OFFLINE_QUEUE_KEY = 'totem_offline_sales_queue';
 /** Intervalo entre tentativas de sincronização (ms). */
 export const OFFLINE_SYNC_INTERVAL_MS = 15000;
 
-export type ManualMetodo = 'dinheiro' | 'cartao_fisico';
+export type ManualMetodo = 'dinheiro' | 'cartao_fisico' | 'pix_proprietario';
 
 export interface QueuedSale {
   id: string;

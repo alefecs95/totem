@@ -9,9 +9,8 @@ export type FichaTicket = {
   /** Logo individual do produto (data URL), se houver. */
   logo?: string | null;
   via?: FichaVia;
-  /** Codigo de retirada com prefixo B- (ex. B-K7P2). */
+  /** Numero do dia (001, 002…). */
   codigo?: string;
-  /** Contador do dia (#047) — via barman. */
   seqDia?: number;
 };
 
@@ -25,7 +24,6 @@ export function isImprimeFicha(value: unknown): boolean {
   return false;
 }
 
-const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 const DAY_SEQ_KEY = 'totemFichaDaySeq';
 
 function todayKey(): string {
@@ -50,14 +48,12 @@ export function nextDaySeq(): number {
   }
 }
 
-export function generateFichaCodigo(len = 4): string {
-  const bytes = new Uint8Array(len);
-  crypto.getRandomValues(bytes);
-  let out = '';
-  for (let i = 0; i < len; i += 1) {
-    out += CODE_ALPHABET[bytes[i]! % CODE_ALPHABET.length];
-  }
-  return `B-${out}`;
+export function formatFichaNumero(n: number): string {
+  return String(Math.max(0, Math.floor(n))).padStart(3, '0');
+}
+
+export function generateFichaCodigo(): string {
+  return formatFichaNumero(nextDaySeq());
 }
 
 export function readProductFichaFlags(): Record<string, boolean> {
@@ -142,8 +138,8 @@ export function expandFichaTickets(
     for (let i = 0; i < qtd; i += 1) {
       const base = `${item.id ?? item.nome}-${i}`;
       if (dual) {
-        const codigo = generateFichaCodigo(4);
         const seqDia = nextDaySeq();
+        const codigo = formatFichaNumero(seqDia);
         tickets.push({
           key: `${base}-bar`,
           productId: item.id,

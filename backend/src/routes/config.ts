@@ -20,7 +20,8 @@ router.get('/config', async (req, res) => {
       `SELECT id, nome, gateway, mp_device_id, mp_access_token,
               sumup_api_key, sumup_reader_id, sumup_merchant_code,
               sumup_surcharge_enabled, sumup_debit_surcharge_percent,
-              sumup_credit_surcharge_percent
+              sumup_credit_surcharge_percent,
+              pix_proprietario_enabled, pix_proprietario_chave
        FROM tenants WHERE id = $1 AND ativo = true`,
       [tenantId]
     );
@@ -91,11 +92,11 @@ router.get('/config', async (req, res) => {
       pagamentos: {
         pix: pixDisponivel,
         cartao: cartaoDisponivel,
+        pixProprietario: Boolean(tenant.pix_proprietario_enabled),
       },
-      sumupSurcharge:
-        gateway === 'sumup'
-          ? getTenantCardSurchargeConfig(tenant)
-          : null,
+      pixProprietarioChave:
+        (tenant.pix_proprietario_chave as string | null) || null,
+      sumupSurcharge: getTenantCardSurchargeConfig(tenant),
     });
   } catch (err) {
     console.error('Erro ao carregar config do totem:', err);

@@ -153,6 +153,11 @@ const tenantSchema = z.object({
   sumup_surcharge_enabled: z.boolean().optional(),
   sumup_debit_surcharge_percent: z.number().nonnegative().optional(),
   sumup_credit_surcharge_percent: z.number().nonnegative().optional(),
+  pix_proprietario_enabled: z.boolean().optional(),
+  pix_proprietario_chave: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? null : String(v).trim()),
+    z.string().max(140).nullable().optional()
+  ),
   ficha_logo_data: z.preprocess(
     (v) => (v === '' || v === undefined ? null : v),
     z
@@ -680,10 +685,11 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
          sumup_affiliate_key, sumup_affiliate_app_id, sumup_pay_to_email,
          sumup_surcharge_enabled, sumup_debit_surcharge_percent,
          sumup_credit_surcharge_percent,
+         pix_proprietario_enabled, pix_proprietario_chave,
          endereco, numero, bairro, cidade, estado, latitude, longitude,
          portal_senha_hash, operador_senha_hash, operador_email, codigo_evento)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-         $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+         $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
        RETURNING *`,
       [
         tenantFields.nome,
@@ -704,6 +710,8 @@ router.post('/tenants', verifyAdmin, async (req, res) => {
         tenantFields.sumup_surcharge_enabled ?? false,
         tenantFields.sumup_debit_surcharge_percent ?? 0,
         tenantFields.sumup_credit_surcharge_percent ?? 0,
+        tenantFields.pix_proprietario_enabled ?? false,
+        tenantFields.pix_proprietario_chave ?? null,
         tenantFields.endereco ?? null,
         tenantFields.numero ?? null,
         tenantFields.bairro ?? null,
@@ -788,6 +796,7 @@ router.post('/tenants/:id/duplicate', verifyAdmin, async (req, res) => {
          sumup_affiliate_key, sumup_affiliate_app_id, sumup_pay_to_email,
          sumup_surcharge_enabled, sumup_debit_surcharge_percent,
          sumup_credit_surcharge_percent,
+         pix_proprietario_enabled, pix_proprietario_chave,
          endereco, numero, bairro, cidade, estado, latitude, longitude,
          portal_senha_hash, operador_senha_hash, operador_email,
          ficha_logo_data, codigo_evento, ativo)
@@ -798,6 +807,7 @@ router.post('/tenants/:id/duplicate', verifyAdmin, async (req, res) => {
          sumup_affiliate_key, sumup_affiliate_app_id, sumup_pay_to_email,
          sumup_surcharge_enabled, sumup_debit_surcharge_percent,
          sumup_credit_surcharge_percent,
+         pix_proprietario_enabled, pix_proprietario_chave,
          endereco, numero, bairro, cidade, estado, latitude, longitude,
          portal_senha_hash, operador_senha_hash, NULL,
          ficha_logo_data, $2, true

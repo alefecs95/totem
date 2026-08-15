@@ -33,7 +33,7 @@ Na tela de login:
 Gerado em:
 
 ```text
-pdv/release/Totem PDV Setup 1.2.6.exe
+pdv/release/Totem PDV Setup 1.2.15.exe
 ```
 
 Para regenerar:

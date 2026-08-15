@@ -5,7 +5,6 @@ import { useCartStore, type CartItem } from '../store/cartStore';
 import {
   computeCardSurchargeForCardType,
   formatSurchargePercent,
-  isSumupGateway,
   readSumupSurchargeConfig,
   type CardType,
 } from '../utils/cardSurcharge';
@@ -39,7 +38,7 @@ export default function Payment() {
 
   const sumupSurcharge = readSumupSurchargeConfig();
   const needsCardType =
-    isSumupGateway() && Boolean(sumupSurcharge?.enabled);
+    Boolean(sumupSurcharge?.enabled);
   const debitPreview = needsCardType
     ? computeCardSurchargeForCardType({
         netAmount: total,
