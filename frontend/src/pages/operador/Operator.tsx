@@ -142,22 +142,20 @@ export default function Operator() {
   const total = getTotal();
   const totalItems = getTotalItems();
   const sumupSurcharge = readSumupSurchargeConfig();
-  const debitPreview =
-    cardPickerOpen && sumupSurcharge?.enabled
-      ? computeCardSurchargeForCardType({
-          netAmount: total,
-          config: sumupSurcharge,
-          cardType: 'debit',
-        })
-      : null;
-  const creditPreview =
-    cardPickerOpen && sumupSurcharge?.enabled
-      ? computeCardSurchargeForCardType({
-          netAmount: total,
-          config: sumupSurcharge,
-          cardType: 'credit',
-        })
-      : null;
+  const debitPreview = cardPickerOpen
+    ? computeCardSurchargeForCardType({
+        netAmount: total,
+        config: sumupSurcharge,
+        cardType: 'debit',
+      })
+    : null;
+  const creditPreview = cardPickerOpen
+    ? computeCardSurchargeForCardType({
+        netAmount: total,
+        config: sumupSurcharge,
+        cardType: 'credit',
+      })
+    : null;
   const pendingQty = Math.min(
     999,
     Math.max(1, qtyDigits === '' ? 1 : Number.parseInt(qtyDigits, 10) || 1)
@@ -333,7 +331,10 @@ export default function Operator() {
 
   const iniciarCartaoGateway = useCallback(() => {
     const surcharge = readSumupSurchargeConfig();
-    if (surcharge?.enabled) {
+    if (
+      surcharge?.enabled ||
+      localStorage.getItem('gateway') === 'mercadopago'
+    ) {
       setCardPickerOpen(true);
       return;
     }
@@ -1053,7 +1054,7 @@ export default function Operator() {
         </div>
       )}
 
-      {cardPickerOpen && debitPreview && creditPreview && sumupSurcharge && (
+      {cardPickerOpen && debitPreview && creditPreview && (
         <div style={modalOverlay} onClick={() => setCardPickerOpen(false)}>
           <div
             style={modalCard}
@@ -1086,7 +1087,7 @@ export default function Operator() {
                 {debitPreview.surchargeAmount > 0 && (
                   <span style={{ display: 'block', fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
                     +{formatPreco(debitPreview.surchargeAmount)} (
-                    {formatSurchargePercent(sumupSurcharge.debitPercent)})
+                    {formatSurchargePercent(sumupSurcharge?.debitPercent ?? 0)})
                   </span>
                 )}
               </button>
@@ -1108,7 +1109,7 @@ export default function Operator() {
                 {creditPreview.surchargeAmount > 0 && (
                   <span style={{ display: 'block', fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
                     +{formatPreco(creditPreview.surchargeAmount)} (
-                    {formatSurchargePercent(sumupSurcharge.creditPercent)})
+                    {formatSurchargePercent(sumupSurcharge?.creditPercent ?? 0)})
                   </span>
                 )}
               </button>

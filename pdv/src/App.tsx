@@ -314,23 +314,21 @@ export default function App() {
   const mpOk = Boolean(config?.pagamentos?.mercadopago);
   const cartaoMaquininha = sumupOk || mpOk || Boolean(config?.pagamentos?.cartao);
   const sumupSurcharge = config?.sumupSurcharge ?? null;
-  const needsCardType = Boolean(sumupSurcharge?.enabled);
-  const debitPreview =
-    cardPickerOpen && needsCardType && sumupSurcharge
-      ? computeCardSurchargeForCardType({
-          netAmount: total,
-          config: sumupSurcharge,
-          cardType: 'debit',
-        })
-      : null;
-  const creditPreview =
-    cardPickerOpen && needsCardType && sumupSurcharge
-      ? computeCardSurchargeForCardType({
-          netAmount: total,
-          config: sumupSurcharge,
-          cardType: 'credit',
-        })
-      : null;
+  const needsSurchargeType = Boolean(sumupSurcharge?.enabled);
+  const debitPreview = cardPickerOpen
+    ? computeCardSurchargeForCardType({
+        netAmount: total,
+        config: sumupSurcharge,
+        cardType: 'debit',
+      })
+    : null;
+  const creditPreview = cardPickerOpen
+    ? computeCardSurchargeForCardType({
+        netAmount: total,
+        config: sumupSurcharge,
+        cardType: 'credit',
+      })
+    : null;
 
   const cashRecebido = useMemo(() => {
     const reais = cashInt === '' ? 0 : parseInt(cashInt, 10) || 0;
@@ -831,7 +829,7 @@ export default function App() {
 
   const iniciarSumupComTipo = () => {
     setCardPayGateway('sumup');
-    if (needsCardType) {
+    if (needsSurchargeType) {
       setGatewayPickerOpen(false);
       setCardPickerOpen(true);
       return;
@@ -841,12 +839,8 @@ export default function App() {
 
   const iniciarMpComTipo = () => {
     setCardPayGateway('mercadopago');
-    if (needsCardType) {
-      setGatewayPickerOpen(false);
-      setCardPickerOpen(true);
-      return;
-    }
-    void pagarCartaoGateway('mercadopago');
+    setGatewayPickerOpen(false);
+    setCardPickerOpen(true);
   };
 
   const iniciarLeitor = () => {
@@ -2049,12 +2043,15 @@ export default function App() {
         </div>
       )}
 
-      {cardPickerOpen && debitPreview && creditPreview && sumupSurcharge && (
+      {cardPickerOpen && debitPreview && creditPreview && (
         <div style={modalOverlay} onClick={() => setCardPickerOpen(false)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontWeight: 800, fontSize: 16 }}>Tipo de cartao</div>
             <p style={{ color: '#a8a29e', fontSize: 13, marginTop: 6 }}>
               Total base {formatPreco(total)}
+              {cardPayGateway === 'mercadopago'
+                ? ' — a Point nao pergunta de novo'
+                : ''}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
               <button
@@ -2073,9 +2070,11 @@ export default function App() {
                 }}
               >
                 DEBITO — {formatPreco(debitPreview.grossAmount)}
-                <div style={{ fontSize: 12, opacity: 0.85, fontWeight: 600 }}>
-                  taxa {formatSurchargePercent(sumupSurcharge.debitPercent)}
-                </div>
+                {needsSurchargeType && sumupSurcharge ? (
+                  <div style={{ fontSize: 12, opacity: 0.85, fontWeight: 600 }}>
+                    taxa {formatSurchargePercent(sumupSurcharge.debitPercent)}
+                  </div>
+                ) : null}
               </button>
               <button
                 type="button"
@@ -2093,9 +2092,11 @@ export default function App() {
                 }}
               >
                 CREDITO — {formatPreco(creditPreview.grossAmount)}
-                <div style={{ fontSize: 12, opacity: 0.85, fontWeight: 600 }}>
-                  taxa {formatSurchargePercent(sumupSurcharge.creditPercent)}
-                </div>
+                {needsSurchargeType && sumupSurcharge ? (
+                  <div style={{ fontSize: 12, opacity: 0.85, fontWeight: 600 }}>
+                    taxa {formatSurchargePercent(sumupSurcharge.creditPercent)}
+                  </div>
+                ) : null}
               </button>
               <button
                 type="button"

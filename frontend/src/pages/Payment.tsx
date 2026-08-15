@@ -38,7 +38,8 @@ export default function Payment() {
 
   const sumupSurcharge = readSumupSurchargeConfig();
   const needsCardType =
-    Boolean(sumupSurcharge?.enabled);
+    Boolean(sumupSurcharge?.enabled) ||
+    localStorage.getItem('gateway') === 'mercadopago';
   const debitPreview = needsCardType
     ? computeCardSurchargeForCardType({
         netAmount: total,
@@ -276,7 +277,7 @@ export default function Payment() {
         )}
       </main>
 
-      {cardPickerOpen && debitPreview && creditPreview && sumupSurcharge && (
+      {cardPickerOpen && debitPreview && creditPreview && (
         <div
           style={{
             position: 'fixed',
@@ -329,7 +330,7 @@ export default function Payment() {
                 {debitPreview.surchargeAmount > 0 && (
                   <span style={{ display: 'block', fontSize: 13, opacity: 0.85 }}>
                     +{formatPreco(debitPreview.surchargeAmount)} taxa (
-                    {formatSurchargePercent(sumupSurcharge.debitPercent)})
+                    {formatSurchargePercent(sumupSurcharge?.debitPercent ?? 0)})
                   </span>
                 )}
               </button>
@@ -343,7 +344,7 @@ export default function Payment() {
                 {creditPreview.surchargeAmount > 0 && (
                   <span style={{ display: 'block', fontSize: 13, opacity: 0.85 }}>
                     +{formatPreco(creditPreview.surchargeAmount)} taxa (
-                    {formatSurchargePercent(sumupSurcharge.creditPercent)})
+                    {formatSurchargePercent(sumupSurcharge?.creditPercent ?? 0)})
                   </span>
                 )}
               </button>

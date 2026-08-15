@@ -174,6 +174,15 @@ interface CreateCardParams {
   tenantId: string;
   transactionId: string;
   webhookUrl?: string;
+  cardType?: 'credit' | 'debit';
+}
+
+function mpCardType(
+  cardType?: 'credit' | 'debit'
+): 'credit_card' | 'debit_card' | null {
+  if (cardType === 'debit') return 'debit_card';
+  if (cardType === 'credit') return 'credit_card';
+  return null;
 }
 
 // IDs da API de Orders começam com "ORD"; os antigos (payment-intents) são UUID.
@@ -218,8 +227,10 @@ async function postCardOrder(
   accessToken: string,
   deviceId: string,
   total: number,
-  transactionId: string
+  transactionId: string,
+  cardType?: 'credit' | 'debit'
 ): Promise<Response> {
+  const defaultType = mpCardType(cardType);
   return fetch(`${MP_API_BASE}/v1/orders`, {
     method: 'POST',
     headers: {
@@ -236,6 +247,16 @@ async function postCardOrder(
           terminal_id: deviceId,
           print_on_terminal: 'no_ticket',
         },
+        ...(defaultType
+          ? {
+              payment_method: {
+                default_type: defaultType,
+                ...(defaultType === 'credit_card'
+                  ? { default_installments: 1, installments_cost: 'seller' }
+                  : {}),
+              },
+            }
+          : {}),
       },
       transactions: {
         payments: [{ amount: total.toFixed(2) }],
@@ -249,7 +270,8 @@ async function postCardPaymentIntent(
   deviceId: string,
   total: number,
   transactionId: string,
-  sandbox: boolean
+  sandbox: boolean,
+  cardType?: 'credit' | 'debit'
 ): Promise<Response> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
@@ -257,6 +279,7 @@ async function postCardPaymentIntent(
   };
   if (sandbox) headers['x-test-scope'] = 'sandbox';
 
+  const type = mpCardType(cardType);
   return fetch(
     `${MP_API_BASE}/point/integration-api/devices/${encodeURIComponent(deviceId)}/payment-intents`,
     {
@@ -265,6 +288,16 @@ async function postCardPaymentIntent(
       body: JSON.stringify({
         amount: Math.round(total * 100),
         description: 'Fichas Festival',
+        ...(type
+          ? {
+              payment: {
+                type,
+                ...(type === 'credit_card'
+                  ? { installments: 1, installments_cost: 'seller' }
+                  : {}),
+              },
+            }
+          : {}),
         additional_info: {
           external_reference: transactionId,
           print_on_terminal: false,
@@ -281,6 +314,7 @@ export async function createCardPayment({
   total,
   deviceId,
   transactionId,
+  cardType,
   sandbox = false,
   pendingIntentIds = [],
 }: CreateCardParams & {
@@ -301,7 +335,8 @@ export async function createCardPayment({
     accessToken,
     deviceId,
     total,
-    transactionId
+    transactionId,
+    cardType
   );
 
   // 409 = já há uma order na fila da maquininha — cancela e tenta de novo.
@@ -313,7 +348,13 @@ export async function createCardPayment({
         // best-effort
       }
     }
-    orderResp = await postCardOrder(accessToken, deviceId, total, transactionId);
+    orderResp = await postCardOrder(
+      accessToken,
+      deviceId,
+      total,
+      transactionId,
+      cardType
+    );
   }
 
   if (orderResp.ok) {
@@ -332,7 +373,8 @@ export async function createCardPayment({
     deviceId,
     total,
     transactionId,
-    sandbox
+    sandbox,
+    cardType
   );
 
   if (response.status === 409 && pendingIntentIds.length > 0) {
@@ -344,7 +386,8 @@ export async function createCardPayment({
       deviceId,
       total,
       transactionId,
-      sandbox
+      sandbox,
+      cardType
     );
   }
 

@@ -491,6 +491,7 @@ router.post('/card', async (req, res) => {
         items: gatewayItems,
         tenantId,
         transactionId,
+        cardType: bodyCardType,
         sandbox: env.mercadopago.sandbox,
         pendingIntentIds,
       });
